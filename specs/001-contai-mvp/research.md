@@ -484,6 +484,10 @@ Ele traz decisões que afetam a implementação além do visual.
     e `isAnimationActive` desligado no Recharts quando o usuário pede menos movimento.
   - **`design-preview/`** fica no repositório como referência visual. Não faz parte do build nem
     do deploy.
+  - **Documentação interativa só fora de produção**: a página `/api/docs` carrega scripts de
+    fora da origem, o que a política acima proíbe. Em produção, `/api/docs` e
+    `/api/openapi.json` ficam desligados; o OpenAPI continua sendo gerado automaticamente e
+    está disponível em desenvolvimento.
 - **Rationale**: servir as fontes pelo app mantém a política de conteúdo restrita à própria
   origem e não informa acessos a terceiros (Princípios V e VII). A lista fechada de cores é o
   que mantém válida a conferência de contraste e de daltonismo feita no design system.

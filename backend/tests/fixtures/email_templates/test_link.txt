@@ -1,0 +1,7 @@
+Assunto: Olá, $name
+
+Este é um e-mail de teste.
+
+Abra o link: $link
+
+Motivo: $reason
