@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assistente — prévia do Contaí</title>
+    <script src="theme.js"></script>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body data-active="assistente">
+    <div class="app">
+      <main class="main chat">
+        <header class="page-header">
+          <h1 class="title-1">Assistente</h1>
+          <button class="icon-btn" aria-label="Histórico de conversas"><span class="icon" data-icon="clock"></span></button>
+        </header>
+
+        <div class="messages" aria-live="polite">
+          <p class="msg-user">Quanto gastei com comida esse mês?</p>
+
+          <div class="msg-bot">
+            <span class="label muted">Contaí</span>
+            <p>
+              Você gastou <strong class="money marca-texto">R$ 1.126,40</strong> com Alimentação em setembro de
+              2026, em 23 lançamentos.
+            </p>
+            <div class="source">
+              <p class="label muted">De onde veio esse número</p>
+              <ul>
+                <li><span>Mercado Extra <span class="small muted">· 29 de set.</span></span><span class="money money-sm">R$ 386,20</span></li>
+                <li><span>Feira de sábado <span class="small muted">· 20 de set.</span></span><span class="money money-sm">R$ 96,00</span></li>
+                <li><span>Restaurante Sabor <span class="small muted">· 14 de set.</span></span><span class="money money-sm">R$ 84,50</span></li>
+                <li><span>Padaria Central <span class="small muted">· 22 de set.</span></span><span class="money money-sm">R$ 52,30</span></li>
+                <li><span>iFood <span class="small muted">· 30 de set.</span></span><span class="money money-sm">R$ 45,90</span></li>
+              </ul>
+              <a class="link small" href="lancamentos.html">Ver todos os 23 lançamentos</a>
+            </div>
+          </div>
+
+          <p class="msg-user">E no mês anterior?</p>
+
+          <div class="msg-bot">
+            <span class="label muted">Contaí</span>
+            <p>
+              Em agosto de 2026 foram <strong class="money marca-texto">R$ 1.048,10</strong> com Alimentação. Em
+              setembro você gastou <span class="money">R$ 78,30</span> a mais (7,5%).
+            </p>
+          </div>
+
+          <p class="msg-user">gastei 45 no ifood ontem no cartão</p>
+
+          <div class="msg-bot">
+            <span class="label muted">Contaí</span>
+            <p>Preenchi o lançamento. Confira antes de salvar.</p>
+            <div class="proposal">
+              <div>
+                <p class="label muted">Lançamento sugerido · Despesa</p>
+                <p class="money money-lg">−R$ 45,00</p>
+              </div>
+              <ul class="proposal-meta small">
+                <li><span class="chip chip-sm cat-caqui" data-icon="utensils"></span>iFood · Alimentação › Delivery</li>
+                <li><span class="icon" data-icon="calendar"></span>Ontem, 30 de set.</li>
+                <li><span class="icon" data-icon="card"></span>Cartão Nubank</li>
+              </ul>
+              <div class="proposal-actions">
+                <a class="btn btn-primary" href="lancar.html">Conferir e salvar</a>
+                <button class="btn btn-ghost">Descartar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <p class="small muted">Restam 4 perguntas hoje</p>
+          <div class="composer-box">
+            <label class="sr-only" for="pergunta">Escreva sua pergunta</label>
+            <textarea id="pergunta" rows="1" placeholder="Pergunte sobre o seu dinheiro"></textarea>
+            <button class="send" aria-label="Enviar"><span class="icon" data-icon="arrow-up"></span></button>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

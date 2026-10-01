@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lançamentos — prévia do Contaí</title>
+    <script src="theme.js"></script>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body data-active="lancamentos">
+    <div class="app">
+      <main class="main">
+        <header class="page-header">
+          <h1 class="title-1">Lançamentos</h1>
+        </header>
+
+        <div class="field field-search">
+          <label class="sr-only" for="busca">Buscar lançamentos</label>
+          <span class="icon" data-icon="search"></span>
+          <input class="input" id="busca" type="search" placeholder="Buscar por descrição" />
+        </div>
+        <div class="filters">
+          <button class="pill"><span class="icon" data-icon="calendar"></span>Setembro de 2026</button>
+          <button class="pill until-sm">Filtros<span class="icon" data-icon="chevron-down"></span></button>
+          <button class="pill from-sm">Todas as contas<span class="icon" data-icon="chevron-down"></span></button>
+          <button class="pill from-sm">Todas as categorias<span class="icon" data-icon="chevron-down"></span></button>
+        </div>
+
+        <section class="card card-flush" aria-label="Lançamentos de setembro de 2026">
+          <ul class="tx-list">
+            <li class="tx-day">
+              <span class="label muted">ter., 30 de set.</span>
+              <span class="money money-sm muted">+R$ 585,70</span>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-caqui" data-icon="utensils"></span>
+                <span class="tx-text"><span class="body-strong">iFood</span><span class="small muted">Delivery · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 45,90</span>
+              </button>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-tinta" data-icon="car"></span>
+                <span class="tx-text"><span class="body-strong">Uber</span><span class="small muted">Transporte · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 18,40</span>
+              </button>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-mostarda" data-icon="banknote"></span>
+                <span class="tx-text"><span class="body-strong">Site da padaria</span><span class="small muted">Trabalhos extras · Conta Nubank</span></span>
+                <span class="money money-md is-income">+R$ 650,00</span>
+              </button>
+            </li>
+
+            <li class="tx-day">
+              <span class="label muted">seg., 29 de set.</span>
+              <span class="money money-sm muted">−R$ 448,95</span>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-caqui" data-icon="bag"></span>
+                <span class="tx-text"><span class="body-strong">Mercado Extra</span><span class="small muted">Mercado · Conta Nubank</span></span>
+                <span class="money money-md">−R$ 386,20</span>
+              </button>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-pitanga" data-icon="heart"></span>
+                <span class="tx-text"><span class="body-strong">Farmácia São João</span><span class="small muted">Saúde · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 62,75</span>
+              </button>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip chip-neutral" data-icon="transfer"></span>
+                <span class="tx-text"><span class="body-strong">Transferência</span><span class="small muted">Conta Nubank para Poupança Caixa</span></span>
+                <span class="money money-md tx-transfer">R$ 300,00</span>
+              </button>
+            </li>
+
+            <li class="tx-day">
+              <span class="label muted">dom., 28 de set.</span>
+              <span class="money money-sm muted">−R$ 153,90</span>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-goiaba" data-icon="smile"></span>
+                <span class="tx-text"><span class="body-strong">Cinema</span><span class="small muted">Lazer · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 64,00</span>
+              </button>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-ardosia" data-icon="more"></span>
+                <span class="tx-text"><span class="body-strong">Tênis de corrida</span><span class="small muted">Outros · Cartão Nubank · 3/6</span></span>
+                <span class="money money-md">−R$ 89,90</span>
+              </button>
+            </li>
+
+            <li class="tx-day">
+              <span class="label muted">sex., 26 de set.</span>
+              <span class="money money-sm muted">−R$ 224,90</span>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-piscina" data-icon="tv"></span>
+                <span class="tx-text"><span class="body-strong">Netflix</span><span class="small muted">Assinaturas · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 44,90</span>
+              </button>
+            </li>
+            <li>
+              <button class="tx-row">
+                <span class="chip cat-mata" data-icon="zap"></span>
+                <span class="tx-text"><span class="body-strong">Conta de luz</span><span class="small muted">Moradia · Conta Nubank</span></span>
+                <span class="money money-md">−R$ 180,00</span>
+              </button>
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

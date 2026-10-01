@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Novo lançamento — prévia do Contaí</title>
+    <script src="theme.js"></script>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body data-active="lancamentos">
+    <div class="app">
+      <!-- A tela de lançamentos fica atrás da folha, como no app. -->
+      <main class="main" aria-hidden="true">
+        <header class="page-header">
+          <h1 class="title-1">Lançamentos</h1>
+        </header>
+        <section class="card card-flush">
+          <ul class="tx-list">
+            <li class="tx-day">
+              <span class="label muted">ter., 30 de set.</span>
+              <span class="money money-sm muted">+R$ 585,70</span>
+            </li>
+            <li>
+              <div class="tx-row">
+                <span class="chip cat-caqui" data-icon="utensils"></span>
+                <span class="tx-text"><span class="body-strong">iFood</span><span class="small muted">Delivery · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 45,90</span>
+              </div>
+            </li>
+            <li>
+              <div class="tx-row">
+                <span class="chip cat-tinta" data-icon="car"></span>
+                <span class="tx-text"><span class="body-strong">Uber</span><span class="small muted">Transporte · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 18,40</span>
+              </div>
+            </li>
+            <li>
+              <div class="tx-row">
+                <span class="chip cat-mostarda" data-icon="banknote"></span>
+                <span class="tx-text"><span class="body-strong">Site da padaria</span><span class="small muted">Trabalhos extras · Conta Nubank</span></span>
+                <span class="money money-md is-income">+R$ 650,00</span>
+              </div>
+            </li>
+            <li class="tx-day">
+              <span class="label muted">seg., 29 de set.</span>
+              <span class="money money-sm muted">−R$ 448,95</span>
+            </li>
+            <li>
+              <div class="tx-row">
+                <span class="chip cat-caqui" data-icon="bag"></span>
+                <span class="tx-text"><span class="body-strong">Mercado Extra</span><span class="small muted">Mercado · Conta Nubank</span></span>
+                <span class="money money-md">−R$ 386,20</span>
+              </div>
+            </li>
+            <li>
+              <div class="tx-row">
+                <span class="chip cat-pitanga" data-icon="heart"></span>
+                <span class="tx-text"><span class="body-strong">Farmácia São João</span><span class="small muted">Saúde · Cartão Nubank</span></span>
+                <span class="money money-md">−R$ 62,75</span>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </main>
+    </div>
+
+    <div class="scrim"></div>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="t-novo">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <div class="sheet-head">
+        <h2 class="title-2" id="t-novo">Novo lançamento</h2>
+        <a class="icon-btn" href="lancamentos.html" aria-label="Fechar"><span class="icon" data-icon="x"></span></a>
+      </div>
+
+      <form class="sheet-body" onsubmit="return false">
+        <div class="segmented" role="group" aria-label="Tipo de lançamento">
+          <button type="button" aria-pressed="true">Despesa</button>
+          <button type="button" aria-pressed="false">Receita</button>
+          <button type="button" aria-pressed="false">Transferência</button>
+        </div>
+
+        <div class="field">
+          <label class="label" for="valor">Valor</label>
+          <div class="money-field money money-hero">
+            <span class="currency">R$</span>
+            <input id="valor" inputmode="numeric" value="45,90" aria-label="Valor em reais" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="descricao">Descrição</label>
+          <input class="input" id="descricao" value="iFood" />
+        </div>
+
+        <div class="field">
+          <span class="label" id="l-categoria">Categoria</span>
+          <button type="button" class="input select" aria-labelledby="l-categoria">
+            <span class="chip chip-sm cat-caqui" data-icon="utensils"></span>
+            <span class="grow">Alimentação › Delivery</span>
+            <span class="icon" data-icon="chevron-down"></span>
+          </button>
+        </div>
+
+        <div class="field-pair">
+          <div class="field">
+            <span class="label" id="l-conta">Conta</span>
+            <button type="button" class="input select" aria-labelledby="l-conta">
+              <span class="icon" data-icon="card"></span>
+              <span class="grow">Cartão Nubank</span>
+              <span class="icon" data-icon="chevron-down"></span>
+            </button>
+          </div>
+          <div class="field">
+            <span class="label" id="l-data">Data</span>
+            <button type="button" class="input select" aria-labelledby="l-data">
+              <span class="icon" data-icon="calendar"></span>
+              <span class="grow">Hoje, 1º de out.</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="obs">Observação <span class="muted">(opcional)</span></label>
+          <input class="input" id="obs" placeholder="Algo para lembrar depois" />
+        </div>
+      </form>
+
+      <div class="sheet-foot">
+        <button class="btn btn-primary btn-block">Salvar lançamento</button>
+        <a class="btn btn-secondary btn-block" href="lancamentos.html">Cancelar</a>
+      </div>
+    </section>
+
+    <script src="app.js"></script>
+  </body>
+</html>
