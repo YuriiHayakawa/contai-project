@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Painel — prévia do Contaí</title>
+    <script src="theme.js"></script>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body data-active="painel">
+    <div class="app">
+      <main class="main main-wide">
+        <header class="page-header">
+          <h1 class="title-1">
+            <button class="title-btn" aria-label="Setembro de 2026, escolher outro mês">Setembro de 2026<span class="icon" data-icon="chevron-down"></span></button>
+          </h1>
+          <div class="period">
+            <button class="icon-btn" aria-label="Mês anterior"><span class="icon" data-icon="chevron-left"></span></button>
+            <button class="icon-btn" aria-label="Próximo mês"><span class="icon" data-icon="chevron-right"></span></button>
+          </div>
+        </header>
+
+        <div class="stack">
+          <div class="dash-top">
+            <section class="hero reveal" style="--i: 0" aria-label="Saldo do mês">
+              <p class="label muted">Saldo do mês</p>
+              <p class="money money-hero">
+                <span class="marca-texto paint"><span class="currency">R$</span>1.477,60</span>
+              </p>
+              <p class="small muted">Em setembro você recebeu mais do que gastou.</p>
+            </section>
+
+            <section class="card split reveal" style="--i: 1" aria-label="Entradas e saídas">
+              <div>
+                <span class="label flow is-income"><span class="icon" data-icon="arrow-up"></span>Entradas</span>
+                <span class="money money-lg">R$ 5.450,00</span>
+              </div>
+              <div>
+                <span class="label flow is-expense"><span class="icon" data-icon="arrow-down"></span>Saídas</span>
+                <span class="money money-lg">R$ 3.972,40</span>
+              </div>
+            </section>
+          </div>
+
+          <div class="dash-grid">
+            <section class="card reveal" style="--i: 2" aria-labelledby="t-cat">
+              <div class="card-head">
+                <h2 class="title-3" id="t-cat">Para onde foi o dinheiro</h2>
+              </div>
+              <ul class="rank">
+                <li>
+                  <a class="rank-row" href="lancamentos.html">
+                    <span class="chip cat-mata" data-icon="house"></span>
+                    <span>
+                      <span class="rank-top"><span class="body-strong">Moradia</span><span class="money money-md">R$ 1.580,00</span></span>
+                      <span class="rank-bar"><span class="cat-mata" style="width: 100%"></span></span>
+                      <span class="small muted">39,8% dos gastos</span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rank-row" href="lancamentos.html">
+                    <span class="chip cat-caqui" data-icon="utensils"></span>
+                    <span>
+                      <span class="rank-top"><span class="body-strong">Alimentação</span><span class="money money-md">R$ 1.126,40</span></span>
+                      <span class="rank-bar"><span class="cat-caqui" style="width: 71.3%"></span></span>
+                      <span class="small muted">28,4% dos gastos</span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rank-row" href="lancamentos.html">
+                    <span class="chip cat-tinta" data-icon="car"></span>
+                    <span>
+                      <span class="rank-top"><span class="body-strong">Transporte</span><span class="money money-md">R$ 412,30</span></span>
+                      <span class="rank-bar"><span class="cat-tinta" style="width: 26.1%"></span></span>
+                      <span class="small muted">10,4% dos gastos</span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rank-row" href="lancamentos.html">
+                    <span class="chip cat-pitanga" data-icon="heart"></span>
+                    <span>
+                      <span class="rank-top"><span class="body-strong">Saúde</span><span class="money money-md">R$ 318,90</span></span>
+                      <span class="rank-bar"><span class="cat-pitanga" style="width: 20.2%"></span></span>
+                      <span class="small muted">8,0% dos gastos</span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rank-row" href="lancamentos.html">
+                    <span class="chip cat-goiaba" data-icon="smile"></span>
+                    <span>
+                      <span class="rank-top"><span class="body-strong">Lazer</span><span class="money money-md">R$ 286,50</span></span>
+                      <span class="rank-bar"><span class="cat-goiaba" style="width: 18.1%"></span></span>
+                      <span class="small muted">7,2% dos gastos</span>
+                    </span>
+                  </a>
+                </li>
+                <li>
+                  <a class="rank-row" href="lancamentos.html">
+                    <span class="chip cat-ardosia" data-icon="more"></span>
+                    <span>
+                      <span class="rank-top"><span class="body-strong">Outras</span><span class="money money-md">R$ 248,30</span></span>
+                      <span class="rank-bar"><span class="cat-ardosia" style="width: 15.7%"></span></span>
+                      <span class="small muted">6,3% dos gastos</span>
+                    </span>
+                  </a>
+                </li>
+              </ul>
+            </section>
+
+            <div class="stack">
+              <section class="card reveal" style="--i: 3" aria-labelledby="t-trend">
+                <div class="card-head">
+                  <h2 class="title-3" id="t-trend">Últimos 6 meses</h2>
+                </div>
+                <div class="legend small">
+                  <span><span class="swatch bar-in"></span>Entradas</span>
+                  <span><span class="swatch bar-out"></span>Saídas</span>
+                </div>
+                <div
+                  class="chart micro"
+                  role="img"
+                  aria-label="Entradas e saídas de abril a setembro de 2026. Em todos os meses as entradas foram maiores que as saídas. Em setembro: entradas de R$ 5.450,00 e saídas de R$ 3.972,40."
+                >
+                  <div class="chart-y" aria-hidden="true">
+                    <span style="top: 0">R$ 6 mil</span>
+                    <span style="top: 33.333%">R$ 4 mil</span>
+                    <span style="top: 66.667%">R$ 2 mil</span>
+                    <span style="top: 100%">0</span>
+                  </div>
+                  <div class="chart-area" aria-hidden="true">
+                    <div class="chart-group" style="--g: 0"><span class="bar bar-in" style="--h: 80%"></span><span class="bar bar-out" style="--h: 70.2%"></span></div>
+                    <div class="chart-group" style="--g: 1"><span class="bar bar-in" style="--h: 80%"></span><span class="bar bar-out" style="--h: 64.8%"></span></div>
+                    <div class="chart-group" style="--g: 2"><span class="bar bar-in" style="--h: 88.3%"></span><span class="bar bar-out" style="--h: 75.3%"></span></div>
+                    <div class="chart-group" style="--g: 3"><span class="bar bar-in" style="--h: 80%"></span><span class="bar bar-out" style="--h: 68.4%"></span></div>
+                    <div class="chart-group" style="--g: 4"><span class="bar bar-in" style="--h: 85%"></span><span class="bar bar-out" style="--h: 62.7%"></span></div>
+                    <div class="chart-group" style="--g: 5"><span class="bar bar-in" style="--h: 90.8%"></span><span class="bar bar-out" style="--h: 66.2%"></span></div>
+                  </div>
+                  <div class="chart-x" aria-hidden="true">
+                    <span>abr</span><span>mai</span><span>jun</span><span>jul</span><span>ago</span><span class="is-current">set</span>
+                  </div>
+                </div>
+                <details class="table-toggle">
+                  <summary>Ver como tabela</summary>
+                  <table class="table">
+                    <thead>
+                      <tr><th scope="col">Mês</th><th scope="col">Entradas</th><th scope="col">Saídas</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>Abril</td><td class="money">R$ 4.800,00</td><td class="money">R$ 4.210,00</td></tr>
+                      <tr><td>Maio</td><td class="money">R$ 4.800,00</td><td class="money">R$ 3.890,00</td></tr>
+                      <tr><td>Junho</td><td class="money">R$ 5.300,00</td><td class="money">R$ 4.520,00</td></tr>
+                      <tr><td>Julho</td><td class="money">R$ 4.800,00</td><td class="money">R$ 4.105,00</td></tr>
+                      <tr><td>Agosto</td><td class="money">R$ 5.100,00</td><td class="money">R$ 3.760,00</td></tr>
+                      <tr><td>Setembro</td><td class="money">R$ 5.450,00</td><td class="money">R$ 3.972,40</td></tr>
+                    </tbody>
+                  </table>
+                </details>
+              </section>
+
+              <section class="card reveal" style="--i: 4" aria-labelledby="t-contas">
+                <div class="card-head">
+                  <h2 class="title-3" id="t-contas">Contas</h2>
+                  <a class="link small" href="#">Ver todas</a>
+                </div>
+                <ul class="rows">
+                  <li>
+                    <span class="chip chip-neutral" data-icon="landmark"></span>
+                    <span class="grow"><span class="body-strong">Conta Nubank</span><span class="small muted">Conta corrente</span></span>
+                    <span class="money money-md">R$ 2.184,35</span>
+                  </li>
+                  <li>
+                    <span class="chip chip-neutral" data-icon="banknote"></span>
+                    <span class="grow"><span class="body-strong">Poupança Caixa</span><span class="small muted">Poupança</span></span>
+                    <span class="money money-md">R$ 6.500,00</span>
+                  </li>
+                  <li>
+                    <span class="chip chip-neutral" data-icon="wallet"></span>
+                    <span class="grow"><span class="body-strong">Carteira</span><span class="small muted">Dinheiro</span></span>
+                    <span class="money money-md">R$ 120,00</span>
+                  </li>
+                </ul>
+              </section>
+
+              <section class="card reveal" style="--i: 5" aria-labelledby="t-cartao">
+                <div class="card-head">
+                  <h2 class="title-3" id="t-cartao">Cartão Nubank</h2>
+                </div>
+                <div class="split">
+                  <div>
+                    <span class="label muted">Fatura atual</span>
+                    <span class="money money-lg">R$ 1.243,80</span>
+                    <span class="small muted">Fecha em 10 de out.</span>
+                  </div>
+                  <div>
+                    <span class="label muted">Parcelas futuras</span>
+                    <span class="money money-lg">R$ 890,00</span>
+                    <span class="small muted">Até fev. de 2027</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -2,6 +2,8 @@
 
 **Branch**: `001-contai-mvp` | **Date**: 2026-10-01 | **Spec**: [spec.md](./spec.md)
 
+**Revisão**: atualizado em 2026-10-01, depois da aprovação do `design-system.md`.
+
 **Input**: Feature specification from `/specs/001-contai-mvp/spec.md`
 
 **Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
@@ -38,7 +40,8 @@ Os detalhes estão em [research.md](./research.md), [data-model.md](./data-model
   pydantic-settings, argon2-cffi, PyJWT, pyotp, cryptography, slowapi, ofxtools, openpyxl,
   filetype, google-genai; gerenciado com uv
 - Frontend: React 19, Vite, Tailwind CSS 4, React Router, TanStack Query, React Hook Form com
-  Zod, Recharts, lucide-react, Motion, qrcode.react
+  Zod, Recharts, lucide-react, Motion, qrcode.react; fontes Besley e Atkinson Hyperlegible Next
+  servidas pelo próprio app
 
 **Storage**: PostgreSQL (dados e fila de jobs); volume privado para arquivos enviados, que são
 temporários; armazenamento de objetos externo apenas para backups cifrados
@@ -60,7 +63,7 @@ API em instância única, com limite de frequência em memória; sem Redis nem b
 arquivos de até 10 MB; telas a partir de 320px; WCAG 2.1 AA; interface em português do Brasil
 
 **Scale/Scope**: dezenas de usuários, cada um com alguns milhares de transações por ano; 10
-histórias de usuário, 82 requisitos funcionais, 17 tabelas, cerca de 70 endpoints, 8 features de
+histórias de usuário, 83 requisitos funcionais, 17 tabelas, cerca de 70 endpoints, 8 features de
 frontend
 
 ## Constitution Check
@@ -77,7 +80,7 @@ frontend
 | VI. Inteligência artificial | ferramentas somente leitura com schemas Pydantic; sem SQL gerado; `user_id` injetado; propostas confirmadas pelo usuário; conferência de totais; dados delimitados; `LLMProvider`; prompts em arquivos; `ai_usage` e limites; backoff | Passa |
 | VII. Privacidade e LGPD | OFX, CSV e planilhas lidos por código; só descrições vão à IA para categoria; aviso antes do primeiro PDF ou imagem; exportação e exclusão com cascata; backups fora do volume de uploads | Passa |
 | VIII. Dados financeiros | `BIGINT` em centavos em todas as camadas; formatação só na exibição; `DATE` e `timestamptz`; fuso `America/Sao_Paulo`; idempotência por identificador externo e impressão digital; transferências fora dos totais; confirmação e desfazer em transação única | Passa |
-| IX. Design e UX | mobile-first desde 320px; tokens em `globals.css`; claro e escuro; estados de carregamento, erro e vazio; confirmação em ações destrutivas | Passa, condicionado: `design-system.md` foi criado em 2026-10-01 e precisa ser aprovado antes de qualquer tarefa de interface |
+| IX. Design e UX | mobile-first desde 320px; tokens em `globals.css`; claro e escuro; estados de carregamento, erro e vazio; confirmação em ações destrutivas | Passa: `design-system.md` foi criado e aprovado em 2026-10-01, depois de uma prévia estática em `design-preview/` |
 | X. Testes | pytest com PostgreSQL real; testes obrigatórios listados; IA sempre falsa; cobertura de 80% imposta no CI; Vitest para hooks e componentes com lógica | Passa |
 | XI. Observabilidade | logs JSON com id da requisição; `/health` e `/health/worker`; erros inesperados com pilha e sem dados sensíveis | Passa |
 | XII. Deploy e infraestrutura | Compose em dev e produção; Caddy; build estático; migrações automáticas; backup diário cifrado com retenção de 14 dias e restauração testada; deploy dependente do CI | Passa |
@@ -85,8 +88,8 @@ frontend
 | Stack e dependências | stack da constituição mantida; cada dependência adicional está justificada na seção 25 de [research.md](./research.md) | Passa |
 | Processo | spec aprovada e esclarecida; abstrações limitadas às exigidas pela constituição | Passa |
 
-**Resultado antes da Fase 0**: aprovado, com um desvio justificado em Complexity Tracking e uma
-condição (a aprovação do `design-system.md`).
+**Resultado antes da Fase 0**: aprovado, com um desvio justificado em Complexity Tracking. A
+condição que existia, a aprovação do `design-system.md`, foi cumprida em 2026-10-01.
 
 **Reavaliação depois da Fase 1**: aprovado. O desenho não criou novos desvios. Três pontos foram
 conferidos de novo contra a constituição:
@@ -98,11 +101,16 @@ conferidos de novo contra a constituição:
   mapeamento; o arquivo continua fora de qualquer pasta pública e fora do backup.
 - O limite de frequência em memória zera quando a API reinicia. O bloqueio por tentativas
   erradas, que é o requisito da spec, fica no banco.
+- A política de segurança de conteúdo libera estilos no atributo `style`
+  (`style-src-attr 'unsafe-inline'`), porque o Motion e o Recharts dependem disso. Scripts e
+  folhas de estilo continuam restritos à própria origem. Como é uma concessão de segurança, o
+  Princípio V exige que seja documentada e justificada em ADR, e ela está na lista abaixo.
 
 **ADRs a escrever durante a implementação** (Princípio XIII): fila de jobs no PostgreSQL; modelo
 de sessão e tokens; camada de IA e garantia numérica do assistente; dinheiro em centavos e saldo
 calculado; importadores plugáveis e detecção de duplicatas; arquivos enviados em volume privado;
-backup cifrado e restauração.
+backup cifrado e restauração; política de segurança de conteúdo e a concessão para estilos no
+atributo `style`.
 
 ## Project Structure
 
@@ -140,7 +148,8 @@ backend/
 │   │   ├── rate_limit.py
 │   │   ├── logging.py           # logs JSON com id da requisição
 │   │   ├── money.py             # centavos, divisão de parcelas, formatação em reais
-│   │   └── clock.py             # "hoje" e períodos em America/Sao_Paulo
+│   │   ├── clock.py             # "hoje" e períodos em America/Sao_Paulo
+│   │   └── health.py            # /health e /health/worker
 │   ├── modules/                 # cada um: router.py, service.py, repository.py, models.py, schemas.py
 │   │   ├── auth/
 │   │   ├── users/               # perfil, sessões, 2FA, exportação e exclusão
@@ -154,10 +163,14 @@ backend/
 │   │   └── assistant/
 │   │       ├── tools/           # ferramentas somente leitura
 │   │       └── prompts/         # prompts de sistema versionados
-│   ├── ai/                      # provider.py (LLMProvider), gemini.py, fake.py
+│   ├── ai/                      # provider.py (LLMProvider), gemini.py, fake.py, factory.py,
+│   │                            # models.py, repository.py e usage.py (uso e limites)
 │   ├── email/                   # envio por SMTP e modelos de texto
 │   └── worker/
 │       ├── main.py              # laço do worker e batimento
+│       ├── models.py            # Job e WorkerHeartbeat
+│       ├── repository.py        # único acesso às tabelas da fila e do batimento
+│       ├── queue.py             # regras da fila: backoff e jobs travados
 │       └── jobs/                # importações, e-mails e tarefas periódicas
 └── tests/
     ├── unit/                    # dinheiro, parcelas, faturas, saldos, importadores, duplicatas, ferramentas
@@ -168,11 +181,14 @@ backend/
 frontend/
 ├── package.json
 ├── Dockerfile
+├── public/
+│   └── theme-init.js            # define o tema antes da primeira pintura
 └── src/
     ├── main.tsx
     ├── App.tsx
     ├── router.tsx               # rotas e guard único
-    ├── lib/                     # api-client.ts, money.ts, dates.ts
+    ├── assets/fonts/            # Besley e Atkinson Hyperlegible Next (.woff2)
+    ├── lib/                     # api-client.ts, money.ts, dates.ts, motion.ts
     ├── components/
     │   ├── ui/                  # Button, Input, Modal, Card, MoneyInput, EmptyState...
     │   └── layout/              # AppShell, barra inferior no celular, lateral no desktop
@@ -189,7 +205,9 @@ frontend/
         └── globals.css          # tokens de design e temas claro e escuro
 
 infra/
-├── Caddyfile
+├── Caddyfile                    # produção
+├── Caddyfile.dev                # desenvolvimento
+├── postgres/                    # init-test-db.sql (banco de testes)
 ├── deploy.sh
 └── backup/                      # backup.sh, restore.sh e instruções
 
@@ -199,6 +217,7 @@ docker-compose.yml               # desenvolvimento (inclui mailpit)
 docker-compose.prod.yml          # produção (inclui backup)
 .env.example
 design-system.md
+design-preview/                  # prévia estática do design; fora do build e do deploy
 README.md
 ```
 
@@ -207,6 +226,14 @@ seguindo a árvore fornecida na entrada do plano. O backend é um único pacote 
 dois processos, API e worker, a partir da mesma imagem. Foram acrescentados à árvore fornecida
 `core/money.py` e `core/clock.py` (regras de centavos e de fuso em um só lugar), a separação de
 `tests/` em `unit`, `integration`, `isolation` e `fixtures`, os `Dockerfile` e `infra/deploy.sh`.
+O design system aprovado acrescentou `frontend/public/theme-init.js`,
+`frontend/src/assets/fonts/` e `frontend/src/lib/motion.ts` (seção 26 de
+[research.md](./research.md)).
+
+Além dos cinco arquivos padrão, um módulo pode ter arquivos auxiliares de regra pura, como
+`transactions/invoices.py`, `imports/duplicates.py` e `assistant/validation.py`. Eles não
+acessam o banco: só repositórios acessam, inclusive em `ai` e em `worker`, e os jobs do worker
+chamam serviços.
 
 ## Complexity Tracking
 
@@ -214,4 +241,4 @@ dois processos, API e worker, a partir da mesma imagem. Foram acrescentados à �
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| Módulo `categorization`, fora da lista de domínios do Princípio III (`auth`, `users`, `accounts`, `categories`, `transactions`, `imports`, `dashboard`, `assistant`) | A sugestão de categoria é usada por três módulos: `imports` (linhas propostas), `transactions` (aprender com correções) e `assistant` (lançamento por texto). Foi pedido na entrada do plano. | Colocar dentro de `categories` misturaria o cadastro de categorias com regras aprendidas e chamadas à IA; colocar dentro de `imports` obrigaria `transactions` e `assistant` a depender de `imports`. Recomenda-se uma emenda PATCH à constituição para incluir o módulo na lista. |
+| Módulo `categorization`, fora da lista de domínios do Princípio III (`auth`, `users`, `accounts`, `categories`, `transactions`, `imports`, `dashboard`, `assistant`) | A sugestão de categoria é usada por três módulos: `imports` (linhas propostas), `transactions` (aprender com correções) e `assistant` (lançamento por texto). Foi pedido na entrada do plano. | Colocar dentro de `categories` misturaria o cadastro de categorias com regras aprendidas e chamadas à IA; colocar dentro de `imports` obrigaria `transactions` e `assistant` a depender de `imports`. A emenda PATCH que inclui o módulo na lista é a tarefa T055, feita antes da Phase 7. |

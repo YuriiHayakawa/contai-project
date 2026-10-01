@@ -1,0 +1,139 @@
+/* Contaí — tokens do design-system.md (seções 2, 3, 5 e 9).
+   Prévia estática: CSS puro, sem Tailwind. No app, estes valores vão para globals.css. */
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  src: url("fonts/AtkinsonHyperlegibleNext-Variable.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Besley";
+  src: url("fonts/Besley-Variable.woff2") format("woff2");
+  font-weight: 400 900;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+
+  /* base */
+  --bg: #f5f0e6;
+  --bg-sunken: #ece5d6;
+  --surface: #fffdf8;
+  --surface-raised: #ffffff;
+  --border: #ddd3c0;
+  --border-strong: #877e6c;
+  --ink: #1a2238;
+  --ink-muted: #525c75;
+  --ink-subtle: #586077;
+  --primary: #2a3fb0;
+  --primary-hover: #22348f;
+  --on-primary: #ffffff;
+  --primary-soft: #e4e8fa;
+  --highlight: #ffe066;
+  --margin-line: #e3a996;
+  --scrim: rgb(26 34 56 / 0.5);
+
+  /* semânticas */
+  --income: #136f58;
+  --income-soft: #d9f0e8;
+  --expense: #ad4328;
+  --expense-soft: #f8e3db;
+  --warning: #8a5300;
+  --warning-soft: #fcefc9;
+  --danger: #b4232f;
+  --danger-soft: #fadfe1;
+  --on-danger: #ffffff;
+
+  /* categorias */
+  --cat-tinta: #2f5fd0;
+  --cat-caqui: #d9621e;
+  --cat-piscina: #12998a;
+  --cat-mostarda: #a67c00;
+  --cat-goiaba: #d6568f;
+  --cat-mata: #3f8f3a;
+  --cat-ameixa: #7b4cc2;
+  --cat-pitanga: #c4384a;
+  --cat-ardosia: #7a8296;
+
+  /* gráficos */
+  --chart-income: #1e9e7e;
+  --chart-expense: #a33d24;
+  --chart-single: #2f5fd0;
+  --chart-grid: #ddd3c0;
+
+  /* sombras */
+  --elev-1: 0 1px 2px rgb(26 34 56 / 0.08);
+  --elev-2: 0 6px 16px -4px rgb(26 34 56 / 0.14);
+  --elev-3: 0 20px 48px -12px rgb(26 34 56 / 0.24);
+
+  /* fixos */
+  --font-sans: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Besley", ui-serif, Georgia, serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 360ms;
+  --duration-emphasis: 520ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #10152a;
+  --bg-sunken: #0b0f20;
+  --surface: #182040;
+  --surface-raised: #202a52;
+  --border: #2c3763;
+  --border-strong: #7c87b5;
+  --ink: #efe9dc;
+  --ink-muted: #b3b9d1;
+  --ink-subtle: #969dbc;
+  --primary: #9daeff;
+  --primary-hover: #b4c1ff;
+  --on-primary: #10152a;
+  --primary-soft: #263161;
+  --highlight: #5e4b00;
+  --margin-line: #6b3a2c;
+  --scrim: rgb(5 8 18 / 0.65);
+
+  --income: #6fd3b0;
+  --income-soft: #123a30;
+  --expense: #f0977c;
+  --expense-soft: #4a2219;
+  --warning: #f2c14e;
+  --warning-soft: #45360b;
+  --danger: #ff8f96;
+  --danger-soft: #4d1a20;
+  --on-danger: #2a0a0e;
+
+  --cat-tinta: #6088ec;
+  --cat-caqui: #dd7435;
+  --cat-piscina: #22a595;
+  --cat-mostarda: #b58a18;
+  --cat-goiaba: #dc6397;
+  --cat-mata: #50a64b;
+  --cat-ameixa: #9b76e0;
+  --cat-pitanga: #e5566a;
+  --cat-ardosia: #8a93b5;
+
+  --chart-income: #2fa789;
+  --chart-expense: #b94e33;
+  --chart-single: #6088ec;
+  --chart-grid: #2c3763;
+
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.5);
+  --elev-2: 0 6px 16px -4px rgb(0 0 0 / 0.5);
+  --elev-3: 0 20px 48px -12px rgb(0 0 0 / 0.5);
+}

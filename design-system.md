@@ -381,6 +381,10 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - A linha inteira é um botão que abre o detalhe. Não há ação por deslizar.
 - Carregando: 5 linhas de esqueleto. Vazio: estado vazio. Erro: mensagem com "Tentar de novo".
 - Lista longa: carregar mais ao rolar, sempre com um botão "Carregar mais" como alternativa.
+- **Filtros da lista**: o período fica sempre visível. Até `sm`, os demais filtros ficam atrás
+  de um único botão "Filtros", que abre uma folha; a partir de `sm`, cada filtro tem o próprio
+  seletor. Os botões de filtro têm contorno de 1,5px `--border-strong`, raio `--radius-sm`,
+  44px de altura e texto em `label`.
 - **Modo de revisão** (importação): caixa de seleção de 24px com alvo de 44px à esquerda; linhas
   desmarcadas usam `--ink-muted` e o texto "Não será importada"; possível duplicata leva o selo
   "Possível duplicata" em `--warning` sobre `--warning-soft`, com ícone.
@@ -429,7 +433,9 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Na base, o nome do usuário, com acesso a Configurações e Sair.
 
 **Cabeçalho da página**: título em `title-1` à esquerda e, no máximo, uma ação à direita. No
-celular ele rola com o conteúdo; não há barra superior fixa, exceto no chat.
+celular ele rola com o conteúdo; não há barra superior fixa, exceto no chat. No painel, o título
+é o mês exibido e funciona como botão para escolher outro mês; as setas de mês anterior e
+próximo aparecem a partir de 480px de largura.
 
 ### 6.10 Ícones
 

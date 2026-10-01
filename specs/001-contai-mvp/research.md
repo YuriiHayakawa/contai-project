@@ -1,0 +1,500 @@
+# Research: Contaí — decisões técnicas da Fase 0
+
+**Feature**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md) | **Date**: 2026-10-01
+
+A stack, a estrutura de pastas e o modelo de dados principal vieram prontos na entrada do
+`/speckit-plan`. Este documento registra as decisões que faltavam para fechar o desenho e as
+justificativas das dependências novas, como exige a constituição. Não restou nenhum
+`NEEDS CLARIFICATION`.
+
+As decisões não foram conferidas em fontes online; a seção 27 lista o que precisa ser verificado
+no início da implementação.
+
+## 1. Topologia: mesma origem atrás do Caddy
+
+- **Decision**: o Caddy é a única porta de entrada. `/api/*` vai para a API, e todo o resto vai
+  para o frontend. Em desenvolvimento, o `docker-compose.yml` sobe o Caddy em
+  `http://localhost:8080`, com o frontend rodando o servidor de desenvolvimento do Vite (com
+  recarga automática) por trás dele; em produção, o serviço `frontend` é uma imagem que apenas
+  serve o build estático.
+- **Rationale**: com app e API na mesma origem, o cookie `SameSite=Strict` funciona sem
+  exceções, não é preciso liberar CORS para nenhuma outra origem, e dev e produção têm o mesmo
+  desenho de rotas. A lista de origens permitidas do CORS fica vazia por padrão e é configurável
+  por variável de ambiente.
+- **Alternatives considered**: API em subdomínio próprio (exige CORS com credenciais e cookie
+  entre subdomínios); Vite acessado direto na porta 5173 com proxy do próprio Vite (dev diferente
+  de produção).
+
+## 2. Sessões, access token e refresh token
+
+- **Decision**:
+  - Access token JWT (PyJWT, HS256, segredo em variável de ambiente), validade de 15 minutos,
+    com `sub` (usuário) e `sid` (sessão). Fica só em memória no frontend.
+  - Refresh token opaco no formato `<session_id>.<segredo aleatório de 32 bytes>`. A tabela
+    `sessions` guarda apenas o SHA-256 do segredo atual. A cada uso o segredo é trocado. Se
+    chegar um segredo que não é o atual para uma sessão existente, é reutilização de token
+    antigo: a sessão inteira é revogada.
+  - Uma linha de `sessions` é ao mesmo tempo o "dispositivo conectado" da tela de sessões e a
+    "família de rotação".
+  - A sessão expira após 30 dias sem uso (janela deslizante renovada a cada refresh).
+  - A dependência de autenticação da API confere, a cada requisição, se a sessão do `sid` não
+    foi revogada e se o usuário está ativo (uma consulta por chave primária).
+- **Rationale**: o formato `sessão.segredo` detecta a reutilização de qualquer token antigo com
+  uma única tabela. A conferência por requisição faz o encerramento remoto de sessão, a troca
+  de senha e o pedido de exclusão de conta valerem na hora, e não só quando o JWT expira (FR-014,
+  FR-015, SC-011). O custo é irrelevante na escala do projeto.
+- **Alternatives considered**: uma linha por refresh token com `family_id` (mais tabelas e
+  limpeza, sem ganho); JWT puramente sem estado (sessão encerrada continuaria valendo por até
+  15 minutos).
+
+## 3. Cookie de refresh, CSRF e várias abas
+
+- **Decision**:
+  - Cookie `httpOnly`, `Secure`, `SameSite=Strict`, com `Path=/api/v1/auth/refresh`.
+  - O endpoint de refresh exige o cabeçalho `X-Contai-Client: web` e confere o cabeçalho
+    `Origin` contra a origem configurada do app.
+  - O logout usa o access token (pelo `sid`) para revogar a sessão e devolve um `Set-Cookie`
+    que apaga o cookie no mesmo `Path`.
+  - No frontend, o refresh é serializado entre abas com a Web Locks API
+    (`navigator.locks.request`), para que duas abas nunca apresentem o mesmo token ao mesmo
+    tempo.
+  - O cookie é sempre `Secure`, inclusive em desenvolvimento: navegadores baseados em Chromium e
+    o Firefox aceitam cookies `Secure` em `http://localhost`.
+- **Rationale**: como cada aba guarda o access token em memória, duas abas abertas juntas
+  fariam refresh em paralelo, e a segunda seria tratada como reutilização, derrubando a sessão.
+  Serializar no cliente resolve isso sem criar uma "janela de tolerância" no servidor, que
+  enfraqueceria a detecção.
+- **Alternatives considered**: tolerância de alguns segundos no servidor para tokens recém
+  trocados (enfraquece a segurança e exigiria ADR); cookie sem `Secure` em desenvolvimento
+  (cria uma configuração que pode vazar para produção).
+
+## 4. Senhas
+
+- **Decision**: `argon2-cffi` (Argon2id, parâmetros padrão da biblioteca), com `check_needs_rehash`
+  no login. Mínimo de 8 caracteres, sem regras de composição. Checagem contra uma lista local de
+  senhas comuns (cerca de 10 mil, incluindo termos comuns em português), versionada no repositório.
+- **Rationale**: `argon2-cffi` é a implementação de referência e já oferece verificação e
+  re-hash; `pwdlib` seria apenas uma camada a mais sobre ela. A lista local evita depender de
+  rede e de enviar qualquer derivado da senha a terceiros.
+- **Alternatives considered**: `pwdlib` (camada extra sem uso para nós); consulta a serviço
+  externo de senhas vazadas (rede externa no fluxo de cadastro e nos testes).
+
+## 5. Bloqueio de login e rate limiting
+
+- **Decision**:
+  - O bloqueio após 5 tentativas erradas fica no banco, por conta (`failed_login_count`,
+    `locked_until` em `users`), e conta erros de senha e de código de duas etapas.
+  - `slowapi` em memória limita a frequência por IP nos endpoints públicos e por usuário nos
+    autenticados. Valores iniciais, todos configuráveis: login 10/min por IP; cadastro 5/h por
+    IP; pedidos de e-mail (reenvio, recuperação) 5/h por IP; upload 20/h por usuário; mensagens
+    ao assistente 10/min por usuário.
+  - O IP do cliente vem do cabeçalho definido pelo Caddy, e a API só confia nele quando a
+    conexão vem da rede interna do Compose.
+- **Rationale**: o bloqueio é uma regra da spec (FR-009) e precisa sobreviver a reinícios e ser
+  testável; por isso fica no banco. O limite por frequência é só proteção contra abuso, e perder
+  os contadores em um reinício é aceitável com a API em instância única.
+- **Alternatives considered**: tudo em memória (bloqueio some no reinício); Redis (proibido no
+  MVP pela constituição).
+
+## 6. Verificação em duas etapas
+
+- **Decision**:
+  - `pyotp` para TOTP, aceitando o passo atual e um passo de tolerância para cada lado; o último
+    passo usado fica gravado para impedir reuso do mesmo código.
+  - O segredo TOTP é cifrado no banco com Fernet (`cryptography`), com a chave em variável de
+    ambiente.
+  - 10 códigos de recuperação aleatórios, guardados como SHA-256, de uso único.
+  - O QR code de ativação é desenhado no frontend (`qrcode.react`) a partir da URI `otpauth://`;
+    o segredo também é exibido em texto para digitação manual.
+  - O login em duas etapas usa um `challenge_token` (JWT de 5 minutos, com finalidade própria)
+    entre a etapa da senha e a etapa do código.
+  - Recuperação sem celular e sem códigos: com o `challenge_token` em mãos, o usuário pede o
+    link; ao abrir o link, nasce um `TwoFactorResetRequest` que vale em 72 horas. O worker envia
+    o aviso inicial, um lembrete 24 horas antes e, no prazo, desativa as duas etapas, apaga os
+    códigos e encerra todas as sessões. O pedido é cancelado pelo link do aviso ou por um login
+    com código válido.
+- **Rationale**: atende FR-011 a FR-013 com as bibliotecas pedidas. Exigir o `challenge_token`
+  garante que só quem sabe a senha consegue iniciar a recuperação.
+- **Alternatives considered**: gerar o QR no backend (dependência equivalente e o segredo
+  trafegaria como imagem); guardar o segredo TOTP em claro (um vazamento do banco anularia as
+  duas etapas).
+
+## 7. E-mails
+
+- **Decision**: todo e-mail é enviado pelo worker, por um job `send_email`, usando `smtplib` e
+  `email.message` da biblioteca padrão dentro de `asyncio.to_thread`. O token do link é gerado
+  dentro do job, que grava só o hash; o payload do job tem apenas ids e o tipo do e-mail. Os
+  textos ficam em arquivos em `app/email/templates/`, preenchidos com `string.Template`.
+- **Rationale**: enviar pela fila dá novas tentativas automáticas e faz as respostas de cadastro
+  e recuperação levarem o mesmo tempo exista ou não o e-mail (FR-008). Gerar o token no job evita
+  guardar o token em claro no payload. A biblioteca padrão dispensa dependência nova.
+- **Alternatives considered**: `aiosmtplib` (dependência nova para pouco ganho); envio direto na
+  requisição (tempo de resposta denuncia se o e-mail existe e não há nova tentativa).
+
+## 8. Fila de jobs e worker
+
+- **Decision**:
+  - Tabela `jobs`; o worker busca com `SELECT ... FOR UPDATE SKIP LOCKED`, em laço com espera
+    curta quando não há trabalho.
+  - Falha transitória: nova tentativa com backoff exponencial e aleatoriedade, até
+    `max_attempts`. Job travado (worker morreu) volta para a fila depois de um tempo limite.
+  - Tarefas periódicas rodam no mesmo laço, por intervalo: exclusões de conta vencidas, pedidos
+    de desativação de duas etapas vencidos e seus lembretes, limpeza de tokens e sessões
+    expirados, e limpeza de arquivos e importações abandonadas.
+  - Saúde do worker: ele grava um batimento em `worker_heartbeats`; `GET /api/v1/health/worker`
+    responde saudável se o último batimento tem menos de 60 segundos, e o `healthcheck` do
+    contêiner usa a mesma checagem.
+  - O payload dos jobs contém apenas identificadores, nunca conteúdo de documento, descrição ou
+    valor.
+  - O acesso às tabelas `jobs` e `worker_heartbeats` fica só em `worker/repository.py`; os jobs
+    chamam serviços dos módulos e nunca consultam o banco direto.
+- **Rationale**: é a fila exigida pela constituição (Princípio III), sem broker externo.
+- **Alternatives considered**: `LISTEN/NOTIFY` para acordar o worker (complexidade sem
+  necessidade; a espera de 1 a 2 segundos é imperceptível); bibliotecas de fila sobre PostgreSQL
+  (dependência nova para algo de cerca de cem linhas).
+
+## 9. Uploads
+
+- **Decision**: limite de 10 MB aplicado no Caddy e de novo na API, lendo em blocos; tipo real
+  conferido com `filetype` pelos primeiros bytes (PDF, JPG, PNG, XLSX) e por inspeção de conteúdo
+  para OFX e CSV, que são texto; nome gerado pelo sistema (UUID); gravação em um volume privado
+  compartilhado só entre `api` e `worker`, fora de qualquer pasta servida; o volume não entra no
+  backup. PDF cifrado é detectado pelo marcador `/Encrypt` e recusado.
+- **Rationale**: atende o Princípio V. Guardar o arquivo no banco colocaria documentos bancários
+  dentro dos backups por 14 dias, contra a regra de descartar o original.
+- **Alternatives considered**: arquivo em coluna `bytea` (vai para o backup); armazenamento de
+  objetos externo (infraestrutura a mais para arquivos que vivem minutos).
+
+## 10. Fluxo e estados da importação
+
+- **Decision**: estados `queued → processing → awaiting_review → completed → undone`, com os
+  desvios `awaiting_mapping` (CSV ou planilha sem modelo conhecido) e `failed`. As transações
+  propostas ficam em `import_items` até a confirmação. A revisão é feita no navegador, e a
+  confirmação envia a decisão final de cada linha em uma única requisição, gravada em uma única
+  transação de banco. O arquivo é apagado quando a importação chega a `awaiting_review` ou
+  `failed`; em `awaiting_mapping` ele é mantido até o usuário mapear, por no máximo 24 horas. Uma
+  importação em `awaiting_review` expira depois de 7 dias sem confirmação (FR-083). Os
+  `import_items` são apagados na confirmação. O frontend acompanha o estado consultando
+  `GET /imports/{id}` a cada 2 segundos enquanto o estado não é final.
+- **Rationale**: o estado `awaiting_mapping` é necessário porque o mapeamento de colunas acontece
+  depois do envio. Manter as edições da revisão só no navegador evita endpoints por linha; o
+  custo é perder edições não confirmadas se a página for fechada, aceitável no MVP.
+- **Alternatives considered**: salvar cada edição de linha no servidor (mais endpoints e estados);
+  WebSocket ou SSE para o andamento (consulta periódica basta).
+
+## 11. OFX
+
+- **Decision**: `ofxtools`, com uma etapa própria de pré-processamento tolerante antes da
+  leitura (detecção de codificação, correção de cabeçalho e de datas fora do padrão). O `FITID`
+  vira o identificador externo; o saldo informado (`LEDGERBAL`) alimenta a comparação do FR-082.
+- **Rationale**: é a biblioteca pedida e não traz dependências. Arquivos OFX de bancos
+  brasileiros costumam fugir do padrão, então a tolerância fica isolada no importador e é coberta
+  por fixtures de vários bancos.
+- **Alternatives considered**: `ofxparse` (mais tolerante, mas sem tipos e com dependências);
+  parser próprio (reinventar o que já existe).
+
+## 12. CSV e planilhas
+
+- **Decision**: `csv` da biblioteca padrão (com detecção de delimitador e codificação) e
+  `openpyxl` em modo somente leitura para `.xlsx`. Um modelo (`ImportTemplate`) é identificado
+  pela assinatura do cabeçalho (nomes de colunas normalizados). O mapeamento guarda as colunas de
+  data, descrição e valor, o formato da data, o separador decimal e a convenção de sinal, e
+  aceita também o caso de colunas separadas de entrada e saída. Ao pedir o mapeamento, o sistema
+  sugere as colunas por heurística nos nomes e mostra a prévia das primeiras linhas. `.xls`
+  antigo não é aceito.
+- **Rationale**: "formato reconhecido" passa a ter definição testável: existe um modelo salvo do
+  usuário com a mesma assinatura de cabeçalho (FR-039, SC-007).
+- **Alternatives considered**: catálogo embutido de modelos por banco (manutenção contínua;
+  pode vir depois sem mudar o núcleo); `pandas` (dependência pesada para leitura simples).
+
+## 13. PDF e imagem com IA
+
+- **Decision**: o arquivo vai inteiro para o modelo de extração, com saída estruturada (JSON
+  Schema) validada por Pydantic. O esquema do extrato traz as linhas e, quando houver, o total do
+  documento; o do comprovante traz uma única transação. O backend soma as linhas, compara com o
+  total e registra a divergência. Valores monetários chegam como texto e são convertidos para
+  centavos com `Decimal`, nunca com `float`.
+- **Rationale**: atende FR-041 a FR-043 e o Princípio VI: a conferência é feita por código, e o
+  usuário revisa tudo antes de salvar.
+- **Alternatives considered**: extrair o texto do PDF localmente e mandar só o texto (PDFs
+  digitalizados não têm texto; exigiria biblioteca de PDF e OCR).
+
+## 14. Duplicatas e idempotência
+
+- **Decision**: três níveis, aplicados na preparação da revisão.
+  1. Identificador externo: índice único parcial em `(account_id, external_id)`; linha com
+     identificador já existente é `exact`.
+  2. Impressão digital (`fingerprint` = hash de conta, data, tipo, valor e descrição
+     normalizada), comparada por contagem: se o arquivo tem duas linhas idênticas e o banco já
+     tem uma, só uma é marcada `exact`.
+  3. Provável: mesma conta, mesmo tipo e valor, data com até 3 dias de diferença, qualquer
+     descrição; marca `probable`. É o que pega lançamentos feitos à mão.
+  Linhas `exact` e `probable` chegam desmarcadas. O hash do arquivo é guardado para avisar que o
+  mesmo arquivo já foi importado.
+- **Rationale**: reimportar o mesmo arquivo gera zero duplicatas com a seleção padrão (FR-050,
+  SC-008), e o banco impede a duplicata de OFX mesmo se o código falhar. A impressão digital não
+  é única porque duas compras iguais no mesmo dia são legítimas.
+- **Alternatives considered**: índice único na impressão digital (bloquearia compras legítimas
+  repetidas).
+
+## 15. Categorização
+
+- **Decision**: a descrição normalizada é minúscula, sem acentos, sem pontuação e sem trechos
+  puramente numéricos ou de data. `CategorizationRule` associa descrição normalizada a
+  categoria, com origem `user` ou `ai`. Ordem: regra do usuário; regra em cache vinda da IA;
+  o restante vai em um único lote à IA, que recebe só as descrições distintas e a lista de
+  categorias do usuário, e devolve um índice por descrição; o que a IA não resolver, ou devolver
+  inválido, fica em "Outros". Uma correção do usuário grava ou substitui a regra como `user`,
+  que a IA nunca sobrescreve.
+- **Rationale**: atende FR-047, FR-048 e o Princípio VII. O cache das respostas da IA poupa a
+  cota gratuita em importações repetidas do mesmo comércio.
+- **Alternatives considered**: semelhança aproximada entre descrições (resultados imprevisíveis;
+  a correspondência exata da descrição normalizada é testável e pode evoluir depois).
+
+## 16. Dinheiro, parcelas, datas e fuso
+
+- **Decision**: centavos inteiros em todas as camadas (`BIGINT` no banco, `int` no Python,
+  inteiro no JSON e no TypeScript). Parcelas: `total // n` em cada uma, com o resto de centavos
+  somado à primeira. Datas das parcelas: mesmo dia dos meses seguintes, ajustado ao último dia
+  em meses curtos. "Hoje" e "mês atual" vêm de `zoneinfo` com `America/Sao_Paulo` (com o pacote
+  `tzdata` na imagem). No frontend, `money.ts` e `dates.ts` concentram formatação e fuso.
+- **Rationale**: Princípio VIII e FR-029 a FR-031.
+- **Alternatives considered**: `Decimal`/`NUMERIC` (correto, mas a constituição fixa inteiros).
+
+## 17. Saldos, faturas e relatórios
+
+- **Decision**:
+  - Saldo = saldo inicial + receitas − despesas + transferências recebidas − transferências
+    enviadas, para transações com data entre a data de referência e hoje. O saldo é sempre
+    calculado por consulta, nunca armazenado. A dívida de um cartão é o saldo com sinal trocado.
+  - Transferência: duas linhas em `transactions` (uma por conta), ligadas por
+    `transfer_group_id`, com `transfer_direction` (`out` ou `in`).
+  - Fatura: derivada, não armazenada. Com fechamento no dia F (limitado ao último dia do mês),
+    uma compra na data d pertence à fatura que fecha na primeira data de fechamento posterior a
+    d. Fatura atual é a que contém hoje. Parcelas futuras são as parcelas do cartão com data a
+    partir do próximo fechamento.
+  - Um único serviço de relatórios, no módulo `dashboard`, é usado pelo painel e pelas
+    ferramentas do assistente.
+- **Rationale**: saldo calculado não pode divergir das transações (SC-009), e o serviço único é
+  o que garante números idênticos entre painel e assistente (FR-062, SC-010).
+- **Alternatives considered**: saldo armazenado e atualizado a cada transação (risco de
+  divergência); tabela de faturas (estado duplicado que precisa ser recalculado a cada edição).
+
+## 18. Camada de IA
+
+- **Decision**: interface `LLMProvider` com duas operações: conversa com ferramentas e geração
+  estruturada com anexos opcionais. Tipos próprios e neutros de mensagem, chamada de ferramenta
+  e uso de tokens. `gemini.py` implementa com o SDK `google-genai` em modo assíncrono, com a
+  execução automática de funções desligada; `fake.py` devolve respostas roteirizadas nos testes.
+  Dois modelos por variável de ambiente (`AI_MODEL_CHAT`, `AI_MODEL_EXTRACTION`). Toda chamada
+  grava `AiUsage`. Limites diários por usuário (30 perguntas, 10 extrações) contados no fuso de
+  Brasília. Erros de limite do provedor viram uma exceção própria: no worker, nova tentativa com
+  backoff; no chat, uma nova tentativa curta e, se persistir, mensagem amigável.
+- **Rationale**: Princípio VI. Desligar a execução automática mantém o backend no controle de
+  cada chamada de ferramenta, que é onde o `user_id` é injetado.
+- **Alternatives considered**: bibliotecas de orquestração de LLM (abstração de terceiros no
+  lugar de uma interface de duas operações).
+
+## 19. Assistente
+
+- **Decision**:
+  - Laço de ferramentas com no máximo 5 rodadas. O modelo recebe a data de hoje em Brasília, as
+    contas e as categorias do usuário (só nomes e ids) e as últimas 20 mensagens da conversa.
+  - Períodos são parâmetros simbólicos (`this_month`, `last_month`, `last_n_months`,
+    `this_year`, `last_year`, `month`, `custom`), resolvidos em datas pelo backend. O modelo não
+    faz conta de datas.
+  - As ferramentas devolvem cada valor em centavos e também já formatado em reais, além das
+    diferenças e percentuais já calculados.
+  - Conferência da resposta: todo valor monetário e percentual presente no texto do modelo
+    precisa existir nos resultados das ferramentas daquela rodada. Se não existir, o backend pede
+    a resposta de novo uma vez e, se falhar outra vez, monta a resposta por modelo de texto fixo
+    a partir dos resultados.
+  - Os ids das transações citadas vêm dos resultados das ferramentas, não do modelo, e ficam em
+    `ChatMessage`.
+  - Lançamento por texto: ferramenta `propose_transaction`, que não grava nada; o backend valida,
+    resolve conta e categoria e devolve uma mensagem do tipo `transaction_proposal`, que o
+    frontend abre no formulário para confirmação.
+  - Descrições e conteúdos de documentos entram no prompt dentro de blocos delimitados, com a
+    instrução de sistema de tratá-los só como dados. Os prompts ficam em arquivos versionados em
+    `assistant/prompts/`.
+  - A resposta é entregue inteira, sem streaming.
+- **Rationale**: a conferência por código é o que transforma "a IA não inventa números" em algo
+  verificável (FR-062, SC-010). Períodos simbólicos e valores pré-formatados eliminam as duas
+  fontes mais comuns de erro de um modelo: contas com datas e com casas decimais.
+- **Alternatives considered**: confiar só no prompt (sem garantia); streaming (melhora a
+  percepção de espera, mas impede a conferência antes de exibir).
+
+## 20. Exportação e exclusão de conta
+
+- **Decision**: a exportação é um ZIP gerado na hora com `zipfile` e `csv` da biblioteca padrão:
+  CSV para contas, categorias, transações e importações, e JSON para perfil e conversas. O pedido
+  de exclusão marca o usuário como `pending_deletion`, revoga as sessões e cancela os jobs
+  pendentes. Durante os 7 dias, o login funciona, mas a dependência de autenticação só libera a
+  consulta do próprio perfil e o cancelamento da exclusão. No prazo, o worker apaga a linha do
+  usuário; todas as tabelas de dados do usuário têm `ON DELETE CASCADE`, e os arquivos
+  remanescentes são removidos na mesma tarefa.
+- **Rationale**: FR-016, FR-017 e SC-011, com um único ponto de bloqueio para a conta em
+  exclusão.
+- **Alternatives considered**: exportação por job com link por e-mail (desnecessário para alguns
+  milhares de linhas).
+
+## 21. Observabilidade
+
+- **Decision**: `logging` da biblioteca padrão com um formatador JSON próprio e um
+  `contextvar` com o id da requisição, devolvido também no cabeçalho `X-Request-ID` e no corpo
+  dos erros. Os logs registram apenas campos de uma lista permitida (rota, método, status,
+  duração, ids, códigos de erro). Erros inesperados registram a pilha, sem os valores das
+  variáveis. `GET /api/v1/health` confere a API e o banco.
+- **Rationale**: Princípios V e XI. Uma lista do que pode ser registrado é mais segura do que
+  tentar filtrar o que não pode.
+- **Alternatives considered**: `structlog` (dependência nova sem necessidade).
+
+## 22. Frontend
+
+- **Decision**:
+  - `AuthContext` guarda o access token em memória e o usuário atual; ao carregar o app, tenta um
+    refresh silencioso. Um único guard de rota protege as rotas autenticadas.
+  - `api-client.ts` usa `fetch`, anexa o token e, em um 401, faz um refresh serializado e repete
+    a requisição uma vez.
+  - Todo dado do servidor passa por TanStack Query; cada feature tem `services/` (HTTP), `hooks/`
+    (queries e mutations) e `components/`.
+  - Tokens de design como propriedades CSS em `globals.css`, expostos ao Tailwind 4 por
+    `@theme`; o tema escuro segue a preferência do sistema, com troca manual guardada no
+    navegador.
+  - `Motion` só para transições de entrada e saída de modais, folhas e itens de lista, sempre
+    respeitando `prefers-reduced-motion`.
+  - Gráficos do Recharts sempre acompanhados de uma lista ou tabela com os mesmos dados.
+  - A política de privacidade é uma rota pública do app, com versão registrada no aceite.
+- **Rationale**: Princípios II, IV e IX.
+- **Alternatives considered**: biblioteca de estado global (proibida na entrada do plano);
+  `axios` (o `fetch` nativo basta).
+
+## 23. Testes
+
+- **Decision**:
+  - Backend: `pytest`, `pytest-asyncio`, `httpx` e `pytest-cov`. Os testes de integração usam o
+    PostgreSQL de um contêiner (serviço do Compose no dia a dia, `services` no GitHub Actions),
+    com esquema criado pelas migrações e cada teste isolado em uma transação desfeita ao final.
+  - Isolamento entre usuários: um teste percorre todas as rotas registradas no app e falha se
+    alguma rota autenticada não tiver um caso de isolamento registrado; cada caso cria o recurso
+    com o usuário A e exige 404 para o usuário B.
+  - `FakeLLMProvider` em todos os testes; nenhum teste acessa a rede.
+  - Fixtures de OFX, CSV e XLSX no formato de vários bancos, com dados fictícios.
+  - Cobertura mínima de 80% em `app/modules`, imposta no CI.
+  - Frontend: Vitest e Testing Library para hooks, formulários, `money.ts` e `dates.ts`, com os
+    `services` substituídos por dublês.
+- **Rationale**: Princípio X. O teste que percorre as rotas impede que um endpoint novo entre
+  sem teste de isolamento (SC-002).
+- **Alternatives considered**: `testcontainers` (dependência nova; o Compose já sobe o banco);
+  SQLite nos testes (comportamento diferente do PostgreSQL, proibido pela constituição).
+
+## 24. Infraestrutura, deploy, backup e CI
+
+- **Decision**:
+  - `docker-compose.yml` (dev): `caddy`, `frontend` (Vite), `api`, `worker`, `postgres`,
+    `mailpit`. `docker-compose.prod.yml`: `caddy` (HTTPS automático), `frontend` (build
+    estático), `api`, `worker`, `postgres` (sem porta publicada) e `backup`.
+  - O contêiner da API roda `alembic upgrade head` antes de iniciar; o worker só sobe com a API
+    saudável.
+  - Backup: contêiner que roda `pg_dump` uma vez por dia, compacta, cifra com `age` usando uma
+    chave pública (a chave privada fica fora do servidor) e envia com `rclone` para um
+    armazenamento de objetos compatível com S3. Retenção de 14 dias, aplicada pela regra de ciclo
+    de vida do bucket e conferida pelo script. `infra/backup/restore.sh` documenta e executa a
+    restauração; o procedimento é testado restaurando em um banco temporário.
+  - CI (`ci.yml`): Ruff, mypy, pytest com cobertura e `pip-audit` no backend; ESLint, Prettier,
+    `tsc`, Vitest e `npm audit` no frontend.
+  - Deploy: job do GitHub Actions que depende dos jobs de CI e roda só na branch principal;
+    conecta na VPS por SSH e executa `infra/deploy.sh`, que atualiza o código, constrói as imagens
+    e sobe o `docker-compose.prod.yml`.
+  - Cabeçalhos de segurança (CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`) definidos no
+    Caddy para tudo e repetidos pela API nas respostas dela.
+- **Rationale**: Princípio XII. Depender dos jobs de CI garante por construção que só há deploy
+  com CI verde. A cifra com chave pública impede que uma invasão do servidor exponha os backups
+  antigos.
+- **Alternatives considered**: `Makefile` para rodar localmente (o ambiente de desenvolvimento é
+  Windows; `docker compose up` já é o comando único); construir imagens no CI e publicar em um
+  registro (mais peças; pode vir depois se a VPS não aguentar o build).
+
+## 25. Dependências além da lista da constituição
+
+A constituição exige justificativa para cada dependência nova. As da entrada do plano e as
+decididas aqui:
+
+| Dependência | Uso | Por que não a biblioteca padrão ou o que já temos |
+|-------------|-----|---------------------------------------------------|
+| `asyncpg` | driver do PostgreSQL | exigido pelo SQLAlchemy assíncrono |
+| `pydantic-settings` | configurações | parte do ecossistema Pydantic v2 |
+| `argon2-cffi` | hash de senha | Argon2id não existe na biblioteca padrão |
+| `PyJWT` | access token | exigido pelo Princípio V |
+| `pyotp` | TOTP | implementação testada do padrão |
+| `cryptography` | cifra do segredo TOTP | cifra autenticada não existe na biblioteca padrão |
+| `slowapi` | limite de frequência | evita escrever e testar um limitador próprio |
+| `python-multipart` | upload de arquivos | exigido pelo FastAPI para `multipart/form-data` |
+| `ofxtools` | leitura de OFX | formato complexo; sem dependências próprias |
+| `openpyxl` | leitura de `.xlsx` | formato binário compactado |
+| `filetype` | tipo real do arquivo | exigido pelo Princípio V; sem dependências |
+| `google-genai` | provedor de IA | SDK oficial, isolado atrás de `LLMProvider` |
+| `tzdata` | base de fusos | a imagem enxuta não traz a base do sistema |
+| `uvicorn` | servidor da API | necessário para executar o FastAPI |
+| `pytest-asyncio`, `httpx`, `pytest-cov`, `pip-audit` | testes e auditoria | exigidos pelos Princípios V e X |
+| `@hookform/resolvers` | liga React Hook Form ao Zod | integração oficial das duas bibliotecas adotadas |
+| `qrcode.react` | QR code das duas etapas | gerar QR à mão não se justifica |
+| `@tailwindcss/vite` | integra o Tailwind 4 ao Vite | plugin oficial do Tailwind 4, que faz parte da stack da constituição |
+| `motion` | transições de entrada e saída | animar a saída de elementos removidos não é possível só com CSS; uso restrito |
+| `jsdom`, `@testing-library/user-event` | ambiente de teste | exigidos pelo Vitest com Testing Library |
+
+`age` e `rclone` são ferramentas da imagem de backup, não dependências do código.
+
+## 26. Consequências do design system aprovado
+
+O `design-system.md` foi aprovado em 2026-10-01, depois da prévia estática em `design-preview/`.
+Ele traz decisões que afetam a implementação além do visual.
+
+- **Decision**:
+  - **Fontes servidas pelo app**: Besley e Atkinson Hyperlegible Next entram como arquivos
+    `.woff2` variáveis em `frontend/src/assets/fonts/`, com `@font-face` no `globals.css`. Não há
+    chamada ao endereço do Google Fonts nem pacote novo.
+  - **Política de segurança de conteúdo**: `default-src 'self'`, com `script-src 'self'`,
+    `style-src 'self'`, `font-src 'self'`, `img-src 'self' data:`, `connect-src 'self'`,
+    `frame-ancestors 'none'`, `base-uri 'self'` e `form-action 'self'`. A única concessão é
+    `style-src-attr 'unsafe-inline'`, porque o Motion e o Recharts aplicam estilos pelo atributo
+    `style`. Essa concessão é registrada em ADR, como exige o Princípio V.
+  - **Tema sem script embutido**: o tema é definido antes da primeira pintura por um arquivo
+    externo, `frontend/public/theme-init.js`, carregado no `<head>`; um script embutido na página
+    seria bloqueado pela política acima.
+  - **Tokens em um só lugar**: `globals.css` declara os valores por tema, a ponte
+    `@theme inline` e os tokens fixos, com a paleta padrão do Tailwind desativada. Durações e
+    curvas de animação ficam espelhadas em `frontend/src/lib/motion.ts`.
+  - **Cor de categoria como lista fechada**: o backend valida `color` contra os 8 nomes da paleta
+    (`ardosia` só na categoria "Outros") e recusa qualquer outro valor; o frontend oferece só as
+    oito amostras.
+  - **Gastos por categoria sem rosca**: o painel usa a lista de barras ordenadas, feita em HTML
+    e CSS. O Recharts fica para a evolução de 6 meses e para as parcelas futuras.
+  - **Campo de dinheiro**: componente próprio (`MoneyInput`), com digitação pela direita e valor
+    em centavos inteiros, coberto por testes.
+  - **Movimento reduzido**: `<MotionConfig reducedMotion="user">` na raiz, a regra global de CSS
+    e `isAnimationActive` desligado no Recharts quando o usuário pede menos movimento.
+  - **`design-preview/`** fica no repositório como referência visual. Não faz parte do build nem
+    do deploy.
+- **Rationale**: servir as fontes pelo app mantém a política de conteúdo restrita à própria
+  origem e não informa acessos a terceiros (Princípios V e VII). A lista fechada de cores é o
+  que mantém válida a conferência de contraste e de daltonismo feita no design system.
+- **Alternatives considered**: carregar as fontes do Google Fonts (abre a política de conteúdo
+  para dois domínios externos e expõe o endereço do usuário); cor livre por categoria (cores sem
+  contraste garantido); `nonce` para estilos embutidos (não cobre o atributo `style`).
+
+## 27. A conferir no início da implementação
+
+- Os ids atuais dos modelos Flash e Flash-Lite do Gemini e as cotas do plano gratuito (por
+  minuto e por dia). Os limites por usuário (30 perguntas, 10 extrações) precisam caber na cota
+  diária somada de todos os usuários.
+- Se o plano gratuito do provedor continua permitindo o uso descrito na política de privacidade,
+  e qual é o texto exato a informar ao usuário.
+- A tolerância do `ofxtools` com arquivos reais de bancos brasileiros; se falhar em algum banco
+  comum mesmo com o pré-processamento, reavaliar o `ofxparse` só nesse importador.
+- O comportamento de cookies `Secure` em `http://localhost` no Safari.
+- As animações do design system em movimento e a interface em celulares reais e em outros
+  navegadores: a prévia foi conferida só por capturas estáticas no Chrome.
+- Os arquivos de licença das duas fontes, ao copiá-las para o repositório.
+- O provedor de e-mail transacional e o de armazenamento de objetos para o backup, e as
+  credenciais de cada um.

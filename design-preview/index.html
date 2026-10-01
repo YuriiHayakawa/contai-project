@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prévia do design — Contaí</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 32px 24px 64px;
+        font-family: var(--font-sans);
+        line-height: 1.5;
+        color: var(--ink);
+        background: var(--bg-sunken);
+      }
+      .wrap {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      h1,
+      h2 {
+        font-family: var(--font-display);
+        letter-spacing: -0.01em;
+        margin: 0;
+      }
+      h1 {
+        font-size: 2rem;
+        line-height: 2.375rem;
+        font-weight: 700;
+      }
+      h2 {
+        font-size: 1.5rem;
+        line-height: 1.875rem;
+        font-weight: 700;
+      }
+      p {
+        margin: 0;
+      }
+      .intro {
+        max-width: 65ch;
+        margin: 12px 0 20px;
+        color: var(--ink-muted);
+      }
+      .toc {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .toc a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 1.5px solid var(--border-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      :focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      section {
+        padding-top: 48px;
+      }
+      .desc {
+        margin: 4px 0 20px;
+        color: var(--ink-muted);
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        margin-bottom: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--ink-muted);
+      }
+      figcaption a {
+        color: var(--primary);
+      }
+      .phone {
+        width: 320px;
+        height: 640px;
+      }
+      .desktops {
+        flex: 1 1 520px;
+        min-width: 0;
+        display: grid;
+        gap: 24px;
+      }
+      .scaler {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+      }
+      .scaler iframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1280px;
+        height: 800px;
+        transform-origin: top left;
+      }
+      iframe {
+        display: block;
+        border: 0;
+        background: var(--bg);
+      }
+      .frame {
+        border: 1px solid var(--border-strong);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Contaí — prévia do design</h1>
+      <p class="intro">
+        Quatro telas com dados fictícios, montadas só com os tokens e as regras do
+        <code>design-system.md</code>. Cada uma aparece em 320px e em desktop (1280px), nos temas claro e
+        escuro. É uma prévia estática, fora do app: os gráficos são CSS, não Recharts, e nada aqui salva dados.
+        Dentro de cada quadro é possível rolar e navegar.
+      </p>
+      <nav class="toc" aria-label="Telas">
+        <a href="#painel">Painel do mês</a>
+        <a href="#lancamentos">Lista de lançamentos</a>
+        <a href="#lancar">Lançamento rápido</a>
+        <a href="#assistente">Chat do assistente</a>
+      </nav>
+
+      <div id="screens"></div>
+    </div>
+
+    <script>
+      const SCREENS = [
+        { id: "painel", title: "Painel do mês", desc: "Saldo com marca-texto, entradas e saídas, gastos por categoria em barras ordenadas, evolução de 6 meses, contas e cartão." },
+        { id: "lancamentos", title: "Lista de lançamentos", desc: "Agrupada por dia, com pauta, linha de margem e despesas em tinta comum; só a receita é colorida." },
+        { id: "lancar", title: "Lançamento rápido", desc: "Folha no celular e diálogo no desktop, com o campo de dinheiro em destaque." },
+        { id: "assistente", title: "Chat do assistente", desc: "Resposta com o número marcado, a origem do número e um lançamento sugerido a partir de texto." },
+      ];
+      const THEMES = [
+        { id: "light", label: "claro" },
+        { id: "dark", label: "escuro" },
+      ];
+
+      const figure = (screen, theme, kind) => {
+        const src = `${screen.id}.html?theme=${theme.id}`;
+        const title = `${screen.title}, ${kind === "phone" ? "320px" : "desktop"}, tema ${theme.label}`;
+        const caption = `${kind === "phone" ? "320px" : "Desktop 1280px"} · ${theme.label} · <a href="${src}" target="_blank" rel="noopener">abrir</a>`;
+        const frame =
+          kind === "phone"
+            ? `<div class="frame"><iframe class="phone" src="${src}" title="${title}"></iframe></div>`
+            : `<div class="frame scaler"><iframe src="${src}" title="${title}"></iframe></div>`;
+        return `<figure><figcaption>${caption}</figcaption>${frame}</figure>`;
+      };
+
+      document.getElementById("screens").innerHTML = SCREENS.map(
+        (screen) =>
+          `<section id="${screen.id}"><h2>${screen.title}</h2><p class="desc">${screen.desc}</p>` +
+          `<div class="row">${THEMES.map((t) => figure(screen, t, "phone")).join("")}` +
+          `<div class="desktops">${THEMES.map((t) => figure(screen, t, "desktop")).join("")}</div></div></section>`,
+      ).join("");
+
+      // Os quadros de desktop têm 1280px reais e são reduzidos para caber na coluna.
+      function fit() {
+        document.querySelectorAll(".scaler").forEach((box) => {
+          const scale = box.clientWidth / 1280;
+          box.firstElementChild.style.transform = `scale(${scale})`;
+          box.style.height = `${800 * scale}px`;
+        });
+      }
+      addEventListener("resize", fit);
+      fit();
+    </script>
+  </body>
+</html>
