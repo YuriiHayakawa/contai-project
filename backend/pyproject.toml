@@ -1,0 +1,88 @@
+[project]
+name = "contai-backend"
+version = "0.1.0"
+description = "API e worker do Contaí"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.20.0",
+    "argon2-cffi>=25.1.0",
+    "asyncpg>=0.31.0",
+    "cryptography>=50.0.2",
+    "fastapi>=0.142.2",
+    "filetype>=1.2.0",
+    "google-genai>=2.26.0",
+    "ofxtools>=1.1.1",
+    "openpyxl>=3.1.5",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.15.1",
+    "pyotp>=2.10.0",
+    "python-multipart>=0.0.32",
+    "slowapi>=0.1.10",
+    "sqlalchemy[asyncio]>=2.1.1",
+    "tzdata>=2026.4",
+    "uvicorn>=0.54.0",
+]
+
+[tool.uv]
+# O backend é uma aplicação, não um pacote instalável.
+package = false
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.4.0",
+    "pip-audit>=2.10.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["."]
+
+[tool.ruff.lint]
+select = [
+    "E",     # erros de estilo
+    "W",     # avisos de estilo
+    "F",     # erros lógicos (pyflakes)
+    "I",     # ordem dos imports
+    "N",     # nomes
+    "UP",    # sintaxe moderna
+    "B",     # armadilhas comuns (bugbear)
+    "SIM",   # simplificações
+    "ASYNC", # erros em código assíncrono
+    "S",     # segurança (bandit)
+    "RUF",   # regras do próprio Ruff
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Testes usam assert e senhas fictícias por natureza.
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# Estas bibliotecas não publicam tipos; o uso delas fica isolado nos importadores.
+module = ["openpyxl.*", "filetype.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+
+[tool.coverage.run]
+source = ["app/modules"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

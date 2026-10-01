@@ -441,9 +441,17 @@ decididas aqui:
 | `qrcode.react` | QR code das duas etapas | gerar QR à mão não se justifica |
 | `@tailwindcss/vite` | integra o Tailwind 4 ao Vite | plugin oficial do Tailwind 4, que faz parte da stack da constituição |
 | `motion` | transições de entrada e saída | animar a saída de elementos removidos não é possível só com CSS; uso restrito |
-| `jsdom`, `@testing-library/user-event` | ambiente de teste | exigidos pelo Vitest com Testing Library |
+| `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event` | ambiente de teste | exigidos pelo Vitest com Testing Library |
+| `@vitejs/plugin-react` | React no Vite | plugin oficial; sem ele o Vite não compila JSX com recarga |
+| `typescript-eslint`, `@eslint/js`, `eslint-plugin-react-hooks`, `globals` | regras do ESLint | conjunto mínimo para aplicar o ESLint a TypeScript e React, e para proibir `any` |
+| `@types/react`, `@types/react-dom`, `@types/node` | tipos | exigidos pelo TypeScript estrito |
 
 `age` e `rclone` são ferramentas da imagem de backup, não dependências do código.
+
+O script de dados de demonstração (`backend/scripts/seed_demo.py`) é um seed só para
+desenvolvimento local. Ele é executado à mão, recusa-se a rodar com `ENVIRONMENT=production`,
+não é chamado por nenhum processo de deploy e não entra na imagem de produção, porque
+`backend/.dockerignore` exclui `scripts/` e `tests/`.
 
 ## 26. Consequências do design system aprovado
 

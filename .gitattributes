@@ -1,0 +1,9 @@
+# Finais de linha LF em todos os arquivos de texto: os contêineres são Linux,
+# e um script de shell com CRLF não executa.
+* text=auto eol=lf
+
+*.woff2 binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.xlsx binary
