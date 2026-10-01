@@ -27,3 +27,10 @@ uploads/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Empacotamento do Python
+*.egg-info/
+build/
+
+# Cache do Vite
+.vite/

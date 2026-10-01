@@ -135,8 +135,10 @@ specs/001-contai-mvp/
 
 ```text
 backend/
-├── pyproject.toml
-├── Dockerfile
+├── pyproject.toml          # com uv.lock e .python-version (3.12)
+├── Dockerfile              # estágios dev e prod; entrypoint.sh aplica as migrações
+├── .dockerignore           # tests/ e scripts/ nunca entram na imagem
+├── scripts/                # só desenvolvimento local (seed de demonstração)
 ├── alembic/
 ├── app/
 │   ├── main.py                  # cria o app, registra routers, middlewares e cabeçalhos
@@ -180,7 +182,8 @@ backend/
 
 frontend/
 ├── package.json
-├── Dockerfile
+├── Dockerfile                  # estágios dev e prod
+├── Caddyfile                   # servidor de arquivos da imagem de produção
 ├── public/
 │   └── theme-init.js            # define o tema antes da primeira pintura
 └── src/

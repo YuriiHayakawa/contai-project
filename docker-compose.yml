@@ -1,0 +1,101 @@
+# Ambiente de desenvolvimento. Uso: copie .env.example para .env e rode "docker compose up".
+# App em http://localhost:8080 e e-mails em http://localhost:8025.
+
+name: contai
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init-test-db.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    ports:
+      # Só na máquina local, para rodar testes e ferramentas fora dos contêineres.
+      # A porta padrão é 5433 para não colidir com outro PostgreSQL já em uso na 5432.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "127.0.0.1:8025:8025"
+
+  api:
+    build:
+      context: ./backend
+      target: dev
+    env_file: .env
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./backend:/app
+      - uploads:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  worker:
+    build:
+      context: ./backend
+      target: dev
+    env_file: .env
+    environment:
+      # Só a API aplica as migrações.
+      RUN_MIGRATIONS: "0"
+    command: ["python", "-m", "app.worker.main"]
+    volumes:
+      - ./backend:/app
+      - uploads:/data/uploads
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker.health"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      VITE_USE_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      # Mantém as dependências instaladas na imagem, e não as da máquina local.
+      - /app/node_modules
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      # Só na máquina local; o ambiente de desenvolvimento não fica exposto na rede.
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./infra/Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - frontend
+
+volumes:
+  pgdata:
+  # Arquivos enviados: volume privado, montado só na API e no worker.
+  uploads:

@@ -1,0 +1,18 @@
+# Proxy de desenvolvimento: uma única origem, http://localhost:8080.
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	handle /api/* {
+		request_body {
+			max_size 10MB
+		}
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy frontend:5173
+	}
+}

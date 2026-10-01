@@ -1,0 +1,16 @@
+# Nunca entram na imagem: ambiente local, caches, testes e scripts de desenvolvimento.
+# Em desenvolvimento, testes e scripts chegam ao contêiner pelo volume do código.
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+scripts/
+.env*
+Dockerfile
+.dockerignore
+*.log
