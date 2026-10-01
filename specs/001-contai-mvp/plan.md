@@ -142,6 +142,7 @@ backend/
 ├── alembic/
 ├── app/
 │   ├── main.py                  # cria o app, registra routers, middlewares e cabeçalhos
+│   ├── models_registry.py       # importa os modelos de todos os módulos (Alembic e testes)
 │   ├── core/
 │   │   ├── config.py            # settings via variáveis de ambiente
 │   │   ├── database.py

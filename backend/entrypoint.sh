@@ -4,12 +4,7 @@
 set -e
 
 if [ "${RUN_MIGRATIONS:-1}" = "1" ]; then
-    if [ -f alembic.ini ]; then
-        alembic upgrade head
-    else
-        # O Alembic é configurado na T013; até lá não há o que migrar.
-        echo "alembic.ini não encontrado: migrações ignoradas"
-    fi
+    alembic upgrade head
 fi
 
 exec "$@"

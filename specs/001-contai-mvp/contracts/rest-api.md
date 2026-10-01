@@ -2,7 +2,7 @@
 
 **Feature**: [spec.md](../spec.md) | **Data model**: [data-model.md](../data-model.md)
 
-A referência final é o OpenAPI gerado pelo FastAPI em `/api/docs`. Este documento fixa o que os
+A referência final é o OpenAPI gerado pelo FastAPI em `/api/docs` (disponível fora de produção). Este documento fixa o que os
 testes de integração e o frontend assumem.
 
 ## Convenções
