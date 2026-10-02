@@ -8,6 +8,7 @@ import { ToastProvider } from "./components/ui/Toast";
 import { AuthProvider, useAuth, type AuthContextValue } from "./features/auth/hooks/useAuth";
 import type { CurrentUser } from "./features/auth/types";
 import { SESSION_EXPIRED_MESSAGE, api, setAccessToken } from "./lib/api-client";
+import { monthRange, yearMonthOf } from "./lib/dates";
 import { paths, returnPathFrom } from "./lib/paths";
 import { createQueryClient } from "./lib/query-client";
 import { routes } from "./router";
@@ -335,7 +336,7 @@ describe("navegação", () => {
   it("sem conta cadastrada, a folha de lançamento leva ao cadastro de conta", async () => {
     const user = userEvent.setup();
     const router = renderApp(paths.transactions);
-    await screen.findByRole("heading", { name: "Faça seu primeiro lançamento" });
+    await screen.findByRole("heading", { name: /^Nada lançado em / });
 
     await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Lançar" }));
     const sheet = await screen.findByRole("dialog", { name: "Novo lançamento" });
@@ -367,7 +368,9 @@ describe("navegação", () => {
     expect(
       await screen.findByRole("heading", { name: "Nenhum lançamento encontrado" }),
     ).toBeInTheDocument();
-    expect(requestsTo("/transactions?q=padaria")).not.toHaveLength(0);
+    // Sem período no endereço, a busca vale para o mês atual.
+    const { from, to } = monthRange(yearMonthOf());
+    expect(requestsTo(`/transactions?q=padaria&from=${from}&to=${to}`)).not.toHaveLength(0);
   });
 });
 

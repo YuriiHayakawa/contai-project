@@ -1,15 +1,17 @@
 import { LoaderCircle, Wallet } from "lucide-react";
 import { useId, useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Modal } from "../../../components/ui/Modal";
 import { useToast } from "../../../components/ui/Toast";
 import { errorMessage } from "../../../lib/api-client";
+import { monthName, yearMonthOf, type ISODate } from "../../../lib/dates";
 import { paths } from "../../../lib/paths";
 import { activeAccounts, useAccounts } from "../../accounts/hooks/useAccounts";
 import { useCategories } from "../../categories/hooks/useCategories";
+import { isDateShown, monthSearch, readListView } from "../filters";
 import { useCreateTransaction } from "../hooks/useCreateTransaction";
 import { useUpdateTransaction } from "../hooks/useUpdateTransaction";
 import type { Transaction, TransactionInput } from "../types";
@@ -31,6 +33,7 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
   const amountRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const accounts = useAccounts();
   const categories = useCategories();
   const create = useCreateTransaction();
@@ -51,13 +54,35 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
     onClose();
   };
 
+  /**
+   * Avisa que o lançamento foi salvo. Com a data fora do período exibido, ele não aparece na
+   * lista que o usuário está vendo: o aviso diz em que mês ficou e leva até lá.
+   */
+  const announce = (date: ISODate, saved: string, savedElsewhere: string): void => {
+    // Na tela de lançamentos, vale o período escolhido nela; nas outras, o mês atual.
+    const search = location.pathname === paths.transactions ? location.search : "";
+    if (isDateShown(date, readListView(new URLSearchParams(search)).filters)) {
+      toast.success(saved);
+      return;
+    }
+    const month = yearMonthOf(date);
+    const sameYear = month.slice(0, 4) === yearMonthOf().slice(0, 4);
+    const name = sameYear ? monthName(month) : `${monthName(month)} de ${month.slice(0, 4)}`;
+    toast.success(`${savedElsewhere} ${name}.`, {
+      action: {
+        label: `Ver ${monthName(month)}`,
+        onClick: () => void navigate(`${paths.transactions}${monthSearch(month)}`),
+      },
+    });
+  };
+
   const save = async (input: TransactionInput): Promise<void> => {
     if (transaction) {
-      await update.mutateAsync({ id: transaction.id, input });
-      toast.success("Lançamento atualizado.");
+      const updated = await update.mutateAsync({ id: transaction.id, input });
+      announce(updated.date, "Lançamento atualizado.", "Lançamento atualizado. Agora ele está em");
     } else {
-      await create.mutateAsync(input);
-      toast.success("Lançamento salvo.");
+      const created = await create.mutateAsync(input);
+      announce(created.date, "Lançamento salvo.", "Lançamento salvo em");
     }
     close();
   };

@@ -2,10 +2,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 
 import { ToastProvider } from "../../../components/ui/Toast";
-import { today } from "../../../lib/dates";
+import { addMonths, monthName, monthRange, today, yearMonthOf } from "../../../lib/dates";
 import * as accountsService from "../../accounts/services/accountsService";
 import type { Account } from "../../accounts/types";
 import * as categoriesService from "../../categories/services/categoriesService";
@@ -88,14 +88,21 @@ function Harness({ transaction }: HarnessProps) {
   );
 }
 
-function renderSheet(transaction?: Transaction) {
+function CurrentAddress() {
+  const { pathname, search } = useLocation();
+  return <p data-testid="address">{`${pathname}${search}`}</p>;
+}
+
+function renderSheet(transaction?: Transaction, address = "/lancamentos") {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <MemoryRouter initialEntries={["/lancamentos"]}>
+        <MemoryRouter initialEntries={[address]}>
+          <CurrentAddress />
           <Routes>
             <Route path="/lancamentos" element={<Harness transaction={transaction} />} />
+            <Route path="/" element={<Harness transaction={transaction} />} />
             <Route path="/contas" element={<h1>Contas</h1>} />
           </Routes>
         </MemoryRouter>
@@ -103,6 +110,17 @@ function renderSheet(transaction?: Transaction) {
     </QueryClientProvider>,
   );
   return userEvent.setup();
+}
+
+/** Preenche e salva um lançamento novo; a data que vale é a devolvida pelo servidor. */
+async function saveNewEntry(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(trigger());
+  const sheet = await screen.findByRole("dialog", { name: "Novo lançamento" });
+  await user.type(await within(sheet).findByRole("textbox", { name: "Valor em reais" }), "4590");
+  await user.type(within(sheet).getByRole("textbox", { name: "Descrição" }), "iFood");
+  await user.selectOptions(within(sheet).getByRole("combobox", { name: "Categoria" }), "Outros");
+  await user.click(within(sheet).getByRole("button", { name: "Salvar lançamento" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 }
 
 const trigger = (): HTMLElement => screen.getByRole("button", { name: "Lançar" });
@@ -231,5 +249,77 @@ describe("TransactionSheet", () => {
     await user.click(within(sheet).getByRole("button", { name: "Cadastrar conta" }));
 
     expect(await screen.findByRole("heading", { name: "Contas" })).toBeInTheDocument();
+  });
+
+  describe("data fora do mês exibido", () => {
+    // Dois meses atrás: sempre fora do mês atual, em qualquer dia em que o teste rode.
+    const otherMonth = addMonths(yearMonthOf(), -2);
+    const otherDate = `${otherMonth}-15`;
+    const range = monthRange(otherMonth);
+
+    it("o aviso diz em que mês o lançamento ficou e leva até ele", async () => {
+      createTransaction.mockResolvedValue({ ...saved, date: otherDate });
+      const user = renderSheet();
+
+      await saveNewEntry(user);
+
+      expect(screen.getByRole("status")).toHaveTextContent(
+        `Lançamento salvo em ${monthName(otherMonth)}`,
+      );
+      await user.click(screen.getByRole("button", { name: `Ver ${monthName(otherMonth)}` }));
+
+      expect(screen.getByTestId("address")).toHaveTextContent(
+        `/lancamentos?de=${range.from}&ate=${range.to}`,
+      );
+    });
+
+    it("fora da tela de lançamentos, o mês exibido é o atual", async () => {
+      createTransaction.mockResolvedValue({ ...saved, date: otherDate });
+      const user = renderSheet(undefined, "/");
+
+      await saveNewEntry(user);
+
+      expect(
+        screen.getByRole("button", { name: `Ver ${monthName(otherMonth)}` }),
+      ).toBeInTheDocument();
+    });
+
+    it("com a lista já nesse mês, ou em todo o período, o aviso é o de sempre", async () => {
+      createTransaction.mockResolvedValue({ ...saved, date: otherDate });
+      const user = renderSheet(undefined, `/lancamentos?de=${range.from}&ate=${range.to}`);
+
+      await saveNewEntry(user);
+
+      expect(screen.getByRole("status")).toHaveTextContent(/^Lançamento salvo\.$/);
+      expect(screen.queryByRole("button", { name: /^Ver / })).not.toBeInTheDocument();
+    });
+
+    it("data de hoje com a lista em outro mês também avisa", async () => {
+      createTransaction.mockResolvedValue({ ...saved, date: today() });
+      const user = renderSheet(undefined, `/lancamentos?de=${range.from}&ate=${range.to}`);
+
+      await saveNewEntry(user);
+
+      expect(
+        screen.getByRole("button", { name: `Ver ${monthName(yearMonthOf())}` }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: `Ver ${monthName(yearMonthOf())}` }));
+      expect(screen.getByTestId("address")).toHaveTextContent(/^\/lancamentos$/);
+    });
+
+    it("edição que muda a data para outro mês avisa onde o lançamento está", async () => {
+      updateTransaction.mockResolvedValue({ ...saved, date: otherDate });
+      const user = renderSheet(saved);
+      await user.click(trigger());
+      const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
+      await within(sheet).findByRole("textbox", { name: "Descrição" });
+
+      await user.click(within(sheet).getByRole("button", { name: "Salvar lançamento" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(screen.getByRole("status")).toHaveTextContent(
+        `Lançamento atualizado. Agora ele está em ${monthName(otherMonth)}`,
+      );
+    });
   });
 });

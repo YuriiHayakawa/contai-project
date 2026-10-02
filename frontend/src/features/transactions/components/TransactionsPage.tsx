@@ -10,7 +10,7 @@ import { Modal } from "../../../components/ui/Modal";
 import { Select, type SelectOption } from "../../../components/ui/Select";
 import { TextField } from "../../../components/ui/TextField";
 import { cn } from "../../../lib/cn";
-import { addMonths, monthLabel, monthRange, yearMonthOf, type ISODate } from "../../../lib/dates";
+import { addMonths, monthLabel, monthName, monthRange, yearMonthOf } from "../../../lib/dates";
 import { useAccounts } from "../../accounts/hooks/useAccounts";
 import {
   categoriesById,
@@ -18,9 +18,18 @@ import {
   useCategories,
   type CategoryOption,
 } from "../../categories/hooks/useCategories";
+import {
+  ALL_PERIOD_PARAM,
+  FILTER_PARAM as PARAM,
+  SEARCH_MAX_LENGTH,
+  readListView,
+  wholeMonthOf,
+  type FilterParamName as ParamName,
+  type TransactionListView,
+} from "../filters";
 import { useNewTransaction } from "../hooks/useNewTransaction";
 import { useTransactions } from "../hooks/useTransactions";
-import type { EntryType, Transaction, TransactionFilters } from "../types";
+import type { Transaction } from "../types";
 import { TransactionDetail } from "./TransactionDetail";
 import { TransactionList } from "./TransactionList";
 import { TransactionSheet } from "./TransactionSheet";
@@ -33,25 +42,9 @@ interface FilterSelectProps extends Omit<ComponentProps<"select">, "children"> {
   icon?: ReactNode;
 }
 
-// Parâmetros do endereço. Ficam nele para um link (do painel, por exemplo) abrir a lista já
-// filtrada e para o "voltar" do navegador desfazer um filtro.
-const PARAM = {
-  search: "q",
-  from: "de",
-  to: "ate",
-  account: "conta",
-  category: "categoria",
-  type: "tipo",
-} as const;
-
-type ParamName = (typeof PARAM)[keyof typeof PARAM];
-
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const ID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const SEARCH_DELAY_MS = 300;
-const SEARCH_MAX_LENGTH = 100;
 const RECENT_MONTHS = 12;
-const ALL_PERIOD = "";
+const ALL_PERIOD = "all";
 const CUSTOM_PERIOD = "custom";
 
 const typeOptions: readonly SelectOption[] = [
@@ -60,36 +53,10 @@ const typeOptions: readonly SelectOption[] = [
   { value: "income", label: "Receitas" },
 ];
 
-function isEntryType(value: string | null): value is EntryType {
-  return value === "expense" || value === "income";
-}
-
-/** Só um valor no formato esperado vira filtro; o resto do endereço é ignorado. */
-function readFilters(params: URLSearchParams): TransactionFilters {
-  const matching = (name: ParamName, pattern: RegExp): string | undefined => {
-    const value = params.get(name);
-    return value && pattern.test(value) ? value : undefined;
-  };
-  const type = params.get(PARAM.type);
-  return {
-    q: params.get(PARAM.search)?.trim().slice(0, SEARCH_MAX_LENGTH) || undefined,
-    from: matching(PARAM.from, DATE_PATTERN),
-    to: matching(PARAM.to, DATE_PATTERN),
-    account_id: matching(PARAM.account, ID_PATTERN),
-    category_id: matching(PARAM.category, ID_PATTERN),
-    type: isEntryType(type) ? type : undefined,
-  };
-}
-
-/** O mês inteiro que o intervalo cobre, "todo o período" ou um intervalo livre. */
-function periodOf(from: ISODate | undefined, to: ISODate | undefined): string {
-  if (!from && !to) return ALL_PERIOD;
-  if (from && to) {
-    const month = yearMonthOf(from);
-    const range = monthRange(month);
-    if (range.from === from && range.to === to) return month;
-  }
-  return CUSTOM_PERIOD;
+/** O valor do seletor de período: um mês, "todo o período" ou um intervalo livre. */
+function periodOf({ filters, periodKind }: TransactionListView): string {
+  if (periodKind === "all") return ALL_PERIOD;
+  return wholeMonthOf(filters.from, filters.to) ?? CUSTOM_PERIOD;
 }
 
 function periodLabel(period: string): string {
@@ -142,7 +109,7 @@ function FilterSelect({ label, options, icon, className, ...rest }: FilterSelect
 /**
  * Lançamentos do usuário, com busca por texto, período e filtros de conta, categoria e tipo.
  * Até `sm`, os filtros ficam atrás do botão "Filtros"; a partir de `sm`, cada um tem o próprio
- * seletor. O período fica sempre visível.
+ * seletor. O período fica sempre visível e começa no mês atual.
  */
 export function TransactionsPage() {
   const [params, setParams] = useSearchParams();
@@ -151,7 +118,8 @@ export function TransactionsPage() {
   const categories = useCategories();
 
   const paramsKey = params.toString();
-  const filters = useMemo(() => readFilters(new URLSearchParams(paramsKey)), [paramsKey]);
+  const view = useMemo(() => readListView(new URLSearchParams(paramsKey)), [paramsKey]);
+  const { filters, periodKind } = view;
   const transactions = useTransactions(filters);
 
   const urlSearch = filters.q ?? "";
@@ -211,19 +179,21 @@ export function TransactionsPage() {
 
   // ---------- opções dos filtros
 
-  const period = customPeriodOpen ? CUSTOM_PERIOD : periodOf(filters.from, filters.to);
+  const currentMonth = yearMonthOf();
+  const period = customPeriodOpen ? CUSTOM_PERIOD : periodOf(view);
   const periodOptions = useMemo<SelectOption[]>(() => {
-    const current = yearMonthOf();
-    const months = Array.from({ length: RECENT_MONTHS }, (_, index) => addMonths(current, -index));
-    // Um mês mais antigo, vindo de um link, também precisa aparecer como escolhido.
-    const selectedMonth = periodOf(filters.from, filters.to);
-    if (selectedMonth.length === 7 && !months.includes(selectedMonth)) months.push(selectedMonth);
+    const months = Array.from({ length: RECENT_MONTHS }, (_, index) =>
+      addMonths(currentMonth, -index),
+    );
+    // Um mês fora da lista, vindo de um link, também precisa aparecer como escolhido.
+    const selectedMonth = wholeMonthOf(filters.from, filters.to);
+    if (selectedMonth && !months.includes(selectedMonth)) months.push(selectedMonth);
     return [
-      { value: ALL_PERIOD, label: "Todo o período" },
       ...months.map((month) => ({ value: month, label: monthLabel(month) })),
+      { value: ALL_PERIOD, label: "Todo o período" },
       { value: CUSTOM_PERIOD, label: "Outro período…" },
     ];
-  }, [filters.from, filters.to]);
+  }, [currentMonth, filters.from, filters.to]);
 
   const accountOptions = useMemo<SelectOption[]>(
     () => [
@@ -266,12 +236,23 @@ export function TransactionsPage() {
 
   const changePeriod = (value: string): void => {
     if (value === CUSTOM_PERIOD) {
+      // As datas do período de agora viram o ponto de partida do intervalo livre.
       setCustomPeriodOpen(true);
+      setFilter({ [PARAM.from]: filters.from, [PARAM.to]: filters.to, [PARAM.period]: undefined });
       return;
     }
     setCustomPeriodOpen(false);
-    const range = value === ALL_PERIOD ? undefined : monthRange(value);
-    setFilter({ [PARAM.from]: range?.from, [PARAM.to]: range?.to });
+    // O mês atual é o padrão: não precisa de nada no endereço.
+    const range = value === ALL_PERIOD || value === currentMonth ? undefined : monthRange(value);
+    setFilter({
+      [PARAM.from]: range?.from,
+      [PARAM.to]: range?.to,
+      [PARAM.period]: value === ALL_PERIOD ? ALL_PERIOD_PARAM : undefined,
+    });
+  };
+
+  const changeDate = (name: typeof PARAM.from | typeof PARAM.to, value: string): void => {
+    setFilter({ [name]: value, [PARAM.period]: undefined });
   };
 
   const changeType = (value: string): void => {
@@ -287,7 +268,8 @@ export function TransactionsPage() {
   const extraFilterCount = [filters.account_id, filters.category_id, filters.type].filter(
     Boolean,
   ).length;
-  const hasFilters = Boolean(filters.q || filters.from || filters.to) || extraFilterCount > 0;
+  // O mês atual é o ponto de partida da lista, e não um filtro escolhido.
+  const hasFilters = Boolean(filters.q) || periodKind !== "default" || extraFilterCount > 0;
 
   const accountFilter = {
     label: "Conta",
@@ -383,14 +365,14 @@ export function TransactionsPage() {
               type="date"
               max={filters.to}
               value={filters.from ?? ""}
-              onChange={(event) => setFilter({ [PARAM.from]: event.target.value })}
+              onChange={(event) => changeDate(PARAM.from, event.target.value)}
             />
             <TextField
               label="Até"
               type="date"
               min={filters.from}
               value={filters.to ?? ""}
-              onChange={(event) => setFilter({ [PARAM.to]: event.target.value })}
+              onChange={(event) => changeDate(PARAM.to, event.target.value)}
             />
           </div>
         )}
@@ -415,8 +397,8 @@ export function TransactionsPage() {
           ) : (
             <EmptyState
               kind="first-time"
-              title="Faça seu primeiro lançamento"
-              description="Anote uma despesa ou uma receita. Leva poucos segundos, e o saldo da conta já se ajusta."
+              title={`Nada lançado em ${monthName(currentMonth)}`}
+              description="Anote uma despesa ou uma receita, ou escolha outro período para ver os lançamentos de antes."
               actionLabel="Lançar"
               onAction={openNewTransaction}
             />
