@@ -323,14 +323,28 @@ describe("criar conta e confirmar o e-mail", () => {
     });
   });
 
-  it("o link do e-mail confirma a conta com um único pedido e leva à entrada", async () => {
+  it("abrir o link do e-mail não confirma nada: só mostra o botão", async () => {
+    server = "no-session";
+    renderApp("/confirmar-email?token=valido");
+
+    expect(await screen.findByRole("button", { name: "Confirmar meu e-mail" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Falta só um passo" })).toBeVisible();
+    // Um verificador automático que só abre o endereço não gasta o link de uso único.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(requestsTo("/auth/verify-email")).toHaveLength(0);
+  });
+
+  it("o clique em Confirmar meu e-mail confirma com um único pedido e leva à entrada", async () => {
     const user = userEvent.setup();
     server = "no-session";
     const router = renderApp("/confirmar-email?token=valido");
 
+    await user.click(await screen.findByRole("button", { name: "Confirmar meu e-mail" }));
+
     expect(await screen.findByRole("heading", { name: "E-mail confirmado" })).toBeVisible();
-    expect(requestsTo("/auth/verify-email")).toHaveLength(1);
-    expect(requestsTo("/auth/verify-email")[0]?.body).toEqual({ token: "valido" });
+    expect(requestsTo("/auth/verify-email")).toEqual([
+      { method: "POST", path: "/auth/verify-email", body: { token: "valido" }, authorized: false },
+    ]);
 
     await user.click(screen.getByRole("button", { name: "Entrar" }));
 
@@ -339,8 +353,11 @@ describe("criar conta e confirmar o e-mail", () => {
   });
 
   it("link usado ou vencido: explica e oferece pedir outro", async () => {
+    const user = userEvent.setup();
     server = "no-session";
     renderApp("/confirmar-email?token=usado");
+
+    await user.click(await screen.findByRole("button", { name: "Confirmar meu e-mail" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Peça um novo link");
     expect(screen.getByRole("heading", { name: "Não deu para confirmar" })).toBeVisible();

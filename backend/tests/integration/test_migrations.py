@@ -2,7 +2,7 @@
 
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import Connection, text
+from sqlalchemy import CheckConstraint, Connection, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app import models_registry  # noqa: F401 - preenche o metadata
@@ -45,3 +45,26 @@ async def test_lock_columns_left_the_users_table(connection: AsyncConnection) ->
     columns = {row[0] for row in result}
 
     assert not {"failed_login_count", "locked_until"} & columns
+
+
+async def test_check_constraints_have_the_names_declared_by_the_models(
+    connection: AsyncConnection,
+) -> None:
+    # Um nome dobrado (`ck_users_ck_users_...`) aparece quando a migração passa o nome
+    # completo sem `op.f` e a convenção de nomes o prefixa de novo.
+    result = await connection.execute(
+        text(
+            "SELECT conname FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace "
+            "WHERE c.contype = 'c' AND n.nspname = 'public'"
+        )
+    )
+    in_database = {row[0] for row in result}
+    declared = {
+        str(constraint.name)
+        for table in Base.metadata.tables.values()
+        for constraint in table.constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+
+    assert in_database == declared
+    assert not [name for name in in_database if name.count("ck_") > 1]

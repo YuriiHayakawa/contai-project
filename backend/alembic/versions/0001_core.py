@@ -20,6 +20,10 @@ _UUID_DEFAULT = sa.text("gen_random_uuid()")
 _NOW = sa.func.now()
 
 
+# Os nomes das restrições CHECK usam `op.f`, que os marca como finais: sem ele, a convenção
+# de nomes do metadata acrescenta o prefixo de novo (`ck_users_ck_users_...`).
+
+
 def upgrade() -> None:
     op.create_table(
         "users",
@@ -43,10 +47,12 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=_NOW, nullable=False),
         sa.PrimaryKeyConstraint("id", name="pk_users"),
         sa.UniqueConstraint("email", name="uq_users_email"),
-        sa.CheckConstraint("char_length(name) BETWEEN 1 AND 100", name="ck_users_name_length"),
-        sa.CheckConstraint("email = lower(email)", name="ck_users_email_lowercase"),
         sa.CheckConstraint(
-            "status IN ('active', 'pending_deletion')", name="ck_users_status_valid"
+            "char_length(name) BETWEEN 1 AND 100", name=op.f("ck_users_name_length")
+        ),
+        sa.CheckConstraint("email = lower(email)", name=op.f("ck_users_email_lowercase")),
+        sa.CheckConstraint(
+            "status IN ('active', 'pending_deletion')", name=op.f("ck_users_status_valid")
         ),
     )
 
@@ -70,7 +76,7 @@ def upgrade() -> None:
             "revoked_reason IS NULL OR revoked_reason IN ('logout', 'user_revoked', "
             "'password_changed', 'password_reset', 'token_reuse', 'two_factor_reset', "
             "'account_deletion')",
-            name="ck_sessions_revoked_reason_valid",
+            name=op.f("ck_sessions_revoked_reason_valid"),
         ),
     )
     op.create_index("ix_sessions_user_id", "sessions", ["user_id"])
@@ -92,7 +98,7 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "type IN ('email_verification', 'password_reset', 'two_factor_reset_confirm', "
             "'two_factor_reset_cancel')",
-            name="ck_email_tokens_type_valid",
+            name=op.f("ck_email_tokens_type_valid"),
         ),
     )
     op.create_index("ix_email_tokens_user_id_type", "email_tokens", ["user_id", "type"])
@@ -117,9 +123,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["user_id"], ["users.id"], name="fk_jobs_user_id_users", ondelete="CASCADE"
         ),
-        sa.CheckConstraint("type IN ('process_import', 'send_email')", name="ck_jobs_type_valid"),
         sa.CheckConstraint(
-            "status IN ('queued', 'running', 'succeeded', 'failed')", name="ck_jobs_status_valid"
+            "type IN ('process_import', 'send_email')", name=op.f("ck_jobs_type_valid")
+        ),
+        sa.CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed')",
+            name=op.f("ck_jobs_status_valid"),
         ),
     )
     op.create_index(
@@ -154,7 +163,7 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "task IN ('chat', 'text_entry', 'categorization', 'statement_extraction', "
             "'receipt_extraction')",
-            name="ck_ai_usage_task_valid",
+            name=op.f("ck_ai_usage_task_valid"),
         ),
     )
     op.create_index("ix_ai_usage_user_id_usage_date", "ai_usage", ["user_id", "usage_date"])
