@@ -13,9 +13,15 @@ import { RouteErrorPage } from "./components/layout/ErrorPage";
 import { PageHeader } from "./components/layout/PageHeader";
 import { EmptyState } from "./components/ui/EmptyState";
 import { useToast } from "./components/ui/Toast";
+import { ForgotPasswordPage } from "./features/auth/components/ForgotPasswordPage";
 import { LoginPage } from "./features/auth/components/LoginPage";
+import { PrivacyPolicyPage } from "./features/auth/components/PrivacyPolicyPage";
+import { RegisterPage } from "./features/auth/components/RegisterPage";
+import { ResetPasswordPage } from "./features/auth/components/ResetPasswordPage";
+import { VerifyEmailPage } from "./features/auth/components/VerifyEmailPage";
 import { useAuth } from "./features/auth/hooks/useAuth";
-import { paths, type LoginLocationState } from "./lib/paths";
+import { useLogout } from "./features/auth/hooks/useLogout";
+import { paths, returnPathFrom, type LoginLocationState } from "./lib/paths";
 
 interface PendingPageProps {
   title: string;
@@ -64,15 +70,33 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
+/**
+ * Telas de entrada, cadastro e recuperação de senha: quem já está conectado não precisa delas
+ * e segue para a rota de origem (ou para o início). Não é um guard de acesso: essas telas são
+ * públicas.
+ */
+function RedirectIfAuthenticated() {
+  const { status } = useAuth();
+  const location = useLocation();
+
+  if (status === "loading") return <LoadingScreen />;
+  if (status === "authenticated") {
+    return <Navigate to={returnPathFrom(location.state)} replace />;
+  }
+  return <Outlet />;
+}
+
 function AppLayout() {
   const { user } = useAuth();
   const toast = useToast();
+  const logout = useLogout();
 
   return (
     <AppShell
       userName={user?.name ?? ""}
       // A folha do formulário de lançamento entra na T093.
       onNewTransaction={() => toast.info("O formulário de lançamento ainda está sendo preparado.")}
+      onSignOut={() => logout.mutate()}
     >
       <Outlet />
     </AppShell>
@@ -130,7 +154,18 @@ export const routes: RouteObject[] = [
     errorElement: <RouteErrorPage />,
     children: [
       // Rotas públicas
-      { path: paths.login, element: <LoginPage /> },
+      {
+        element: <RedirectIfAuthenticated />,
+        children: [
+          { path: paths.login, element: <LoginPage /> },
+          { path: paths.register, element: <RegisterPage /> },
+          { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
+        ],
+      },
+      // Os links dos e-mails funcionam com ou sem sessão aberta neste aparelho.
+      { path: paths.verifyEmail, element: <VerifyEmailPage /> },
+      { path: paths.resetPassword, element: <ResetPasswordPage /> },
+      { path: paths.privacy, element: <PrivacyPolicyPage /> },
       ...devRoutes,
 
       // Rotas autenticadas: tudo o que exige sessão fica debaixo deste guard.

@@ -47,6 +47,14 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+/**
+ * Mensagem para mostrar ao usuário. As da API já vêm em português e dizem o que fazer; um
+ * erro que não veio da API vira uma mensagem genérica, sem o texto técnico.
+ */
+export function errorMessage(error: unknown): string {
+  return isApiError(error) ? error.message : UNEXPECTED_ERROR_MESSAGE;
+}
+
 /** A sessão acabou: o usuário já está sendo levado à tela de entrada, sem erro técnico. */
 export function isSessionExpiredError(error: unknown): boolean {
   return isApiError(error) && error.code === "session_expired";

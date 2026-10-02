@@ -41,7 +41,7 @@ export function AppShell({ userName, onNewTransaction, onSignOut, children }: Ap
       <main id={MAIN_ID} tabIndex={-1} className="px-4 pt-5 outline-none sm:px-6 lg:px-8 lg:pt-8">
         {children}
       </main>
-      <BottomNav onNewTransaction={onNewTransaction} />
+      <BottomNav onNewTransaction={onNewTransaction} onSignOut={onSignOut} />
     </div>
   );
 }
