@@ -44,15 +44,24 @@ testes de integração e o frontend assumem.
 | `POST /auth/register` | `name`, `email`, `password`, `accept_privacy_policy` | `202` genérico | mesma resposta se o e-mail já existe (FR-008); `422 weak_password` para senha recusada |
 | `POST /auth/verify-email` | `token` | `204` | `400 invalid_or_expired_token` |
 | `POST /auth/resend-verification` | `email` | `202` genérico | |
-| `POST /auth/login` | `email`, `password` | `200` com `access_token` e cookie de refresh, ou `200` com `two_factor_required` e `challenge_token` | `401 invalid_credentials` genérico; `423 account_locked` com `retry_after`; `403 email_not_verified` só com a senha correta |
+| `POST /auth/login` | `email`, `password` | `200` com `access_token` e cookie de refresh, ou `200` com `two_factor_required` e `challenge_token` | `401 invalid_credentials` genérico; `423 account_locked` com `retry_after`, depois de 5 erros seguidos para o mesmo e-mail; `403 email_not_verified` só com a senha correta |
 | `POST /auth/login/2fa` | `challenge_token`, e `code` ou `recovery_code` | `200` com `access_token` e cookie | cancela pedido de desativação em aberto; erro conta para o bloqueio |
 | `POST /auth/refresh` | cookie; cabeçalho `X-Contai-Client: web` | `200` com `access_token` e cookie novo | `401` se inválido, expirado ou reutilizado; confere `Origin`, e responde `403` sem o cabeçalho ou com origem diferente da do app |
 | `POST /auth/logout` | — (autenticada) | `204` e cookie apagado | |
 | `POST /auth/password/forgot` | `email` | `202` genérico | |
-| `POST /auth/password/reset` | `token`, `new_password` | `204` | encerra todas as sessões (FR-010) |
+| `POST /auth/password/reset` | `token`, `new_password` | `204` | encerra todas as sessões e confirma o e-mail da conta, se ainda não estava confirmado (FR-010); desfaz o bloqueio de login do e-mail; `400 invalid_or_expired_token`; `422 weak_password` não gasta o link |
 | `POST /auth/2fa/reset/request` | `challenge_token` | `202` | envia o link de pedido (FR-013) |
 | `POST /auth/2fa/reset/confirm` | `token` | `200` com `effective_at` | abre a contagem de 72 horas |
 | `POST /auth/2fa/reset/cancel` | `token` | `204` | |
+
+**Login sem revelar quais e-mails têm conta (FR-008)**: os erros de login são contados pelo
+e-mail informado, normalizado (sem espaços nas pontas e em minúsculas), exista ou não uma
+conta com ele. Um e-mail sem conta recebe exatamente as mesmas respostas de uma conta com a
+senha errada: `401 invalid_credentials` nas cinco primeiras tentativas e `423 account_locked`
+durante os 15 minutos seguintes, com o mesmo status, o mesmo corpo e o mesmo `Retry-After`.
+O tempo de resposta também é equivalente: sem conta, a senha é conferida contra um hash
+fictício. A contagem de um e-mail recomeça ao entrar com sucesso, ao fim de um bloqueio, ao
+redefinir a senha ou depois de 24 horas sem erros.
 
 ## Usuário e segurança
 

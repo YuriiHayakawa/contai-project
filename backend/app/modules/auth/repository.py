@@ -2,16 +2,24 @@
 
 Só as buscas por credencial (`get_session_by_id` no refresh e `get_email_token_by_hash` no link)
 dispensam `user_id`, porque é a credencial que identifica o usuário. Todos os outros métodos o
-exigem.
+exigem, com uma exceção: as tentativas de login, que são contadas pelo e-mail informado e
+existem também para e-mails sem conta.
 """
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.auth.models import EmailToken, EmailTokenType, Session, SessionRevokedReason
+from app.modules.auth.models import (
+    EmailToken,
+    EmailTokenType,
+    LoginAttempt,
+    Session,
+    SessionRevokedReason,
+)
 
 
 class AuthRepository:
@@ -184,3 +192,46 @@ class AuthRepository:
             )
             .values(used_at=now)
         )
+
+    # ---------- tentativas de login (por e-mail informado, sem `user_id`)
+
+    async def get_login_attempt(self, email_hash: str) -> LoginAttempt | None:
+        return await self._session.get(LoginAttempt, email_hash, populate_existing=True)
+
+    async def count_failed_login(self, email_hash: str, now: datetime) -> int:
+        """Soma um erro à contagem do e-mail e devolve o total; cria a linha se não existir."""
+        statement = (
+            insert(LoginAttempt)
+            .values(email_hash=email_hash, failed_count=1, last_failed_at=now)
+            .on_conflict_do_update(
+                index_elements=[LoginAttempt.email_hash],
+                set_={"failed_count": LoginAttempt.failed_count + 1, "last_failed_at": now},
+            )
+            .returning(LoginAttempt.failed_count)
+        )
+        return (await self._session.execute(statement)).scalar_one()
+
+    async def lock_login(self, email_hash: str, *, until: datetime) -> None:
+        """Bloqueia o e-mail até `until`; a contagem recomeça do zero depois do bloqueio."""
+        await self._session.execute(
+            update(LoginAttempt)
+            .where(LoginAttempt.email_hash == email_hash)
+            .values(locked_until=until, failed_count=0)
+        )
+
+    async def clear_login_attempts(self, email_hash: str) -> None:
+        await self._session.execute(
+            delete(LoginAttempt).where(LoginAttempt.email_hash == email_hash)
+        )
+
+    async def purge_login_attempts(self, *, last_failed_before: datetime, now: datetime) -> int:
+        """Apaga as contagens sem erro recente, menos as que ainda estão bloqueadas."""
+        result = await self._session.execute(
+            delete(LoginAttempt)
+            .where(
+                LoginAttempt.last_failed_at < last_failed_before,
+                or_(LoginAttempt.locked_until.is_(None), LoginAttempt.locked_until <= now),
+            )
+            .returning(LoginAttempt.email_hash)
+        )
+        return len(result.scalars().all())

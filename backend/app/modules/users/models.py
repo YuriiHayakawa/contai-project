@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, text
+from sqlalchemy import CheckConstraint, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, Timestamps, UUIDPrimaryKey
@@ -34,9 +34,6 @@ class User(UUIDPrimaryKey, Timestamps, Base):
     totp_secret_encrypted: Mapped[str | None] = mapped_column(String(255))
     totp_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     totp_last_used_step: Mapped[int | None] = mapped_column(Integer)
-
-    failed_login_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     privacy_policy_version: Mapped[str] = mapped_column(String(20))
     privacy_policy_accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

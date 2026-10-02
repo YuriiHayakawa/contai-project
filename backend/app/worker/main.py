@@ -25,6 +25,7 @@ from app.worker.repository import WorkerRepository
 POLL_INTERVAL_SECONDS = 2.0
 HEARTBEAT_INTERVAL = timedelta(seconds=15)
 STUCK_CHECK_INTERVAL = timedelta(minutes=1)
+LOGIN_ATTEMPT_PURGE_INTERVAL = timedelta(hours=1)
 UNEXPECTED_ERROR_CODE = "unexpected_error"
 
 JobHandler = Callable[[AsyncSession, Job], Awaitable[None]]
@@ -127,12 +128,16 @@ def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     """Monta o worker com tudo que ele executa."""
     # Importar o módulo registra os tipos de e-mail que o job sabe enviar.
     from app.modules.auth import emails as _auth_emails  # noqa: F401
+    from app.worker.jobs.login_attempts import purge_login_attempts
     from app.worker.jobs.send_email import handle_send_email
 
     worker = Worker(session_factory=session_factory)
     worker.register_handler(JobType.SEND_EMAIL, handle_send_email)
     worker.register_periodic("heartbeat", HEARTBEAT_INTERVAL, _heartbeat_task(worker))
     worker.register_periodic("recover_stuck_jobs", STUCK_CHECK_INTERVAL, _recover_stuck)
+    worker.register_periodic(
+        "purge_login_attempts", LOGIN_ATTEMPT_PURGE_INTERVAL, purge_login_attempts
+    )
     return worker
 
 

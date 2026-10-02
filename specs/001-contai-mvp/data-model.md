@@ -31,6 +31,7 @@ users ─┬─ sessions
        └─ jobs (user_id opcional)
 
 worker_heartbeats (sem usuário)
+login_attempts (sem usuário: contadas por e-mail informado)
 ```
 
 ## Identidade e acesso
@@ -50,8 +51,6 @@ worker_heartbeats (sem usuário)
 | `totp_secret_encrypted` | texto | cifrado; nulo sem duas etapas |
 | `totp_enabled_at` | timestamptz | nulo enquanto as duas etapas não estão ativas |
 | `totp_last_used_step` | inteiro | impede reuso do mesmo código |
-| `failed_login_count` | inteiro | zera no login correto |
-| `locked_until` | timestamptz | agora + 15 min ao chegar a 5 erros (FR-009) |
 | `privacy_policy_version` | texto | versão aceita no cadastro (FR-001) |
 | `privacy_policy_accepted_at` | timestamptz | obrigatório |
 | `ai_documents_consent_at` | timestamptz | aceite do aviso antes do primeiro PDF ou imagem (FR-044) |
@@ -90,6 +89,22 @@ Uma linha por dispositivo conectado; é também a família de rotação do refre
 | `used_at` | timestamptz | uso único (FR-004, FR-010) |
 
 Emitir um token novo do mesmo tipo invalida os anteriores do usuário.
+
+### login_attempts
+
+Erros seguidos de login por e-mail informado. A linha existe também para e-mails sem conta:
+contar igual nos dois casos é o que impede o bloqueio de revelar quais e-mails estão
+cadastrados (FR-008). Por isso a tabela não tem `user_id`.
+
+| Campo | Tipo | Regras |
+|-------|------|--------|
+| `email_hash` | texto | PK; SHA-256 do e-mail normalizado (o endereço em si não é guardado) |
+| `failed_count` | inteiro | erros seguidos; volta a zero ao bloquear |
+| `locked_until` | timestamptz | agora + 15 min ao chegar a 5 erros (FR-009) |
+| `last_failed_at` | timestamptz | instante do último erro |
+
+A linha é apagada no login correto e na redefinição de senha. O worker apaga, a cada hora, as
+linhas sem erro há mais de 24 horas e sem bloqueio em curso.
 
 ### recovery_codes
 

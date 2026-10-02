@@ -1,7 +1,8 @@
 """Regras de autenticação: cadastro, confirmação de e-mail, login, refresh, logout e senha.
 
 Nenhuma resposta daqui revela se um e-mail tem conta (FR-008): cadastro, reenvio e recuperação
-respondem igual nos dois casos, e o login tem um único erro para e-mail e senha.
+respondem igual nos dois casos, e o login trata um e-mail sem conta como uma conta com a senha
+errada, inclusive na contagem de erros e no bloqueio.
 """
 
 import hmac
@@ -44,6 +45,8 @@ PRIVACY_POLICY_VERSION = "1"
 
 MAX_FAILED_LOGINS = 5
 LOCK_DURATION = timedelta(minutes=15)
+# Uma contagem sem erro novo por este tempo é apagada: os erros deixam de ser "seguidos".
+LOGIN_ATTEMPT_RETENTION = timedelta(hours=24)
 SESSION_TTL = timedelta(days=30)
 
 PRIVACY_POLICY_REQUIRED_MESSAGE = "Para criar a conta, é preciso aceitar a política de privacidade."
@@ -61,6 +64,15 @@ class IssuedTokens:
 def _dummy_password_hash() -> str:
     """Hash usado quando o e-mail não existe, para o login levar o mesmo tempo nos dois casos."""
     return hash_password(new_token())
+
+
+def _login_attempt_key(email: str) -> str:
+    """Chave da contagem de erros de login: o SHA-256 do e-mail normalizado.
+
+    A contagem existe também para e-mails sem conta; guardar só o hash evita manter no banco
+    endereços de quem não é usuário.
+    """
+    return hash_token(email.strip().lower())
 
 
 def _split_refresh_token(refresh_token: str) -> tuple[uuid.UUID, str]:
@@ -132,9 +144,18 @@ class AuthService:
         user = await self._users.get_by_id(email_token.user_id)
         if user is None:
             raise InvalidOrExpiredToken()
+        self._mark_email_verified(user, clock.utcnow())
+        await self._users.save(user)
+
+    @staticmethod
+    def _mark_email_verified(user: User, now: datetime) -> None:
+        """Único ponto em que uma conta passa a ter o e-mail confirmado.
+
+        É chamado pelo link de confirmação e pelo link de redefinição de senha. Uma conta já
+        confirmada mantém a data original.
+        """
         if user.email_verified_at is None:
-            user.email_verified_at = clock.utcnow()
-            await self._users.save(user)
+            user.email_verified_at = now
 
     async def resend_verification(self, email: str) -> None:
         user = await self._users.get_by_email(email)
@@ -144,25 +165,32 @@ class AuthService:
     # ---------- login, refresh e logout
 
     async def login(self, *, email: str, password: str, user_agent: str, ip: str) -> IssuedTokens:
+        """Entra com e-mail e senha.
+
+        Um e-mail sem conta percorre exatamente o mesmo caminho de um com conta e senha errada:
+        a mesma contagem de erros, o mesmo bloqueio, uma conferência de senha (contra um hash
+        fictício) e as mesmas respostas. Assim nem a resposta nem o tempo revelam se o e-mail
+        está cadastrado (FR-008).
+        """
         now = clock.utcnow()
+        email_key = _login_attempt_key(email)
+
+        attempt = await self._auth.get_login_attempt(email_key)
+        if attempt is not None and attempt.locked_until is not None and attempt.locked_until > now:
+            # Bloqueado: nem a senha certa entra antes do prazo (FR-009).
+            raise AccountLocked(math.ceil((attempt.locked_until - now).total_seconds()))
+
         user = await self._users.get_by_email(email)
-        if user is None:
-            verify_password(_dummy_password_hash(), password)
+        password_hash = user.password_hash if user is not None else _dummy_password_hash()
+        password_matches = verify_password(password_hash, password)
+        if user is None or not password_matches:
+            await self._record_failed_login(email_key, now)
             raise InvalidCredentials()
 
-        if user.locked_until is not None and user.locked_until > now:
-            # Bloqueada: nem a senha certa entra antes do prazo (FR-009).
-            raise AccountLocked(math.ceil((user.locked_until - now).total_seconds()))
-
-        if not verify_password(user.password_hash, password):
-            await self._record_failed_login(user, now)
-            raise InvalidCredentials()
-
-        user.failed_login_count = 0
-        user.locked_until = None
+        await self._auth.clear_login_attempts(email_key)
         if password_needs_rehash(user.password_hash):
             user.password_hash = hash_password(password)
-        await self._users.save(user)
+            await self._users.save(user)
 
         if user.email_verified_at is None:
             # Só quem sabe a senha fica sabendo que falta confirmar o e-mail.
@@ -171,14 +199,19 @@ class AuthService:
 
         return await self._open_session(user, user_agent=user_agent, ip=ip, now=now)
 
-    async def _record_failed_login(self, user: User, now: datetime) -> None:
-        user.failed_login_count += 1
-        if user.failed_login_count >= MAX_FAILED_LOGINS:
-            user.locked_until = now + LOCK_DURATION
-            user.failed_login_count = 0
-        await self._users.save(user)
+    async def _record_failed_login(self, email_key: str, now: datetime) -> None:
+        failures = await self._auth.count_failed_login(email_key, now)
+        if failures >= MAX_FAILED_LOGINS:
+            await self._auth.lock_login(email_key, until=now + LOCK_DURATION)
         # O erro que vem a seguir desfaz a transação da requisição; a contagem precisa ficar.
         await self._session.commit()
+
+    async def purge_stale_login_attempts(self) -> int:
+        """Apaga contagens sem erro recente e sem bloqueio em curso; devolve quantas apagou."""
+        now = clock.utcnow()
+        return await self._auth.purge_login_attempts(
+            last_failed_before=now - LOGIN_ATTEMPT_RETENTION, now=now
+        )
 
     async def _open_session(
         self, user: User, *, user_agent: str, ip: str, now: datetime
@@ -260,9 +293,11 @@ class AuthService:
         if user is None:
             raise InvalidOrExpiredToken()
         user.password_hash = hash_password(new_password)
-        user.failed_login_count = 0
-        user.locked_until = None
+        # O link chegou à caixa de e-mail: usá-lo prova a posse dela, como o link de confirmação.
+        self._mark_email_verified(user, now)
         await self._users.save(user)
+        # A senha nova também desfaz um bloqueio por tentativas erradas.
+        await self._auth.clear_login_attempts(_login_attempt_key(user.email))
         await self._auth.revoke_all_sessions(
             user.id, reason=SessionRevokedReason.PASSWORD_RESET, now=now
         )
