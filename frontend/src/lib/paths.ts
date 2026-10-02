@@ -8,6 +8,13 @@ export const paths = {
   assistant: "/assistente",
   settings: "/configuracoes",
   login: "/entrar",
+  register: "/criar-conta",
+  // Os dois caminhos abaixo estão nos links dos e-mails enviados pelo backend
+  // (backend/app/modules/auth/emails.py): mudar aqui exige mudar lá.
+  verifyEmail: "/confirmar-email",
+  resetPassword: "/redefinir-senha",
+  forgotPassword: "/esqueci-a-senha",
+  privacy: "/privacidade",
 } as const;
 
 /** Estado de navegação levado à tela de entrada pelo guard de rotas. */

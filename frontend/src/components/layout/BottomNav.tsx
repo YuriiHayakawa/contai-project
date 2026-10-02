@@ -1,4 +1,4 @@
-import { ChevronRight, Menu, Plus } from "lucide-react";
+import { ChevronRight, LogOut, Menu, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router";
 
@@ -9,6 +9,8 @@ import { bottomNavLeading, bottomNavTrailing, moreItems, type NavItem } from "./
 export interface BottomNavProps {
   /** Abre a folha de novo lançamento. */
   onNewTransaction: () => void;
+  /** Sai da conta; o item "Sair" da folha "Mais" só aparece quando informado. */
+  onSignOut?: () => void;
 }
 
 interface TabLinkProps {
@@ -75,9 +77,10 @@ function TabLink({ item }: TabLinkProps) {
 
 /**
  * Barra inferior (até `lg`): Início, Lançamentos, o botão central "Lançar", Assistente e
- * "Mais", que abre uma folha com Contas, Categorias, Importações e Configurações.
+ * "Mais", que abre uma folha com Contas, Categorias, Importações e Configurações e, no fim,
+ * a saída da conta.
  */
-export function BottomNav({ onNewTransaction }: BottomNavProps) {
+export function BottomNav({ onNewTransaction, onSignOut }: BottomNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const keyboardOpen = useVirtualKeyboardOpen();
   const { pathname } = useLocation();
@@ -148,6 +151,23 @@ export function BottomNav({ onNewTransaction }: BottomNavProps) {
             ))}
           </ul>
         </nav>
+        {/* No celular não há barra lateral: a saída da conta fica no fim desta folha. */}
+        {onSignOut && (
+          <button
+            type="button"
+            onClick={() => {
+              setMoreOpen(false);
+              onSignOut();
+            }}
+            className={cn(
+              "mt-2 flex min-h-14 w-full items-center gap-3 border-t border-border",
+              "text-left text-body font-bold text-ink",
+            )}
+          >
+            <LogOut aria-hidden="true" className="size-6 text-ink-muted" />
+            Sair
+          </button>
+        )}
       </Modal>
     </>
   );
