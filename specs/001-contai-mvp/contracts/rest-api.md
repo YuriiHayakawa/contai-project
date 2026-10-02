@@ -46,7 +46,7 @@ testes de integração e o frontend assumem.
 | `POST /auth/resend-verification` | `email` | `202` genérico | |
 | `POST /auth/login` | `email`, `password` | `200` com `access_token` e cookie de refresh, ou `200` com `two_factor_required` e `challenge_token` | `401 invalid_credentials` genérico; `423 account_locked` com `retry_after`; `403 email_not_verified` só com a senha correta |
 | `POST /auth/login/2fa` | `challenge_token`, e `code` ou `recovery_code` | `200` com `access_token` e cookie | cancela pedido de desativação em aberto; erro conta para o bloqueio |
-| `POST /auth/refresh` | cookie; cabeçalho `X-Contai-Client: web` | `200` com `access_token` e cookie novo | `401` se inválido, expirado ou reutilizado; confere `Origin` |
+| `POST /auth/refresh` | cookie; cabeçalho `X-Contai-Client: web` | `200` com `access_token` e cookie novo | `401` se inválido, expirado ou reutilizado; confere `Origin`, e responde `403` sem o cabeçalho ou com origem diferente da do app |
 | `POST /auth/logout` | — (autenticada) | `204` e cookie apagado | |
 | `POST /auth/password/forgot` | `email` | `202` genérico | |
 | `POST /auth/password/reset` | `token`, `new_password` | `204` | encerra todas as sessões (FR-010) |

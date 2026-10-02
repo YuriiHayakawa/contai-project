@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI
 from fastapi.dependencies.models import Dependant
-from fastapi.routing import APIRoute
+from fastapi.routing import iter_route_contexts
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,13 +75,21 @@ def _requires_authentication(dependant: Dependant) -> bool:
 
 
 def authenticated_routes(app: FastAPI) -> set[RouteKey]:
-    """Todas as rotas do app que dependem de `get_current_user`."""
+    """Todas as rotas do app que dependem de `get_current_user`.
+
+    As rotas de um router incluído com `include_router` não ficam em `app.routes`: o FastAPI
+    as guarda dentro do router. `iter_route_contexts` percorre todas, já com o caminho completo.
+    """
     routes: set[RouteKey] = set()
-    for route in app.routes:
-        if isinstance(route, APIRoute) and _requires_authentication(route.dependant):
-            routes.update(
-                (method, route.path) for method in route.methods or () if method != "HEAD"
-            )
+    for context in iter_route_contexts(app.routes):
+        dependant = getattr(context, "dependant", None)
+        if not isinstance(dependant, Dependant) or not _requires_authentication(dependant):
+            continue
+        if context.path is None:
+            continue
+        routes.update(
+            (method, context.path) for method in context.methods or () if method != "HEAD"
+        )
     return routes
 
 

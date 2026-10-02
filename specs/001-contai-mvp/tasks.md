@@ -149,21 +149,21 @@ redefine a senha e entra de novo, sem ajuda
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T056 [P] [US1] Escrever `backend/tests/integration/test_auth_register_verify.py`: cadastro exige aceitar a política; resposta `202` idêntica para e-mail novo e já cadastrado (com aviso por e-mail ao dono); `422 weak_password`; link de confirmação de uso único e válido por 24 horas; reenvio; conta não confirmada recebe `403` em qualquer rota
-- [ ] T057 [P] [US1] Escrever `backend/tests/integration/test_auth_login_refresh.py`: cookie `httpOnly`, `Secure`, `SameSite=Strict` com `Path=/api/v1/auth/refresh`; `401` genérico para e-mail inexistente e senha errada; bloqueio de 15 minutos após 5 erros, mesmo com a senha certa; rotação do refresh; token antigo reutilizado revoga a sessão; refresh sem `X-Contai-Client` ou com `Origin` errado é recusado; sessão expira após 30 dias sem uso; logout revoga
-- [ ] T058 [P] [US1] Escrever `backend/tests/integration/test_auth_password_reset.py`: resposta `202` idêntica exista ou não o e-mail; link de uso único válido por 1 hora; a redefinição encerra todas as sessões
+- [X] T056 [P] [US1] Escrever `backend/tests/integration/test_auth_register_verify.py`: cadastro exige aceitar a política; resposta `202` idêntica para e-mail novo e já cadastrado (com aviso por e-mail ao dono); `422 weak_password`; link de confirmação de uso único e válido por 24 horas; reenvio; conta não confirmada recebe `403` em qualquer rota
+- [X] T057 [P] [US1] Escrever `backend/tests/integration/test_auth_login_refresh.py`: cookie `httpOnly`, `Secure`, `SameSite=Strict` com `Path=/api/v1/auth/refresh`; `401` genérico para e-mail inexistente e senha errada; bloqueio de 15 minutos após 5 erros, mesmo com a senha certa; rotação do refresh; token antigo reutilizado revoga a sessão; refresh sem `X-Contai-Client` ou com `Origin` errado é recusado; sessão expira após 30 dias sem uso; logout revoga
+- [X] T058 [P] [US1] Escrever `backend/tests/integration/test_auth_password_reset.py`: resposta `202` idêntica exista ou não o e-mail; link de uso único válido por 1 hora; a redefinição encerra todas as sessões
 - [ ] T059 [P] [US1] Escrever `frontend/src/features/auth/components/RegisterForm.test.tsx` e `LoginForm.test.tsx`: validação com Zod, aceite obrigatório da política, mensagens de erro que dizem o que fazer e estado de carregando
 
 ### Implementation for User Story 1
 
-- [ ] T060 [P] [US1] Implementar `backend/app/modules/users/schemas.py` (`UserRead`)
-- [ ] T061 [P] [US1] Implementar `backend/app/modules/auth/schemas.py` com as entradas e saídas das rotas de Auth de `contracts/rest-api.md`
-- [ ] T062 [US1] Implementar em `backend/app/modules/auth/service.py` o cadastro, a confirmação de e-mail e o reenvio, enfileirando os e-mails por job e sem revelar se o e-mail existe (FR-001, FR-003 a FR-005, FR-008)
-- [ ] T063 [US1] Implementar em `backend/app/modules/auth/service.py` o login, o bloqueio por tentativas no banco, o refresh com rotação e detecção de reutilização, a janela de 30 dias e o logout (FR-006, FR-007, FR-009)
-- [ ] T064 [US1] Implementar em `backend/app/modules/auth/service.py` o pedido e a conclusão da redefinição de senha, encerrando todas as sessões (FR-010)
-- [ ] T065 [US1] Implementar `backend/app/modules/auth/router.py` com as rotas `/auth/register`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password/forgot` e `/auth/password/reset`, os limites de frequência, o cookie de refresh e a proteção CSRF do refresh; registrar em `backend/app/main.py`
-- [ ] T066 [US1] Implementar `backend/app/modules/users/service.py` e `backend/app/modules/users/router.py` com `GET /users/me`; registrar em `backend/app/main.py` e no registro de isolamento
-- [ ] T067 [P] [US1] Criar os modelos de e-mail em `backend/app/email/templates/`: `verify_email.txt`, `already_registered.txt` e `password_reset.txt`, em linguagem simples
+- [X] T060 [P] [US1] Implementar `backend/app/modules/users/schemas.py` (`UserRead`)
+- [X] T061 [P] [US1] Implementar `backend/app/modules/auth/schemas.py` com as entradas e saídas das rotas de Auth de `contracts/rest-api.md`
+- [X] T062 [US1] Implementar em `backend/app/modules/auth/service.py` o cadastro, a confirmação de e-mail e o reenvio, enfileirando os e-mails por job e sem revelar se o e-mail existe (FR-001, FR-003 a FR-005, FR-008)
+- [X] T063 [US1] Implementar em `backend/app/modules/auth/service.py` o login, o bloqueio por tentativas no banco, o refresh com rotação e detecção de reutilização, a janela de 30 dias e o logout (FR-006, FR-007, FR-009)
+- [X] T064 [US1] Implementar em `backend/app/modules/auth/service.py` o pedido e a conclusão da redefinição de senha, encerrando todas as sessões (FR-010)
+- [X] T065 [US1] Implementar `backend/app/modules/auth/router.py` com as rotas `/auth/register`, `/auth/verify-email`, `/auth/resend-verification`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/password/forgot` e `/auth/password/reset`, os limites de frequência, o cookie de refresh e a proteção CSRF do refresh; registrar em `backend/app/main.py`
+- [X] T066 [US1] Implementar `backend/app/modules/users/service.py` e `backend/app/modules/users/router.py` com `GET /users/me`; registrar em `backend/app/main.py` e no registro de isolamento
+- [X] T067 [P] [US1] Criar os modelos de e-mail em `backend/app/email/templates/`: `verify_email.txt`, `already_registered.txt` e `password_reset.txt`, em linguagem simples
 - [ ] T068 [P] [US1] Implementar `frontend/src/features/auth/types.ts`, `frontend/src/features/auth/schemas.ts` (Zod) e `frontend/src/features/auth/services/authService.ts`
 - [ ] T069 [US1] Implementar os hooks em `frontend/src/features/auth/hooks/`: `useRegister.ts`, `useLogin.ts`, `useLogout.ts`, `useVerifyEmail.ts`, `useResendVerification.ts`, `useForgotPassword.ts` e `useResetPassword.ts`
 - [ ] T070 [US1] Implementar em `frontend/src/features/auth/components/` as telas `RegisterForm.tsx`, `LoginForm.tsx`, `VerifyEmailPage.tsx` (aguardando confirmação, reenvio e chegada pelo link), `ForgotPasswordPage.tsx` e `ResetPasswordPage.tsx`

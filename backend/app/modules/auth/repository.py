@@ -43,9 +43,15 @@ class AuthRepository:
         await self._session.refresh(session)
         return session
 
-    async def get_session_by_id(self, session_id: uuid.UUID) -> Session | None:
-        """Busca por credencial, usada no refresh: o token traz o id da sessão."""
-        return await self._session.get(Session, session_id)
+    async def get_session_by_id(
+        self, session_id: uuid.UUID, *, for_update: bool = False
+    ) -> Session | None:
+        """Busca por credencial, usada no refresh: o token traz o id da sessão.
+
+        Com `for_update`, a linha fica travada até o fim da transação: dois refreshes
+        simultâneos da mesma sessão são atendidos um depois do outro.
+        """
+        return await self._session.get(Session, session_id, with_for_update=for_update)
 
     async def get_session(self, user_id: uuid.UUID, session_id: uuid.UUID) -> Session | None:
         result = await self._session.execute(

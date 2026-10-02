@@ -41,8 +41,8 @@ _hasher = PasswordHasher()
 class WeakPassword(ValidationFailed):
     code = "weak_password"
 
-    def __init__(self, message: str) -> None:
-        super().__init__(message, details={"fields": {"password": message}})
+    def __init__(self, message: str, field: str = "password") -> None:
+        super().__init__(message, details={"fields": {field: message}})
 
 
 @lru_cache
@@ -51,16 +51,20 @@ def _common_passwords() -> frozenset[str]:
     return frozenset(line.strip().lower() for line in lines if line.strip())
 
 
-def validate_password(password: str) -> None:
-    """Aplica a política de senha; levanta `WeakPassword` dizendo como corrigir."""
+def validate_password(password: str, field: str = "password") -> None:
+    """Aplica a política de senha; levanta `WeakPassword` dizendo como corrigir.
+
+    `field` é o nome do campo da requisição, para a mensagem aparecer junto dele.
+    """
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise WeakPassword(f"Use uma senha com pelo menos {MIN_PASSWORD_LENGTH} caracteres.")
+        raise WeakPassword(f"Use uma senha com pelo menos {MIN_PASSWORD_LENGTH} caracteres.", field)
     if len(password) > MAX_PASSWORD_LENGTH:
-        raise WeakPassword(f"Use uma senha com no máximo {MAX_PASSWORD_LENGTH} caracteres.")
+        raise WeakPassword(f"Use uma senha com no máximo {MAX_PASSWORD_LENGTH} caracteres.", field)
     if password.strip().lower() in _common_passwords():
         raise WeakPassword(
             "Essa senha é muito comum e fácil de adivinhar. Escolha outra, de preferência "
-            "uma frase que só você conheça."
+            "uma frase que só você conheça.",
+            field,
         )
 
 
@@ -120,8 +124,9 @@ def _decode(token: str, expected_type: str) -> dict[str, Any]:
             token,
             get_settings().jwt_secret.get_secret_value(),
             algorithms=[_JWT_ALGORITHM],
-            # A validade é conferida abaixo, contra o relógio da aplicação.
-            options={"verify_exp": False, "require": ["exp", "sub", "typ"]},
+            # O tempo é conferido abaixo, contra o relógio da aplicação, e não contra o do
+            # sistema: nem a validade nem a hora de emissão são julgadas pela biblioteca.
+            options={"verify_exp": False, "verify_iat": False, "require": ["exp", "sub", "typ"]},
         )
     except jwt.InvalidTokenError as exc:
         raise Unauthenticated() from exc

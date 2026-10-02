@@ -4,7 +4,7 @@ import importlib
 import pkgutil
 
 import pytest
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,6 +70,18 @@ def _sample_app() -> FastAPI:
     async def delete_thing(thing_id: str, current: CurrentUserDep) -> dict[str, str]:
         return {}
 
+    # Como no app de verdade: rotas declaradas em um router e incluídas com prefixo.
+    included = APIRouter(prefix="/api/v1/notes")
+
+    @included.get("/public")
+    async def public_note() -> dict[str, str]:
+        return {}
+
+    @included.patch("/{note_id}")
+    async def update_note(note_id: str, current: CurrentUserDep) -> dict[str, str]:
+        return {}
+
+    sample.include_router(included)
     return sample
 
 
@@ -77,7 +89,15 @@ def test_registry_finds_authenticated_routes_and_ignores_public_ones() -> None:
     assert registry.authenticated_routes(_sample_app()) == {
         ("GET", "/things/{thing_id}"),
         ("DELETE", "/things/{thing_id}"),
+        ("PATCH", "/api/v1/notes/{note_id}"),
     }
+
+
+def test_registry_sees_the_authenticated_routes_of_the_real_app() -> None:
+    assert {
+        ("GET", "/api/v1/users/me"),
+        ("POST", "/api/v1/auth/logout"),
+    } <= registry.authenticated_routes(app)
 
 
 def test_registry_reports_routes_without_a_case(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -89,15 +109,20 @@ def test_registry_reports_routes_without_a_case(monkeypatch: pytest.MonkeyPatch)
     async def case(context: IsolationContext) -> None:
         return None
 
-    assert registry.uncovered_routes(sample) == {("DELETE", "/things/{thing_id}")}
+    assert registry.uncovered_routes(sample) == {
+        ("DELETE", "/things/{thing_id}"),
+        ("PATCH", "/api/v1/notes/{note_id}"),
+    }
 
     registry.exempt("DELETE", "/things/{thing_id}", "exemplo de isenção")
+    registry.exempt("PATCH", "/api/v1/notes/{note_id}", "exemplo de isenção")
 
     assert registry.uncovered_routes(sample) == set()
     assert registry.stale_entries(sample) == set()
     assert registry.stale_entries(FastAPI()) == {
         ("GET", "/things/{thing_id}"),
         ("DELETE", "/things/{thing_id}"),
+        ("PATCH", "/api/v1/notes/{note_id}"),
     }
 
 

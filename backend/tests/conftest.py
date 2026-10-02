@@ -174,11 +174,13 @@ import re  # noqa: E402
 import uuid  # noqa: E402
 from collections.abc import Awaitable, Callable  # noqa: E402
 from datetime import timedelta  # noqa: E402
+from urllib.parse import parse_qs, urlparse  # noqa: E402
 
-from httpx import ASGITransport, AsyncClient  # noqa: E402
+from httpx import ASGITransport, AsyncClient, Response  # noqa: E402
 
 from app.ai import factory as ai_factory  # noqa: E402
 from app.ai.fake import FakeLLMProvider  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
 from app.core.database import get_session  # noqa: E402
 from app.core.rate_limit import limiter  # noqa: E402
 from app.core.security import (  # noqa: E402
@@ -194,6 +196,8 @@ from app.modules.users.repository import UserRepository  # noqa: E402
 from app.worker.main import build_worker  # noqa: E402
 
 TEST_PASSWORD = "uma frase só de teste"
+# HTTPS, como em produção: o cookie de refresh é `Secure` e só volta em conexão segura.
+TEST_BASE_URL = "https://test"
 _LINK_PATTERN = re.compile(r"https?://\S+")
 
 UserFactory = Callable[..., Awaitable[User]]
@@ -220,7 +224,7 @@ async def client(session_factory: SessionFactory) -> AsyncIterator[AsyncClient]:
             yield session
 
     app.dependency_overrides[get_session] = override_get_session
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url=TEST_BASE_URL) as client:
         yield client
     app.dependency_overrides.pop(get_session, None)
 
@@ -278,7 +282,7 @@ async def client_for(
         token = create_access_token(user.id, auth_session.id)
         authenticated = AsyncClient(
             transport=ASGITransport(app=app),
-            base_url="http://test",
+            base_url=TEST_BASE_URL,
             headers={"Authorization": f"Bearer {token}"},
         )
         clients.append(authenticated)
@@ -326,10 +330,29 @@ def extract_link(message: EmailMessage) -> str:
     return match.group(0)
 
 
+def extract_token(message: EmailMessage) -> str:
+    """O token do link de um e-mail capturado."""
+    [token] = parse_qs(urlparse(extract_link(message)).query)["token"]
+    return token
+
+
+def refresh_headers() -> dict[str, str]:
+    """O que o frontend envia no refresh: o cabeçalho próprio e a origem do app."""
+    return {"X-Contai-Client": "web", "Origin": get_settings().app_origin}
+
+
+def without_request_id(response: Response) -> dict[str, object]:
+    """Corpo de uma resposta sem o id da requisição, para comparar duas respostas."""
+    body: dict[str, object] = response.json()
+    body.pop("request_id", None)
+    return body
+
+
+EmailDelivery = Callable[[], Awaitable[list[EmailMessage]]]
+
+
 @pytest.fixture
-def deliver_emails(
-    session_factory: SessionFactory, smtp: type[FakeSMTP]
-) -> Callable[[], Awaitable[list[EmailMessage]]]:
+def deliver_emails(session_factory: SessionFactory, smtp: type[FakeSMTP]) -> EmailDelivery:
     """Executa os jobs pendentes contra o SMTP falso e devolve os e-mails enviados.
 
     O token de um link é gerado dentro do job; é assim que os testes obtêm o link.
