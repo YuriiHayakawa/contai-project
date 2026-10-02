@@ -16,6 +16,7 @@ from app.core.rate_limit import register_rate_limiter
 from app.modules.accounts.router import router as accounts_router
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.users.router import router as users_router
 
@@ -100,6 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(accounts_router)
     app.include_router(categories_router)
     app.include_router(transactions_router)
+    app.include_router(dashboard_router)
     return app
 
 
