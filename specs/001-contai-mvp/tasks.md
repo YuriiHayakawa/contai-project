@@ -227,14 +227,14 @@ lista de transações, trocar de mês e abrir uma categoria
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T095 [P] [US3] Escrever `backend/tests/unit/test_reports.py`: entradas, saídas e saldo do período; transferências fora dos totais; gastos por categoria com as subcategorias somadas na mãe e percentuais; evolução de 6 meses; maiores gastos; transação das 23h30 do último dia do mês em Brasília conta naquele mês
-- [ ] T096 [P] [US3] Escrever `backend/tests/integration/test_dashboard.py` e os casos de isolamento em `backend/tests/isolation/test_dashboard.py`: as quatro rotas, o período padrão no mês atual de Brasília e a soma das transações de uma categoria igual ao valor do painel
+- [X] T095 [P] [US3] Escrever `backend/tests/unit/test_reports.py`: entradas, saídas e saldo do período; transferências fora dos totais; gastos por categoria com as subcategorias somadas na mãe e percentuais; evolução de 6 meses; maiores gastos; transação das 23h30 do último dia do mês em Brasília conta naquele mês
+- [X] T096 [P] [US3] Escrever `backend/tests/integration/test_dashboard.py` e os casos de isolamento em `backend/tests/isolation/test_dashboard.py`: as quatro rotas, o período padrão no mês atual de Brasília e a soma das transações de uma categoria igual ao valor do painel
 - [ ] T097 [P] [US3] Escrever `frontend/src/features/dashboard/hooks/useDashboard.test.ts`: troca de mês, estados de carregamento e erro e painel vazio
 
 ### Implementation for User Story 3
 
-- [ ] T098 [US3] Implementar `backend/app/modules/dashboard/schemas.py`, `repository.py` (consultas agregadas por período) e `service.py` (`ReportingService`, a única fonte de números do painel e do assistente: resumo, por categoria, evolução e maiores gastos)
-- [ ] T099 [US3] Implementar `backend/app/modules/dashboard/router.py` com `GET /dashboard/summary`, `/dashboard/categories`, `/dashboard/trend` e `/dashboard/top-expenses`; registrar em `backend/app/main.py`
+- [X] T098 [US3] Implementar `backend/app/modules/dashboard/schemas.py`, `repository.py` (consultas agregadas por período) e `service.py` (`ReportingService`, a única fonte de números do painel e do assistente: resumo, por categoria, evolução e maiores gastos)
+- [X] T099 [US3] Implementar `backend/app/modules/dashboard/router.py` com `GET /dashboard/summary`, `/dashboard/categories`, `/dashboard/trend` e `/dashboard/top-expenses`; registrar em `backend/app/main.py`
 - [ ] T100 [P] [US3] Implementar `frontend/src/features/dashboard/types.ts`, `services/dashboardService.ts` e `hooks/useDashboard.ts`
 - [ ] T101 [P] [US3] Implementar `frontend/src/features/dashboard/components/MonthSummary.tsx` (saldo do mês em `money-hero` com `marca-texto`, entradas e saídas com seta e rótulo) e `PeriodPicker.tsx` (título do mês como botão; setas a partir de 480px); o painel escolhe só o mês (FR-059), sem intervalo de datas
 - [ ] T102 [P] [US3] Implementar `frontend/src/features/dashboard/components/CategoryRanking.tsx` conforme a seção 7.2 do `design-system.md`: barras ordenadas, no máximo 6 linhas com "Outras" em `ardosia`, selo, nome, percentual e valor; cada linha abre os lançamentos da categoria no período
