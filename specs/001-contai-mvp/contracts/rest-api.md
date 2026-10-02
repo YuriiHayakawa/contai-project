@@ -86,28 +86,28 @@ redefinir a senha ou depois de 24 horas sem erros.
 
 | Método e rota | Corpo | Resposta | Notas |
 |---------------|-------|----------|-------|
-| `GET /accounts` | `?include_archived=` | lista com `balance_cents` calculado | |
-| `POST /accounts` | `name`, `type`, `institution`, `initial_balance_cents`, `initial_balance_date`, `closing_day`, `due_day` | conta | dias obrigatórios só para cartão |
+| `GET /accounts` | `?include_archived=` | `{ "items": [...] }`, em ordem alfabética, cada conta com `balance_cents` calculado | |
+| `POST /accounts` | `name`, `type`, `institution`, `initial_balance_cents`, `initial_balance_date`, `closing_day`, `due_day` | `201` com a conta | `closing_day` e `due_day` obrigatórios para cartão e recusados nos demais tipos (`422`); sem `initial_balance_date`, vale o dia do cadastro; `409 account_name_taken` se já existe conta ativa com o nome |
 | `GET /accounts/{id}` | — | conta | |
-| `PATCH /accounts/{id}` | campos editáveis | conta | `type` só muda sem transações |
+| `PATCH /accounts/{id}` | campos editáveis | conta | `type` só muda sem transações (`409 account_type_locked`); `409 account_name_taken` |
 | `DELETE /accounts/{id}` | — | `204` | `409 account_has_transactions` (FR-022) |
-| `POST /accounts/{id}/archive`, `/unarchive` | — | conta | |
+| `POST /accounts/{id}/archive`, `/unarchive` | — | conta | desarquivar dá `409 account_name_taken` se outra conta ativa usa o nome |
 
 ## Categorias
 
 | Método e rota | Corpo | Resposta | Notas |
 |---------------|-------|----------|-------|
-| `GET /categories` | `?include_archived=` | árvore de dois níveis por `kind` | |
-| `POST /categories` | `name`, `kind`, `parent_id`, `icon`, `color` | categoria | `color` é um dos 8 nomes da paleta do design system; outro valor dá `422` |
-| `PATCH /categories/{id}` | `name`, `icon`, `color` | categoria | mesma validação de `color` |
-| `POST /categories/{id}/archive`, `/unarchive` | — | categoria | `409` para a categoria "Outros" |
+| `GET /categories` | `?include_archived=` | `{ "expense": [...], "income": [...] }`; cada categoria traz `children`; ordem alfabética, com "Outros" por último | |
+| `POST /categories` | `name`, `kind`, `parent_id`, `icon`, `color` | `201` com a categoria | `color` é um dos 8 nomes da paleta do design system; outro valor dá `422`; `parent_id` precisa ser uma categoria principal ativa, do usuário e do mesmo `kind` (`422`); `409 category_name_taken` entre irmãs ativas |
+| `PATCH /categories/{id}` | `name`, `icon`, `color` | categoria | mesma validação de `color`; a "Outros" mantém a cor neutra |
+| `POST /categories/{id}/archive`, `/unarchive` | — | categoria, com as subcategorias | `409 category_is_fallback` para a categoria "Outros"; arquivar a principal arquiva as subcategorias, e desarquivá-la traz de volta as que foram arquivadas junto; `409 category_parent_archived` ao desarquivar uma subcategoria de principal arquivada |
 
 ## Transações
 
 | Método e rota | Corpo ou filtros | Resposta | Notas |
 |---------------|------------------|----------|-------|
-| `GET /transactions` | `from`, `to`, `account_id`, `category_id` (inclui subcategorias), `type`, `q`, `installment_group_id`, `ids` | lista paginada, mais `total_count` | filtros combináveis (FR-035) |
-| `POST /transactions` | `type` (`expense` ou `income`), `amount_cents`, `date`, `description`, `account_id`, `category_id`, `notes` | transação | grava ou atualiza a regra de categoria |
+| `GET /transactions` | `from`, `to`, `account_id`, `category_id` (inclui subcategorias), `type`, `q`, `installment_group_id`, `ids` | lista paginada, mais `total_count` | filtros combináveis (FR-035); da mais nova para a mais antiga; `q` procura na descrição e na observação, sem diferenciar acentos nem maiúsculas; `ids` é repetido (`?ids=a&ids=b`) |
+| `POST /transactions` | `type` (`expense` ou `income`), `amount_cents`, `date`, `description`, `account_id`, `category_id`, `notes` | `201` com a transação | conta e categoria precisam ser do usuário e estar ativas, e a categoria precisa ser do mesmo tipo: caso contrário, `422` com a mensagem no campo; grava ou atualiza a regra de categoria |
 | `POST /transactions/installments` | `total_cents`, `installments` (2 a 48), `date`, `description`, `account_id`, `category_id`, `notes` | lista das parcelas | conta precisa ser cartão (FR-030) |
 | `POST /transactions/transfers` | `from_account_id`, `to_account_id`, `amount_cents`, `date`, `description` | as duas linhas | contas diferentes (FR-033) |
 | `GET /transactions/{id}` | — | transação | |
