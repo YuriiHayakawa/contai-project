@@ -22,6 +22,9 @@ const marina: CurrentUser = {
   deletion_scheduled_at: null,
 };
 
+// Marina ainda não tem lançamentos: a tela inicial mostra as boas-vindas.
+const HOME_HEADING = "Boas-vindas, Marina";
+
 type Server = "session" | "no-session" | "offline";
 
 let server: Server;
@@ -112,6 +115,20 @@ function fakeDataRoute(path: string): Response | null {
       });
     case "/transactions":
       return json(200, { items: [], next_cursor: null, total_count: 0 });
+    case "/dashboard/summary":
+      return json(200, {
+        month: yearMonthOf(),
+        income_cents: 0,
+        expense_cents: 0,
+        net_cents: 0,
+        accounts: [],
+      });
+    case "/dashboard/categories":
+      return json(200, { month: yearMonthOf(), total_cents: 0, items: [] });
+    case "/dashboard/trend":
+      return json(200, { items: [] });
+    case "/dashboard/top-expenses":
+      return json(200, { month: yearMonthOf(), items: [] });
     default:
       return null;
   }
@@ -223,7 +240,9 @@ describe("RequireAuth", () => {
     server = "session";
     await user.click(screen.getByRole("button", { name: "Tentar de novo" }));
 
-    expect(await screen.findByRole("heading", { name: "Início", level: 1 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: HOME_HEADING, level: 1 }),
+    ).toBeInTheDocument();
   });
 
   it("endereço desconhecido mostra página não encontrada", async () => {
@@ -264,7 +283,7 @@ describe("sessão expirada no meio do uso", () => {
 
   it("sair da conta não mostra o aviso de sessão expirada", async () => {
     renderApp(paths.home);
-    await screen.findByRole("heading", { name: "Início", level: 1 });
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
 
     act(() => auth.signOut());
 
@@ -289,7 +308,7 @@ describe("navegação", () => {
 
   it("a barra inferior tem Início, Lançamentos, Lançar, Assistente e Mais", async () => {
     renderApp(paths.home);
-    await screen.findByRole("heading", { name: "Início", level: 1 });
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
 
     const items = Array.from(bottomNav().querySelectorAll("a, button")).map(
       (item) => item.getAttribute("aria-label") ?? item.textContent,
@@ -301,7 +320,7 @@ describe("navegação", () => {
   it('"Mais" abre a folha com Contas, Categorias, Importações e Configurações', async () => {
     const user = userEvent.setup();
     const router = renderApp(paths.home);
-    await screen.findByRole("heading", { name: "Início", level: 1 });
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
 
     await user.click(within(bottomNav()).getByRole("button", { name: "Mais" }));
 
@@ -321,7 +340,7 @@ describe("navegação", () => {
   it('"Lançar" e "Novo lançamento" abrem a mesma folha de novo lançamento', async () => {
     const user = userEvent.setup();
     renderApp(paths.home);
-    await screen.findByRole("heading", { name: "Início", level: 1 });
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
 
     await user.click(within(bottomNav()).getByRole("button", { name: "Lançar" }));
     const sheet = await screen.findByRole("dialog", { name: "Novo lançamento" });
@@ -351,6 +370,21 @@ describe("navegação", () => {
     expect(
       screen.getByRole("heading", { name: "Cadastre sua primeira conta" }),
     ).toBeInTheDocument();
+  });
+
+  it("a tela inicial de quem não tem lançamentos mostra os primeiros passos", async () => {
+    const user = userEvent.setup();
+    const router = renderApp(paths.home);
+
+    expect(await screen.findByRole("heading", { name: HOME_HEADING, level: 1 })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Comece por aqui" })).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem", { current: "step" })).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Para onde foi o dinheiro" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Cadastrar conta" }));
+
+    expect(await screen.findByRole("heading", { name: "Contas", level: 1 })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(paths.accounts);
   });
 
   it("as telas de contas, categorias e lançamentos estão nas rotas", async () => {
@@ -475,7 +509,7 @@ describe("entrar e sair", () => {
   it('"Sair" na barra lateral encerra a sessão no servidor e leva à entrada, sem aviso', async () => {
     const user = userEvent.setup();
     const router = renderApp(paths.home);
-    await screen.findByRole("heading", { name: "Início", level: 1 });
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
 
     await user.click(within(sidebar()).getByRole("button", { name: "Sair" }));
 
@@ -491,7 +525,7 @@ describe("entrar e sair", () => {
   it('no celular, "Sair" fica no fim da folha "Mais"', async () => {
     const user = userEvent.setup();
     renderApp(paths.home);
-    await screen.findByRole("heading", { name: "Início", level: 1 });
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
 
     await user.click(within(bottomNav()).getByRole("button", { name: "Mais" }));
     await user.click(
@@ -505,7 +539,7 @@ describe("entrar e sair", () => {
   it("mesmo sem resposta do servidor, sair encerra a sessão neste aparelho", async () => {
     const user = userEvent.setup();
     renderApp(paths.home);
-    await screen.findByRole("heading", { name: "Início", level: 1 });
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
     server = "offline";
 
     await user.click(within(sidebar()).getByRole("button", { name: "Sair" }));
@@ -519,7 +553,7 @@ describe("entrar e sair", () => {
     async (path) => {
       const router = renderApp(path);
 
-      expect(await screen.findByRole("heading", { name: "Início", level: 1 })).toBeVisible();
+      expect(await screen.findByRole("heading", { name: HOME_HEADING, level: 1 })).toBeVisible();
       expect(router.state.location.pathname).toBe(paths.home);
     },
   );

@@ -11,6 +11,12 @@ export function listTransactions(
   return api.get<TransactionPage>("/transactions", { params: { ...filters, cursor }, signal });
 }
 
+/** Quantos lançamentos o usuário tem ao todo, em qualquer data. */
+export async function countTransactions(signal?: AbortSignal): Promise<number> {
+  const page = await api.get<TransactionPage>("/transactions", { params: { limit: 1 }, signal });
+  return page.total_count;
+}
+
 export function createTransaction(input: TransactionInput): Promise<Transaction> {
   return api.post<Transaction>("/transactions", input);
 }

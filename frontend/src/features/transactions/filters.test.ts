@@ -1,4 +1,4 @@
-import { isDateShown, monthSearch, readListView, wholeMonthOf } from "./filters";
+import { isDateShown, listSearch, monthSearch, readListView, wholeMonthOf } from "./filters";
 
 const OCTOBER = "2026-10";
 const ACCOUNT = "9aed6bd1-1c77-42d3-8a4c-5d638f8465f5";
@@ -36,6 +36,14 @@ describe("readListView", () => {
         category_id: ACCOUNT,
         type: "income",
       },
+    });
+  });
+
+  it("ignora uma data que não existe no calendário", () => {
+    expect(view("de=2026-04-01&ate=2026-04-31").filters).toEqual({ from: "2026-04-01" });
+    expect(view("de=2026-02-30")).toEqual({
+      periodKind: "default",
+      filters: { from: "2026-10-01", to: "2026-10-31" },
     });
   });
 
@@ -79,5 +87,23 @@ describe("monthSearch", () => {
   it("monta o endereço de um mês; o mês atual não precisa de parâmetros", () => {
     expect(monthSearch("2026-08", OCTOBER)).toBe("?de=2026-08-01&ate=2026-08-31");
     expect(monthSearch(OCTOBER, OCTOBER)).toBe("");
+  });
+});
+
+describe("listSearch", () => {
+  it("junta o mês com a categoria e o tipo, e a lista lê de volta o mesmo filtro", () => {
+    const search = listSearch("2026-08", { category: ACCOUNT, type: "expense" }, OCTOBER);
+
+    expect(search).toBe(`?de=2026-08-01&ate=2026-08-31&categoria=${ACCOUNT}&tipo=expense`);
+    expect(view(search.slice(1)).filters).toEqual({
+      from: "2026-08-01",
+      to: "2026-08-31",
+      category_id: ACCOUNT,
+      type: "expense",
+    });
+  });
+
+  it("no mês atual, só os filtros vão para o endereço", () => {
+    expect(listSearch(OCTOBER, { category: ACCOUNT }, OCTOBER)).toBe(`?categoria=${ACCOUNT}`);
   });
 });

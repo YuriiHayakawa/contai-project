@@ -3,6 +3,7 @@ import {
   centsFromTypedText,
   formatBRL,
   formatCentsAsDecimal,
+  formatCompactBRL,
   parseBRLToCents,
 } from "./money";
 
@@ -104,5 +105,19 @@ describe("digitação pela direita", () => {
 
   it("campo esvaziado vale zero", () => {
     expect(centsFromTypedText("", 4590)).toBe(0);
+  });
+});
+
+describe("formatCompactBRL", () => {
+  it("encurta valores redondos para o eixo de um gráfico", () => {
+    expect(formatCompactBRL(0)).toBe("0");
+    expect(formatCompactBRL(50_000)).toBe("R$ 500");
+    expect(formatCompactBRL(200_000)).toBe("R$ 2 mil");
+    expect(formatCompactBRL(250_000)).toBe("R$ 2,5 mil");
+    expect(formatCompactBRL(1_500_000_00)).toBe("R$ 1,5 mi");
+  });
+
+  it("negativo leva o sinal de menos tipográfico", () => {
+    expect(formatCompactBRL(-200_000)).toBe("−R$ 2 mil");
   });
 });

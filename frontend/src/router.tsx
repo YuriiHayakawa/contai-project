@@ -1,4 +1,5 @@
 import { Hammer, LoaderCircle } from "lucide-react";
+import { Suspense, lazy } from "react";
 import {
   Navigate,
   Outlet,
@@ -11,23 +12,65 @@ import {
 import { AppShell, PageContent } from "./components/layout/AppShell";
 import { RouteErrorPage } from "./components/layout/ErrorPage";
 import { PageHeader } from "./components/layout/PageHeader";
+import { PageSkeleton } from "./components/layout/PageSkeleton";
 import { EmptyState } from "./components/ui/EmptyState";
-import { AccountsPage } from "./features/accounts/components/AccountsPage";
-import { ForgotPasswordPage } from "./features/auth/components/ForgotPasswordPage";
-import { LoginPage } from "./features/auth/components/LoginPage";
-import { PrivacyPolicyPage } from "./features/auth/components/PrivacyPolicyPage";
-import { RegisterPage } from "./features/auth/components/RegisterPage";
-import { ResetPasswordPage } from "./features/auth/components/ResetPasswordPage";
-import { VerifyEmailPage } from "./features/auth/components/VerifyEmailPage";
 import { useAuth } from "./features/auth/hooks/useAuth";
 import { useLogout } from "./features/auth/hooks/useLogout";
-import { CategoriesPage } from "./features/categories/components/CategoriesPage";
-import { TransactionsPage } from "./features/transactions/components/TransactionsPage";
 import {
   NewTransactionProvider,
   useNewTransaction,
 } from "./features/transactions/hooks/useNewTransaction";
 import { paths, returnPathFrom, type LoginLocationState } from "./lib/paths";
+
+// Cada tela fica em um arquivo próprio do build e só é baixada quando o usuário chega a ela.
+const LoginPage = lazy(() =>
+  import("./features/auth/components/LoginPage").then((module) => ({ default: module.LoginPage })),
+);
+const RegisterPage = lazy(() =>
+  import("./features/auth/components/RegisterPage").then((module) => ({
+    default: module.RegisterPage,
+  })),
+);
+const ForgotPasswordPage = lazy(() =>
+  import("./features/auth/components/ForgotPasswordPage").then((module) => ({
+    default: module.ForgotPasswordPage,
+  })),
+);
+const VerifyEmailPage = lazy(() =>
+  import("./features/auth/components/VerifyEmailPage").then((module) => ({
+    default: module.VerifyEmailPage,
+  })),
+);
+const ResetPasswordPage = lazy(() =>
+  import("./features/auth/components/ResetPasswordPage").then((module) => ({
+    default: module.ResetPasswordPage,
+  })),
+);
+const PrivacyPolicyPage = lazy(() =>
+  import("./features/auth/components/PrivacyPolicyPage").then((module) => ({
+    default: module.PrivacyPolicyPage,
+  })),
+);
+const DashboardPage = lazy(() =>
+  import("./features/dashboard/components/DashboardPage").then((module) => ({
+    default: module.DashboardPage,
+  })),
+);
+const TransactionsPage = lazy(() =>
+  import("./features/transactions/components/TransactionsPage").then((module) => ({
+    default: module.TransactionsPage,
+  })),
+);
+const AccountsPage = lazy(() =>
+  import("./features/accounts/components/AccountsPage").then((module) => ({
+    default: module.AccountsPage,
+  })),
+);
+const CategoriesPage = lazy(() =>
+  import("./features/categories/components/CategoriesPage").then((module) => ({
+    default: module.CategoriesPage,
+  })),
+);
 
 interface PendingPageProps {
   title: string;
@@ -104,8 +147,20 @@ function AppFrame() {
       onNewTransaction={openNewTransaction}
       onSignOut={() => logout.mutate()}
     >
-      <Outlet />
+      {/* A casca fica na tela; só o miolo espera o código da tela chegar. */}
+      <Suspense fallback={<PageSkeleton />}>
+        <Outlet />
+      </Suspense>
     </AppShell>
+  );
+}
+
+/** Telas fora da casca (entrada, cadastro, links dos e-mails): esperam com a tela de carga. */
+function PublicFrame() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <Outlet />
+    </Suspense>
   );
 }
 
@@ -166,6 +221,7 @@ export const routes: RouteObject[] = [
   {
     // Limite de erro das rotas: qualquer erro ao desenhar uma rota cai na ErrorPage.
     errorElement: <RouteErrorPage />,
+    element: <PublicFrame />,
     children: [
       // Rotas públicas
       {
@@ -189,7 +245,7 @@ export const routes: RouteObject[] = [
           {
             element: <AppLayout />,
             children: [
-              { path: paths.home, element: <PendingPage title="Início" /> },
+              { path: paths.home, element: <DashboardPage /> },
               { path: paths.transactions, element: <TransactionsPage /> },
               { path: paths.accounts, element: <AccountsPage /> },
               { path: paths.categories, element: <CategoriesPage /> },

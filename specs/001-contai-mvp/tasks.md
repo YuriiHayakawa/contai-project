@@ -229,19 +229,19 @@ lista de transações, trocar de mês e abrir uma categoria
 
 - [X] T095 [P] [US3] Escrever `backend/tests/unit/test_reports.py`: entradas, saídas e saldo do período; transferências fora dos totais; gastos por categoria com as subcategorias somadas na mãe e percentuais; evolução de 6 meses; maiores gastos; transação das 23h30 do último dia do mês em Brasília conta naquele mês
 - [X] T096 [P] [US3] Escrever `backend/tests/integration/test_dashboard.py` e os casos de isolamento em `backend/tests/isolation/test_dashboard.py`: as quatro rotas, o período padrão no mês atual de Brasília e a soma das transações de uma categoria igual ao valor do painel
-- [ ] T097 [P] [US3] Escrever `frontend/src/features/dashboard/hooks/useDashboard.test.ts`: troca de mês, estados de carregamento e erro e painel vazio
+- [X] T097 [P] [US3] Escrever `frontend/src/features/dashboard/hooks/useDashboard.test.ts`: troca de mês, estados de carregamento e erro e painel vazio
 
 ### Implementation for User Story 3
 
 - [X] T098 [US3] Implementar `backend/app/modules/dashboard/schemas.py`, `repository.py` (consultas agregadas por período) e `service.py` (`ReportingService`, a única fonte de números do painel e do assistente: resumo, por categoria, evolução e maiores gastos)
 - [X] T099 [US3] Implementar `backend/app/modules/dashboard/router.py` com `GET /dashboard/summary`, `/dashboard/categories`, `/dashboard/trend` e `/dashboard/top-expenses`; registrar em `backend/app/main.py`
-- [ ] T100 [P] [US3] Implementar `frontend/src/features/dashboard/types.ts`, `services/dashboardService.ts` e `hooks/useDashboard.ts`
-- [ ] T101 [P] [US3] Implementar `frontend/src/features/dashboard/components/MonthSummary.tsx` (saldo do mês em `money-hero` com `marca-texto`, entradas e saídas com seta e rótulo) e `PeriodPicker.tsx` (título do mês como botão; setas a partir de 480px); o painel escolhe só o mês (FR-059), sem intervalo de datas
-- [ ] T102 [P] [US3] Implementar `frontend/src/features/dashboard/components/CategoryRanking.tsx` conforme a seção 7.2 do `design-system.md`: barras ordenadas, no máximo 6 linhas com "Outras" em `ardosia`, selo, nome, percentual e valor; cada linha abre os lançamentos da categoria no período
-- [ ] T103 [P] [US3] Implementar `frontend/src/features/dashboard/components/TrendChart.tsx` com Recharts conforme as seções 7.1 e 7.3: barras agrupadas de entradas e saídas, legenda, tooltip, `role="img"` com resumo, "Ver como tabela", toque em um mês muda o mês do painel e animação desligada com movimento reduzido
-- [ ] T104 [P] [US3] Implementar `frontend/src/features/dashboard/components/AccountsCard.tsx`, `TopExpenses.tsx` e `FirstSteps.tsx` (orientações de primeiros passos para quem não tem dados, FR-060)
-- [ ] T105 [US3] Implementar `frontend/src/features/dashboard/components/DashboardPage.tsx` com a entrada orquestrada da seção 9.2 do `design-system.md` (cascata de 60ms e o traço do marca-texto) e registrá-la como rota inicial em `frontend/src/router.tsx`
-- [ ] T227 [US3] Dividir o bundle por rota em `frontend/src/router.tsx` com `React.lazy` e `Suspense` (carregamento com o esqueleto da página), para cada tela, e o Recharts só com o painel, ficar em um arquivo próprio; fazer antes de o Recharts entrar no build final e conferir no `npm run build` que nenhum arquivo passa de 500 kB e que o aviso de tamanho do Vite não aparece
+- [X] T100 [P] [US3] Implementar `frontend/src/features/dashboard/types.ts`, `services/dashboardService.ts` e `hooks/useDashboard.ts`
+- [X] T101 [P] [US3] Implementar `frontend/src/features/dashboard/components/MonthSummary.tsx` (saldo do mês em `money-hero` com `marca-texto`, entradas e saídas com seta e rótulo) e `PeriodPicker.tsx` (título do mês como botão; setas a partir de 480px); o painel escolhe só o mês (FR-059), sem intervalo de datas
+- [X] T102 [P] [US3] Implementar `frontend/src/features/dashboard/components/CategoryRanking.tsx` conforme a seção 7.2 do `design-system.md`: barras ordenadas, no máximo 6 linhas com "Outras" em `ardosia`, selo, nome, percentual e valor; cada linha abre os lançamentos da categoria no período
+- [X] T103 [P] [US3] Implementar `frontend/src/features/dashboard/components/TrendChart.tsx` com Recharts conforme as seções 7.1 e 7.3: barras agrupadas de entradas e saídas, legenda, tooltip, `role="img"` com resumo, "Ver como tabela", toque em um mês muda o mês do painel e animação desligada com movimento reduzido
+- [X] T104 [P] [US3] Implementar `frontend/src/features/dashboard/components/AccountsCard.tsx`, `TopExpenses.tsx` e `FirstSteps.tsx` (orientações de primeiros passos para quem não tem dados, FR-060)
+- [X] T105 [US3] Implementar `frontend/src/features/dashboard/components/DashboardPage.tsx` com a entrada orquestrada da seção 9.2 do `design-system.md` (cascata de 60ms e o traço do marca-texto) e registrá-la como rota inicial em `frontend/src/router.tsx`
+- [X] T227 [US3] Dividir o bundle por rota em `frontend/src/router.tsx` com `React.lazy` e `Suspense` (carregamento com o esqueleto da página), para cada tela, e o Recharts só com o painel, ficar em um arquivo próprio; fazer antes de o Recharts entrar no build final e conferir no `npm run build` que nenhum arquivo passa de 500 kB e que o aviso de tamanho do Vite não aparece
 
 **Checkpoint**: as três histórias P1 funcionam juntas; é o MVP utilizável no dia a dia
 
