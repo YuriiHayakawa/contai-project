@@ -82,8 +82,11 @@ no início da implementação.
 ## 5. Bloqueio de login e rate limiting
 
 - **Decision**:
-  - O bloqueio após 5 tentativas erradas fica no banco, por conta (`failed_login_count`,
-    `locked_until` em `users`), e conta erros de senha e de código de duas etapas.
+  - O bloqueio após 5 tentativas erradas fica no banco, na tabela `login_attempts`, contado
+    pelo e-mail informado (guardado só como SHA-256), exista ou não uma conta com ele; conta
+    erros de senha e de código de duas etapas. Um e-mail sem conta recebe as mesmas
+    respostas, no mesmo tempo, de uma conta com a senha errada: contar só nas contas faria o
+    `423` revelar quais e-mails estão cadastrados, o que o FR-008 proíbe.
   - `slowapi` em memória limita a frequência por IP nos endpoints públicos e por usuário nos
     autenticados. Valores iniciais, todos configuráveis: login 10/min por IP; cadastro 5/h por
     IP; pedidos de e-mail (reenvio, recuperação) 5/h por IP; upload 20/h por usuário; mensagens

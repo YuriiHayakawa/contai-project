@@ -1,10 +1,10 @@
-"""Modelos de autenticação: sessões e tokens enviados por e-mail."""
+"""Modelos de autenticação: sessões, tokens enviados por e-mail e tentativas de login."""
 
 import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, CreatedAt, UUIDPrimaryKey
@@ -67,3 +67,23 @@ class EmailToken(UUIDPrimaryKey, CreatedAt, Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LoginAttempt(Base):
+    """Erros seguidos de login para um e-mail informado, exista ou não uma conta com ele.
+
+    Não tem `user_id` de propósito: contar igual para qualquer e-mail é o que impede o bloqueio
+    de revelar quais e-mails estão cadastrados (FR-008). A chave é o SHA-256 do e-mail
+    normalizado, para o banco não guardar endereços de quem não é usuário.
+    """
+
+    __tablename__ = "login_attempts"
+    __table_args__ = (
+        CheckConstraint("failed_count >= 0", name="failed_count_not_negative"),
+        Index("ix_login_attempts_last_failed_at", "last_failed_at"),
+    )
+
+    email_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    failed_count: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_failed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

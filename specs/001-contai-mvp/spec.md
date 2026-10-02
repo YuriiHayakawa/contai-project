@@ -118,6 +118,8 @@ entra de novo, sem ajuda. Entrega um acesso seguro e individual ao app.
    tentativa, **Then** o acesso fica bloqueado temporariamente, mesmo com a senha correta.
 8. **Given** um usuário que esqueceu a senha, **When** pede a redefinição, **Then** vê a mesma
    mensagem exista ou não o e-mail e, se existir, recebe um link de uso único que expira.
+   **When** uma conta com e-mail ainda não confirmado conclui a redefinição pelo link,
+   **Then** o e-mail passa a estar confirmado e ela já pode entrar com a senha nova.
 9. **Given** um usuário conectado, **When** escolhe sair, **Then** a sessão daquele dispositivo é
    encerrada e as telas internas deixam de ser acessíveis.
 
@@ -512,6 +514,8 @@ os 7 dias, não consegue mais entrar.
   de envios de arquivo e de uso da IA.
 - **FR-010**: O sistema DEVE permitir a recuperação de senha por um link de uso único enviado ao
   e-mail, válido por 1 hora; ao redefinir a senha, todas as sessões DEVEM ser encerradas.
+  Concluir a redefinição pelo link DEVE também confirmar o e-mail da conta, se ele ainda não
+  estava confirmado, porque o link prova a posse da caixa de e-mail.
 - **FR-011**: O usuário DEVE poder ativar a verificação em duas etapas com um app autenticador,
   confirmando um código antes da ativação, e receber 10 códigos de recuperação de uso único, que
   podem ser gerados novamente.

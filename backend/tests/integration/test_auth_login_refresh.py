@@ -6,14 +6,18 @@ from http.cookies import SimpleCookie
 import pytest
 from argon2 import PasswordHasher
 from httpx import ASGITransport, AsyncClient, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
-from app.core.security import password_needs_rehash, verify_password
+from app.core.database import SessionFactory
+from app.core.security import hash_token, password_needs_rehash, verify_password
 from app.main import app
-from app.modules.auth.models import Session, SessionRevokedReason
+from app.modules.auth import service as auth_service
+from app.modules.auth.models import LoginAttempt, Session, SessionRevokedReason
+from app.modules.auth.repository import AuthRepository
 from app.modules.users.models import User, UserStatus
+from app.worker.main import build_worker
 from tests.conftest import (
     TEST_BASE_URL,
     TEST_PASSWORD,
@@ -174,9 +178,15 @@ async def test_login_upgrades_a_password_hash_made_with_older_parameters(
 
 
 async def test_login_is_rate_limited_per_client(client: AsyncClient, frozen_time: datetime) -> None:
-    attempt = {"email": "ninguem@exemplo.test", "password": "qualquer senha"}
-
-    statuses = [(await client.post(LOGIN, json=attempt)).status_code for _ in range(11)]
+    # Um e-mail diferente a cada tentativa: o limite por cliente vale mesmo sem bloquear nenhum.
+    statuses = [
+        (
+            await client.post(
+                LOGIN, json={"email": f"pessoa{index}@exemplo.test", "password": "qualquer senha"}
+            )
+        ).status_code
+        for index in range(11)
+    ]
 
     assert statuses == [401] * 10 + [429]
 
@@ -207,8 +217,8 @@ async def test_account_is_locked_for_15_minutes_after_5_wrong_passwords(
 
     clock.set_fixed_time(frozen_time + timedelta(minutes=15, seconds=1))
     assert (await _login(client, user_a)).status_code == 200
-    await session.refresh(user_a)
-    assert (user_a.failed_login_count, user_a.locked_until) == (0, None)
+    # Com a entrada certa, a contagem do e-mail é apagada.
+    assert await AuthRepository(session).get_login_attempt(hash_token(user_a.email)) is None
 
 
 async def test_a_successful_login_resets_the_count_of_wrong_passwords(
@@ -234,6 +244,112 @@ async def test_the_lock_starts_over_after_it_ends(
     # Um erro depois do bloqueio não bloqueia de novo: são precisos outros cinco.
     assert (await _login(client, user_a, "senha errada mesmo")).status_code == 401
     assert (await _login(client, user_a)).status_code == 200
+
+
+async def _six_attempts(client: AsyncClient, email: str, ip: str) -> list[Response]:
+    """Cinco senhas erradas e mais uma tentativa, vindas de um mesmo endereço."""
+    credentials = {"email": email, "password": "senha errada mesmo"}
+    return [
+        await client.post(LOGIN, json=credentials, headers={"X-Forwarded-For": ip})
+        for _ in range(6)
+    ]
+
+
+async def test_lock_answers_exactly_the_same_whether_or_not_the_email_has_an_account(
+    client: AsyncClient, user_a: User, frozen_time: datetime
+) -> None:
+    for_account = await _six_attempts(client, user_a.email, "203.0.113.10")
+    for_nobody = await _six_attempts(client, "ninguem@exemplo.test", "203.0.113.20")
+
+    assert [response.status_code for response in for_account] == [401] * 5 + [423]
+    for existing, unknown in zip(for_account, for_nobody, strict=True):
+        assert existing.status_code == unknown.status_code
+        assert without_request_id(existing) == without_request_id(unknown)
+        assert existing.headers.get("Retry-After") == unknown.headers.get("Retry-After")
+        assert "set-cookie" not in existing.headers
+        assert "set-cookie" not in unknown.headers
+
+    # O prazo também é o mesmo: os dois voltam a responder 401 juntos.
+    clock.set_fixed_time(frozen_time + timedelta(minutes=15, seconds=1))
+    after_account = await client.post(
+        LOGIN, json={"email": user_a.email, "password": "senha errada mesmo"}
+    )
+    after_nobody = await client.post(
+        LOGIN, json={"email": "ninguem@exemplo.test", "password": "senha errada mesmo"}
+    )
+    assert after_account.status_code == after_nobody.status_code == 401
+    assert without_request_id(after_account) == without_request_id(after_nobody)
+
+
+async def test_lock_is_counted_per_normalized_email(
+    client: AsyncClient, user_a: User, user_b: User, frozen_time: datetime
+) -> None:
+    # Maiúsculas e espaços não abrem uma contagem nova para a mesma conta.
+    for email in ("ana@exemplo.test", "ANA@exemplo.test", " Ana@Exemplo.Test ", "ana@exemplo.test"):
+        await client.post(LOGIN, json={"email": email, "password": "senha errada mesmo"})
+    await _login(client, user_a, "senha errada mesmo")
+
+    assert (await _login(client, user_a)).status_code == 423
+    # O bloqueio de um e-mail não alcança outro.
+    assert (await _login(client, user_b)).status_code == 200
+
+
+async def test_unknown_email_costs_the_same_password_check_as_a_real_account(
+    client: AsyncClient, user_a: User, frozen_time: datetime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checked_hashes: list[str] = []
+
+    def spy(password_hash: str, password: str) -> bool:
+        checked_hashes.append(password_hash)
+        return verify_password(password_hash, password)
+
+    monkeypatch.setattr(auth_service, "verify_password", spy)
+
+    await _login(client, user_a, "senha errada mesmo")
+    await client.post(LOGIN, json={"email": "ninguem@exemplo.test", "password": "qualquer uma"})
+
+    # Uma conferência de senha em cada caso: a da conta contra o hash dela, a do e-mail
+    # sem conta contra um hash fictício com os mesmos parâmetros.
+    real_hash, dummy_hash = checked_hashes
+    assert real_hash == user_a.password_hash
+    assert dummy_hash != real_hash
+    assert dummy_hash.split("$")[:4] == real_hash.split("$")[:4]
+
+
+async def test_attempts_for_an_unknown_email_store_only_a_hash_of_the_address(
+    client: AsyncClient, session: AsyncSession, frozen_time: datetime
+) -> None:
+    await client.post(LOGIN, json={"email": "Ninguem@Exemplo.test", "password": "qualquer uma"})
+
+    [attempt] = (await session.execute(select(LoginAttempt))).scalars()
+    assert attempt.email_hash == hash_token("ninguem@exemplo.test")
+    assert (attempt.failed_count, attempt.locked_until) == (1, None)
+    assert attempt.last_failed_at == frozen_time
+    assert (await session.execute(select(func.count()).select_from(User))).scalar_one() == 0
+
+
+async def test_stale_attempts_are_purged_by_the_worker(
+    client: AsyncClient,
+    session: AsyncSession,
+    session_factory: SessionFactory,
+    frozen_time: datetime,
+) -> None:
+    async def fail(email: str, times: int) -> None:
+        for _ in range(times):
+            await client.post(LOGIN, json={"email": email, "password": "senha errada mesmo"})
+
+    await fail("antiga@exemplo.test", 2)
+    clock.set_fixed_time(frozen_time + timedelta(hours=23, minutes=50))
+    await fail("bloqueada@exemplo.test", 5)
+    await fail("recente@exemplo.test", 1)
+    clock.set_fixed_time(frozen_time + timedelta(hours=24, seconds=1))
+
+    await build_worker(session_factory).run_periodic_tasks()
+
+    remaining = {
+        item.email_hash for item in (await session.execute(select(LoginAttempt))).scalars()
+    }
+    assert remaining == {hash_token("bloqueada@exemplo.test"), hash_token("recente@exemplo.test")}
 
 
 # ---------- refresh

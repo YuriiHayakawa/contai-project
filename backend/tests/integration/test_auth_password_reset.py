@@ -210,8 +210,28 @@ async def test_an_email_confirmation_token_does_not_reset_the_password(
     assert (await client.post(VERIFY, json={"token": confirmation_token})).status_code == 204
 
 
-async def test_unverified_account_can_reset_the_password_but_still_has_to_confirm(
+async def test_resetting_the_password_by_the_link_also_confirms_the_email(
     client: AsyncClient,
+    session: AsyncSession,
+    make_user: UserFactory,
+    deliver_emails: EmailDelivery,
+    frozen_time: datetime,
+) -> None:
+    # O link chegou à caixa de e-mail: quem o usa provou que a caixa é dele.
+    pending = await make_user(verified=False)
+    token = await _request_token(client, deliver_emails, pending)
+
+    response = await client.post(RESET, json={"token": token, "new_password": NEW_PASSWORD})
+
+    assert response.status_code == 204
+    await session.refresh(pending)
+    assert pending.email_verified_at == frozen_time
+    assert await _login_status(client, pending, NEW_PASSWORD) == 200
+
+
+async def test_a_refused_reset_does_not_confirm_the_email(
+    client: AsyncClient,
+    session: AsyncSession,
     make_user: UserFactory,
     deliver_emails: EmailDelivery,
     frozen_time: datetime,
@@ -219,11 +239,30 @@ async def test_unverified_account_can_reset_the_password_but_still_has_to_confir
     pending = await make_user(verified=False)
     token = await _request_token(client, deliver_emails, pending)
 
-    response = await client.post(RESET, json={"token": token, "new_password": NEW_PASSWORD})
+    weak = await client.post(RESET, json={"token": token, "new_password": "curta1"})
+    clock.set_fixed_time(frozen_time + timedelta(hours=2))
+    expired = await client.post(RESET, json={"token": token, "new_password": NEW_PASSWORD})
 
-    assert response.status_code == 204
-    login = await client.post(LOGIN, json={"email": pending.email, "password": NEW_PASSWORD})
-    assert (login.status_code, login.json()["error"]["code"]) == (403, "email_not_verified")
+    assert (weak.status_code, expired.status_code) == (422, 400)
+    await session.refresh(pending)
+    assert pending.email_verified_at is None
+
+
+async def test_reset_keeps_the_original_confirmation_date_of_a_confirmed_account(
+    client: AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    deliver_emails: EmailDelivery,
+    frozen_time: datetime,
+) -> None:
+    confirmed_at = user_a.email_verified_at
+    token = await _request_token(client, deliver_emails, user_a)
+    clock.set_fixed_time(frozen_time + timedelta(minutes=30))
+
+    await client.post(RESET, json={"token": token, "new_password": NEW_PASSWORD})
+
+    await session.refresh(user_a)
+    assert user_a.email_verified_at == confirmed_at
 
 
 async def test_forgot_is_rate_limited_per_client(

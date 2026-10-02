@@ -26,4 +26,22 @@ async def test_core_tables_exist(connection: AsyncConnection) -> None:
     )
     tables = {row[0] for row in result}
 
-    assert {"users", "sessions", "email_tokens", "jobs", "worker_heartbeats", "ai_usage"} <= tables
+    assert {
+        "users",
+        "sessions",
+        "email_tokens",
+        "login_attempts",
+        "jobs",
+        "worker_heartbeats",
+        "ai_usage",
+    } <= tables
+
+
+async def test_lock_columns_left_the_users_table(connection: AsyncConnection) -> None:
+    # O bloqueio é contado por e-mail em `login_attempts`, exista ou não a conta.
+    result = await connection.execute(
+        text("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")
+    )
+    columns = {row[0] for row in result}
+
+    assert not {"failed_login_count", "locked_until"} & columns

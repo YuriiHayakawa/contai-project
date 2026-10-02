@@ -26,7 +26,6 @@ async def test_create_user_normalizes_email_and_sets_defaults(
     assert user.email == "ana@exemplo.test"
     assert user.status == UserStatus.ACTIVE
     assert user.email_verified_at is None
-    assert user.failed_login_count == 0
     assert user.id is not None
 
 
