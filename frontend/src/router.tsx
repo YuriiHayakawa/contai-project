@@ -12,7 +12,7 @@ import { AppShell, PageContent } from "./components/layout/AppShell";
 import { RouteErrorPage } from "./components/layout/ErrorPage";
 import { PageHeader } from "./components/layout/PageHeader";
 import { EmptyState } from "./components/ui/EmptyState";
-import { useToast } from "./components/ui/Toast";
+import { AccountsPage } from "./features/accounts/components/AccountsPage";
 import { ForgotPasswordPage } from "./features/auth/components/ForgotPasswordPage";
 import { LoginPage } from "./features/auth/components/LoginPage";
 import { PrivacyPolicyPage } from "./features/auth/components/PrivacyPolicyPage";
@@ -21,6 +21,12 @@ import { ResetPasswordPage } from "./features/auth/components/ResetPasswordPage"
 import { VerifyEmailPage } from "./features/auth/components/VerifyEmailPage";
 import { useAuth } from "./features/auth/hooks/useAuth";
 import { useLogout } from "./features/auth/hooks/useLogout";
+import { CategoriesPage } from "./features/categories/components/CategoriesPage";
+import { TransactionsPage } from "./features/transactions/components/TransactionsPage";
+import {
+  NewTransactionProvider,
+  useNewTransaction,
+} from "./features/transactions/hooks/useNewTransaction";
 import { paths, returnPathFrom, type LoginLocationState } from "./lib/paths";
 
 interface PendingPageProps {
@@ -86,20 +92,28 @@ function RedirectIfAuthenticated() {
   return <Outlet />;
 }
 
-function AppLayout() {
+/** Casca do app, com a ação de "Lançar" e de "Novo lançamento" ligada à folha do formulário. */
+function AppFrame() {
   const { user } = useAuth();
-  const toast = useToast();
   const logout = useLogout();
+  const openNewTransaction = useNewTransaction();
 
   return (
     <AppShell
       userName={user?.name ?? ""}
-      // A folha do formulário de lançamento entra na T093.
-      onNewTransaction={() => toast.info("O formulário de lançamento ainda está sendo preparado.")}
+      onNewTransaction={openNewTransaction}
       onSignOut={() => logout.mutate()}
     >
       <Outlet />
     </AppShell>
+  );
+}
+
+function AppLayout() {
+  return (
+    <NewTransactionProvider>
+      <AppFrame />
+    </NewTransactionProvider>
   );
 }
 
@@ -176,9 +190,9 @@ export const routes: RouteObject[] = [
             element: <AppLayout />,
             children: [
               { path: paths.home, element: <PendingPage title="Início" /> },
-              { path: paths.transactions, element: <PendingPage title="Lançamentos" /> },
-              { path: paths.accounts, element: <PendingPage title="Contas" /> },
-              { path: paths.categories, element: <PendingPage title="Categorias" /> },
+              { path: paths.transactions, element: <TransactionsPage /> },
+              { path: paths.accounts, element: <AccountsPage /> },
+              { path: paths.categories, element: <CategoriesPage /> },
               { path: paths.imports, element: <PendingPage title="Importações" /> },
               { path: paths.assistant, element: <PendingPage title="Assistente" /> },
               { path: paths.settings, element: <PendingPage title="Configurações" /> },

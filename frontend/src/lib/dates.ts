@@ -91,3 +91,15 @@ export function monthLabel(yearMonth: YearMonth): string {
   const name = monthName(yearMonth);
   return `${name.charAt(0).toUpperCase()}${name.slice(1)} de ${yearMonth.slice(0, 4)}`;
 }
+
+/** Soma meses a um mês de calendário; aceita valores negativos. */
+export function addMonths(yearMonth: YearMonth, months: number): YearMonth {
+  const date = calendarDate(`${yearMonth}-01`);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}`;
+}
+
+/** Primeiro e último dia de um mês, como os filtros de período esperam. */
+export function monthRange(yearMonth: YearMonth): { from: ISODate; to: ISODate } {
+  return { from: `${yearMonth}-01`, to: addDays(`${addMonths(yearMonth, 1)}-01`, -1) };
+}
