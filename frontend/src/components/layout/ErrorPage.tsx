@@ -3,14 +3,17 @@ import { useRouteError } from "react-router";
 
 import { EmptyState } from "../ui/EmptyState";
 
-/**
- * Limite de erro do app, usado como `errorElement` da rota raiz. Um erro inesperado ao desenhar
- * uma tela cai aqui, com uma mensagem que diz o que fazer; o detalhe técnico vai só para o
- * console.
- */
-export function ErrorPage() {
-  const error = useRouteError();
+export interface ErrorPageProps {
+  /** O erro capturado; vai só para o console, nunca para a tela. */
+  error: unknown;
+}
 
+/**
+ * Tela do limite de erro do app. Um erro inesperado ao desenhar cai aqui, com uma mensagem que
+ * diz o que fazer. É a mesma tela nos dois limites: o da rota raiz (`RouteErrorPage`) e o que
+ * envolve os provedores em App.tsx.
+ */
+export function ErrorPage({ error }: ErrorPageProps) {
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -26,4 +29,9 @@ export function ErrorPage() {
       />
     </main>
   );
+}
+
+/** `errorElement` da rota raiz: erros ao desenhar uma rota. */
+export function RouteErrorPage() {
+  return <ErrorPage error={useRouteError()} />;
 }

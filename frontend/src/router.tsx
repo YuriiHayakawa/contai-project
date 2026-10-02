@@ -9,7 +9,7 @@ import {
 } from "react-router";
 
 import { AppShell, PageContent } from "./components/layout/AppShell";
-import { ErrorPage } from "./components/layout/ErrorPage";
+import { RouteErrorPage } from "./components/layout/ErrorPage";
 import { PageHeader } from "./components/layout/PageHeader";
 import { EmptyState } from "./components/ui/EmptyState";
 import { useToast } from "./components/ui/Toast";
@@ -126,8 +126,8 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
 
 export const routes: RouteObject[] = [
   {
-    // O limite de erro do app: qualquer erro ao desenhar uma rota cai na ErrorPage.
-    errorElement: <ErrorPage />,
+    // Limite de erro das rotas: qualquer erro ao desenhar uma rota cai na ErrorPage.
+    errorElement: <RouteErrorPage />,
     children: [
       // Rotas públicas
       { path: paths.login, element: <LoginPage /> },
