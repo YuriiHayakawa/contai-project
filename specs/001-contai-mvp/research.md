@@ -441,6 +441,7 @@ decididas aqui:
 | `qrcode.react` | QR code das duas etapas | gerar QR à mão não se justifica |
 | `@tailwindcss/vite` | integra o Tailwind 4 ao Vite | plugin oficial do Tailwind 4, que faz parte da stack da constituição |
 | `motion` | transições de entrada e saída | animar a saída de elementos removidos não é possível só com CSS; uso restrito |
+| `react-error-boundary` | limite de erro em volta dos provedores de `App.tsx` | o React só oferece limite de erro como componente de classe, que o Princípio II proíbe no código do projeto; o `errorElement` do React Router cobre as rotas, mas não os provedores fora delas. A biblioteca entrega o limite como componente pronto, sem dependências próprias, e o código do app continua só com componentes funcionais |
 | `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event` | ambiente de teste | exigidos pelo Vitest com Testing Library |
 | `@vitejs/plugin-react` | React no Vite | plugin oficial; sem ele o Vite não compila JSX com recarga |
 | `typescript-eslint`, `@eslint/js`, `eslint-plugin-react-hooks`, `globals` | regras do ESLint | conjunto mínimo para aplicar o ESLint a TypeScript e React, e para proibir `any` |

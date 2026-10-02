@@ -1,8 +1,10 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "motion/react";
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { RouterProvider } from "react-router";
 
+import { ErrorPage } from "./components/layout/ErrorPage";
 import { ToastProvider } from "./components/ui/Toast";
 import { AuthProvider } from "./features/auth/hooks/useAuth";
 import { createQueryClient } from "./lib/query-client";
@@ -11,8 +13,8 @@ import { createAppRouter } from "./router";
 
 /**
  * Raiz do app: dados do servidor (TanStack Query), movimento reduzido conforme o sistema,
- * avisos, sessão e rotas. O limite de erro é o `errorElement` da rota raiz, em router.tsx: o
- * React só oferece limite de erro como componente de classe, que o projeto não usa.
+ * avisos, sessão e rotas. Há dois limites de erro com a mesma tela: o `errorElement` da rota
+ * raiz, para erros de uma rota, e o `ErrorBoundary` daqui, para erros dos próprios provedores.
  */
 export default function App() {
   const [queryClient] = useState(createQueryClient);
@@ -22,14 +24,16 @@ export default function App() {
   useEffect(() => watchSystemTheme(), []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <MotionConfig reducedMotion="user">
-        <ToastProvider>
-          <AuthProvider>
-            <RouterProvider router={router} />
-          </AuthProvider>
-        </ToastProvider>
-      </MotionConfig>
-    </QueryClientProvider>
+    <ErrorBoundary fallbackRender={({ error }) => <ErrorPage error={error} />}>
+      <QueryClientProvider client={queryClient}>
+        <MotionConfig reducedMotion="user">
+          <ToastProvider>
+            <AuthProvider>
+              <RouterProvider router={router} />
+            </AuthProvider>
+          </ToastProvider>
+        </MotionConfig>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
