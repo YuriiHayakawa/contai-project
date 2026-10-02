@@ -125,6 +125,8 @@ async def _wait(stop: asyncio.Event, seconds: float) -> None:
 
 def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     """Monta o worker com tudo que ele executa."""
+    # Importar o módulo registra os tipos de e-mail que o job sabe enviar.
+    from app.modules.auth import emails as _auth_emails  # noqa: F401
     from app.worker.jobs.send_email import handle_send_email
 
     worker = Worker(session_factory=session_factory)

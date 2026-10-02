@@ -1,0 +1,16 @@
+Assunto: Confirme seu e-mail no Contaí
+
+Olá, $name!
+
+Falta só um passo para começar a usar o Contaí: confirmar que este e-mail é seu.
+
+Abra este link:
+$link
+
+O link vale por 24 horas e só pode ser usado uma vez. Se ele não funcionar mais, entre no
+Contaí e peça um novo link.
+
+Se você não criou uma conta no Contaí, pode ignorar este e-mail. Sem a confirmação, a conta
+não é ativada.
+
+Contaí

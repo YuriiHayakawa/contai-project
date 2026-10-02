@@ -12,21 +12,23 @@ from app.core import clock
 from app.core.database import get_session
 from app.core.errors import Forbidden, Unauthenticated
 from app.core.security import decode_access_token
+from app.modules.auth.errors import EmailNotVerified
 from app.modules.auth.repository import AuthRepository
 from app.modules.users.models import UserStatus
 from app.modules.users.repository import UserRepository
 
 _bearer = HTTPBearer(auto_error=False)
 
-# Únicas rotas liberadas para uma conta com exclusão pedida: ver o perfil e cancelar a exclusão.
+# Únicas rotas liberadas para uma conta com exclusão pedida: ver o perfil, cancelar a exclusão
+# e sair da conta.
 PENDING_DELETION_ALLOWED_ROUTES = frozenset(
     {
         ("GET", "/api/v1/users/me"),
         ("DELETE", "/api/v1/users/me/deletion"),
+        ("POST", "/api/v1/auth/logout"),
     }
 )
 
-EMAIL_NOT_VERIFIED_MESSAGE = "Confirme seu e-mail para continuar. Enviamos um link para você."
 PENDING_DELETION_MESSAGE = (
     "Esta conta está com a exclusão agendada. Para voltar a usá-la, cancele a exclusão."
 )
@@ -60,7 +62,7 @@ async def get_current_user(
     if user is None:
         raise Unauthenticated()
     if user.email_verified_at is None:
-        raise Forbidden(EMAIL_NOT_VERIFIED_MESSAGE, code="email_not_verified")
+        raise EmailNotVerified()
     if user.status == UserStatus.PENDING_DELETION:
         route = request.scope.get("route")
         if (request.method, getattr(route, "path", None)) not in PENDING_DELETION_ALLOWED_ROUTES:

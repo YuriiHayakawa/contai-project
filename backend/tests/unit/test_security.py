@@ -27,6 +27,16 @@ def test_valid_passwords_are_accepted(password: str) -> None:
     security.validate_password(password)
 
 
+def test_weak_password_error_names_the_field_of_the_request() -> None:
+    with pytest.raises(security.WeakPassword) as default_field:
+        security.validate_password("curta")
+    with pytest.raises(security.WeakPassword) as named_field:
+        security.validate_password("curta", field="new_password")
+
+    assert list(default_field.value.details["fields"]) == ["password"]
+    assert list(named_field.value.details["fields"]) == ["new_password"]
+
+
 def test_short_password_is_rejected_with_guidance() -> None:
     with pytest.raises(security.WeakPassword) as error:
         security.validate_password("abc1234")
@@ -112,6 +122,21 @@ def test_access_token_expires_after_15_minutes() -> None:
     security.decode_access_token(token)
 
     clock.set_fixed_time(NOW + timedelta(minutes=15))
+    with pytest.raises(Unauthenticated):
+        security.decode_access_token(token)
+
+
+def test_token_time_is_judged_by_the_application_clock_only() -> None:
+    # Emitido "no futuro" em relação ao relógio do sistema: vale, porque quem manda é o
+    # relógio da aplicação. Sem isso, a biblioteca recusaria pela hora de emissão.
+    far_future = datetime(2100, 1, 1, tzinfo=UTC)
+    clock.set_fixed_time(far_future)
+    user_id, session_id = uuid.uuid4(), uuid.uuid4()
+
+    token = security.create_access_token(user_id, session_id)
+
+    assert security.decode_access_token(token).user_id == user_id
+    clock.set_fixed_time(far_future + timedelta(minutes=15))
     with pytest.raises(Unauthenticated):
         security.decode_access_token(token)
 
