@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { LoaderCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 
@@ -72,18 +71,32 @@ function ResendForm({ defaultEmail }: ResendFormProps) {
   );
 }
 
-/** Chegada pelo link do e-mail: confirma na hora e diz o que aconteceu. */
+/**
+ * Chegada pelo link do e-mail. Abrir a página não confirma nada: a confirmação só acontece no
+ * clique do botão. Assim, um verificador automático de links (de um antivírus ou do próprio
+ * serviço de e-mail), que abre o endereço antes da pessoa, não gasta o link de uso único.
+ */
 function ConfirmingByLink({ token }: ConfirmingByLinkProps) {
   const navigate = useNavigate();
-  const verification = useVerifyEmail(token);
+  const verification = useVerifyEmail();
 
-  if (verification.isPending) {
+  if (verification.isIdle || verification.isPending) {
     return (
-      <AuthLayout title="Confirmando seu e-mail">
-        <p role="status" className="flex items-center gap-3 text-body text-ink-muted">
-          <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-          Só um instante…
-        </p>
+      <AuthLayout title="Falta só um passo" footer={backToLogin}>
+        <Card>
+          <div className="grid gap-4">
+            <p className="text-body text-ink">
+              Toque no botão para confirmar que este e-mail é seu e ativar a sua conta.
+            </p>
+            <Button
+              block
+              loading={verification.isPending}
+              onClick={() => verification.mutate(token)}
+            >
+              Confirmar meu e-mail
+            </Button>
+          </div>
+        </Card>
       </AuthLayout>
     );
   }
@@ -144,8 +157,8 @@ function WaitingForConfirmation() {
 }
 
 /**
- * Confirmação de e-mail. Com `?token=` (o link do e-mail), confirma a conta; sem ele, é a tela
- * de espera mostrada logo depois do cadastro.
+ * Confirmação de e-mail. Com `?token=` (o link do e-mail), mostra o botão que confirma a conta;
+ * sem ele, é a tela de espera mostrada logo depois do cadastro.
  */
 export function VerifyEmailPage() {
   const [params] = useSearchParams();

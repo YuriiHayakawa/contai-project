@@ -509,9 +509,12 @@ os 7 dias, não consegue mais entrar.
   dispositivo.
 - **FR-008**: As mensagens de login, cadastro e recuperação de senha NÃO DEVEM revelar se um
   e-mail está cadastrado.
-- **FR-009**: O sistema DEVE bloquear por 15 minutos a entrada em uma conta após 5 tentativas
-  erradas seguidas e DEVE limitar a frequência de cadastros, de pedidos de recuperação de senha,
-  de envios de arquivo e de uso da IA.
+- **FR-009**: O sistema DEVE bloquear por 15 minutos a entrada com um e-mail após 5 tentativas
+  erradas seguidas com ele. A contagem DEVE ser feita pelo e-mail informado, normalizado (sem
+  espaços nas pontas e em minúsculas), exista ou não uma conta com esse e-mail, e a resposta
+  DEVE ser a mesma nos dois casos, para o bloqueio não revelar quais e-mails estão cadastrados
+  (FR-008). O sistema DEVE também limitar a frequência de cadastros, de pedidos de recuperação
+  de senha, de envios de arquivo e de uso da IA.
 - **FR-010**: O sistema DEVE permitir a recuperação de senha por um link de uso único enviado ao
   e-mail, válido por 1 hora; ao redefinir a senha, todas as sessões DEVEM ser encerradas.
   Concluir a redefinição pelo link DEVE também confirmar o e-mail da conta, se ele ainda não
