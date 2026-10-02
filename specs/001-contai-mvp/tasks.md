@@ -239,6 +239,7 @@ lista de transações, trocar de mês e abrir uma categoria
 - [ ] T103 [P] [US3] Implementar `frontend/src/features/dashboard/components/TrendChart.tsx` com Recharts conforme as seções 7.1 e 7.3: barras agrupadas de entradas e saídas, legenda, tooltip, `role="img"` com resumo, "Ver como tabela", toque em um mês muda o mês do painel e animação desligada com movimento reduzido
 - [ ] T104 [P] [US3] Implementar `frontend/src/features/dashboard/components/AccountsCard.tsx`, `TopExpenses.tsx` e `FirstSteps.tsx` (orientações de primeiros passos para quem não tem dados, FR-060)
 - [ ] T105 [US3] Implementar `frontend/src/features/dashboard/components/DashboardPage.tsx` com a entrada orquestrada da seção 9.2 do `design-system.md` (cascata de 60ms e o traço do marca-texto) e registrá-la como rota inicial em `frontend/src/router.tsx`
+- [ ] T227 [US3] Dividir o bundle por rota em `frontend/src/router.tsx` com `React.lazy` e `Suspense` (carregamento com o esqueleto da página), para cada tela, e o Recharts só com o painel, ficar em um arquivo próprio; fazer antes de o Recharts entrar no build final e conferir no `npm run build` que nenhum arquivo passa de 500 kB e que o aviso de tamanho do Vite não aparece
 
 **Checkpoint**: as três histórias P1 funcionam juntas; é o MVP utilizável no dia a dia
 

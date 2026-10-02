@@ -25,10 +25,10 @@ Templates: não modificados. Os templates e comandos dependentes leem esta const
 de execução. Com a emenda, o desvio registrado no Complexity Tracking do plano deixa de ser um
 desvio; o plano não foi alterado por este comando.
 
+ADR: docs/adr/0009-modulo-categorization.md acompanha esta emenda, como a seção de governança
+pede para emendas que tocam a arquitetura.
+
 Follow-up TODOs:
-  - Governança pede ADR para emendas que mudam arquitetura. Esta foi classificada como PATCH
-    (ajuste de lista, sem regra nova); cabe ao mantenedor confirmar essa leitura ou pedir um ADR
-    do módulo `categorization` junto dos demais ADRs (T219).
   - Continuam valendo as pendências externas da versão 1.0.0 que ainda estão abertas (valores
     numéricos deixados para specs e ADRs).
 
