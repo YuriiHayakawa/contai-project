@@ -35,6 +35,7 @@ from app.modules.auth.errors import (
 )
 from app.modules.auth.models import EmailToken, EmailTokenType, Session, SessionRevokedReason
 from app.modules.auth.repository import AuthRepository
+from app.modules.categories.service import CategoryService
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
 from app.worker.jobs.send_email import enqueue_email
@@ -144,18 +145,19 @@ class AuthService:
         user = await self._users.get_by_id(email_token.user_id)
         if user is None:
             raise InvalidOrExpiredToken()
-        self._mark_email_verified(user, clock.utcnow())
+        await self._mark_email_verified(user, clock.utcnow())
         await self._users.save(user)
 
-    @staticmethod
-    def _mark_email_verified(user: User, now: datetime) -> None:
+    async def _mark_email_verified(self, user: User, now: datetime) -> None:
         """Único ponto em que uma conta passa a ter o e-mail confirmado.
 
         É chamado pelo link de confirmação e pelo link de redefinição de senha. Uma conta já
-        confirmada mantém a data original.
+        confirmada mantém a data original. Na mesma transação, a conta recebe as categorias
+        prontas (FR-024).
         """
         if user.email_verified_at is None:
             user.email_verified_at = now
+            await CategoryService(self._session).create_defaults(user.id)
 
     async def resend_verification(self, email: str) -> None:
         user = await self._users.get_by_email(email)
@@ -294,7 +296,7 @@ class AuthService:
             raise InvalidOrExpiredToken()
         user.password_hash = hash_password(new_password)
         # O link chegou à caixa de e-mail: usá-lo prova a posse dela, como o link de confirmação.
-        self._mark_email_verified(user, now)
+        await self._mark_email_verified(user, now)
         await self._users.save(user)
         # A senha nova também desfaz um bloqueio por tentativas erradas.
         await self._auth.clear_login_attempts(_login_attempt_key(user.email))

@@ -1,5 +1,7 @@
 """As migrações e os modelos precisam descrever o mesmo esquema."""
 
+import re
+
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import CheckConstraint, Connection, text
@@ -7,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app import models_registry  # noqa: F401 - preenche o metadata
 from app.core.database import Base
+
+# `ck_users_ck_users_...`: o prefixo da convenção de nomes aplicado duas vezes.
+_DOUBLED_PREFIX = re.compile(r"^ck_(\w+?)_ck_\1_")
 
 
 def _diff(sync_connection: Connection) -> list[object]:
@@ -67,4 +72,4 @@ async def test_check_constraints_have_the_names_declared_by_the_models(
     }
 
     assert in_database == declared
-    assert not [name for name in in_database if name.count("ck_") > 1]
+    assert not [name for name in in_database if _DOUBLED_PREFIX.match(name)]

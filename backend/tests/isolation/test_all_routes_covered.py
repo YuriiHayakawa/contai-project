@@ -5,13 +5,13 @@ import pkgutil
 
 import pytest
 from fastapi import APIRouter, FastAPI
-from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import tests.isolation as isolation_package
 from app.main import app
 from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.users.models import User
+from tests.conftest import ClientFactory
 from tests.isolation import registry
 from tests.isolation.registry import IsolationContext
 
@@ -35,17 +35,21 @@ def test_no_isolation_entry_points_to_a_route_that_no_longer_exists() -> None:
 
 
 async def test_isolation_cases(
-    session: AsyncSession,
-    user_a: User,
-    user_b: User,
-    client_a: AsyncClient,
-    client_b: AsyncClient,
+    session: AsyncSession, user_a: User, user_b: User, client_for: ClientFactory
 ) -> None:
-    """Executa cada caso registrado: o usuário B nunca alcança o que é do usuário A."""
-    context = IsolationContext(
-        session=session, user_a=user_a, user_b=user_b, client_a=client_a, client_b=client_b
-    )
+    """Executa cada caso registrado: o usuário B nunca alcança o que é do usuário A.
+
+    Cada caso recebe sessões novas dos dois usuários: um caso que encerra uma sessão (o do
+    logout) não interfere nos seguintes.
+    """
     for (method, path), case in sorted(registry.registered_cases().items()):
+        context = IsolationContext(
+            session=session,
+            user_a=user_a,
+            user_b=user_b,
+            client_a=await client_for(user_a),
+            client_b=await client_for(user_b),
+        )
         try:
             await case(context)
         except AssertionError as error:
