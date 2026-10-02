@@ -111,7 +111,7 @@ redefinir a senha ou depois de 24 horas sem erros.
 | `POST /transactions/installments` | `total_cents`, `installments` (2 a 48), `date`, `description`, `account_id`, `category_id`, `notes` | lista das parcelas | conta precisa ser cartão (FR-030) |
 | `POST /transactions/transfers` | `from_account_id`, `to_account_id`, `amount_cents`, `date`, `description` | as duas linhas | contas diferentes (FR-033) |
 | `GET /transactions/{id}` | — | transação | |
-| `PATCH /transactions/{id}` | campos editáveis; `?scope=single` ou `group` | transação ou lista | `scope` vale para parcelas (FR-032); transferência edita os dois lados |
+| `PATCH /transactions/{id}` | campos editáveis; `?scope=single` ou `group` | transação ou lista | `scope` vale para parcelas (FR-032); transferência edita os dois lados; em despesa e receita, também grava ou atualiza a regra de categoria (FR-048) |
 | `DELETE /transactions/{id}` | `?scope=single` ou `group` | `204` | |
 
 ## Importações
