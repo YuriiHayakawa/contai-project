@@ -261,6 +261,8 @@
   --animate-*: initial;
   --animate-spin: spin 0.8s linear infinite;
   --animate-pulse: pulse 1.6s var(--ease-in-out) infinite;
+  /* o traço de marca-texto, pintado uma vez depois da cascata do painel (9.2) */
+  --animate-paint: paint 520ms var(--ease-out) 420ms both;
 
   @keyframes spin {
     to {
@@ -270,6 +272,11 @@
   @keyframes pulse {
     50% {
       opacity: 0.45;
+    }
+  }
+  @keyframes paint {
+    from {
+      transform: scaleX(0);
     }
   }
 }

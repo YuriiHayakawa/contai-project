@@ -1,7 +1,13 @@
-import { keepPreviousData, useInfiniteQuery, type QueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import { accountsQueryKey } from "../../accounts/hooks/useAccounts";
-import { listTransactions } from "../services/transactionsService";
+import { dashboardQueryKey } from "../../dashboard/query-key";
+import { countTransactions, listTransactions } from "../services/transactionsService";
 import type { TransactionFilters } from "../types";
 
 export const transactionsQueryKey = ["transactions"] as const;
@@ -21,10 +27,22 @@ export function useTransactions(filters: TransactionFilters) {
   });
 }
 
-/** Depois de criar, editar ou excluir um lançamento: as listas e os saldos das contas mudaram. */
+/** Quantos lançamentos o usuário tem ao todo: zero é o sinal de quem ainda está começando. */
+export function useTransactionCount() {
+  return useQuery({
+    queryKey: [...transactionsQueryKey, "count"],
+    queryFn: ({ signal }) => countTransactions(signal),
+  });
+}
+
+/**
+ * Depois de criar, editar ou excluir um lançamento: as listas, os saldos das contas e os
+ * números do painel mudaram.
+ */
 export async function invalidateTransactions(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: transactionsQueryKey }),
     queryClient.invalidateQueries({ queryKey: accountsQueryKey }),
+    queryClient.invalidateQueries({ queryKey: dashboardQueryKey }),
   ]);
 }

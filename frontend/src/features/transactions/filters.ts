@@ -36,6 +36,12 @@ export interface TransactionListView {
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
+/** `2026-04-31` tem o formato de uma data, mas não existe: a API a recusaria. */
+function isCalendarDate(value: string): boolean {
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function isEntryType(value: string | null): value is EntryType {
   return value === "expense" || value === "income";
 }
@@ -50,8 +56,13 @@ export function readListView(
     return value && pattern.test(value) ? value : undefined;
   };
 
-  let from = matching(FILTER_PARAM.from, DATE_PATTERN);
-  let to = matching(FILTER_PARAM.to, DATE_PATTERN);
+  const date = (name: FilterParamName): string | undefined => {
+    const value = matching(name, DATE_PATTERN);
+    return value && isCalendarDate(value) ? value : undefined;
+  };
+
+  let from = date(FILTER_PARAM.from);
+  let to = date(FILTER_PARAM.to);
   let periodKind: PeriodKind = "range";
   if (!from && !to) {
     if (params.get(FILTER_PARAM.period) === ALL_PERIOD_PARAM) {
@@ -89,13 +100,33 @@ export function isDateShown(date: ISODate, filters: TransactionFilters): boolean
   return (!filters.from || date >= filters.from) && (!filters.to || date <= filters.to);
 }
 
-/** Parâmetros do endereço que abrem a lista em um mês; o mês atual não precisa de nenhum. */
+export interface ListLinkFilters {
+  /** Categoria; a lista inclui as subcategorias dela. */
+  category?: string;
+  type?: EntryType;
+}
+
+/**
+ * Parâmetros do endereço que abrem a lista em um mês, com os filtros pedidos. O mês atual é o
+ * padrão da lista e não precisa de datas no endereço.
+ */
+export function listSearch(
+  month: YearMonth,
+  { category, type }: ListLinkFilters = {},
+  currentMonth: YearMonth = yearMonthOf(),
+): string {
+  const params = new URLSearchParams();
+  if (month !== currentMonth) {
+    const range = monthRange(month);
+    params.set(FILTER_PARAM.from, range.from);
+    params.set(FILTER_PARAM.to, range.to);
+  }
+  if (category) params.set(FILTER_PARAM.category, category);
+  if (type) params.set(FILTER_PARAM.type, type);
+  return params.size > 0 ? `?${params.toString()}` : "";
+}
+
+/** Parâmetros do endereço que abrem a lista em um mês, sem outros filtros. */
 export function monthSearch(month: YearMonth, currentMonth: YearMonth = yearMonthOf()): string {
-  if (month === currentMonth) return "";
-  const range = monthRange(month);
-  const params = new URLSearchParams({
-    [FILTER_PARAM.from]: range.from,
-    [FILTER_PARAM.to]: range.to,
-  });
-  return `?${params.toString()}`;
+  return listSearch(month, {}, currentMonth);
 }

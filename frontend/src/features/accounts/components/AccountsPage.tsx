@@ -1,13 +1,4 @@
-import {
-  Banknote,
-  CreditCard,
-  Landmark,
-  PiggyBank,
-  Plus,
-  TrendingUp,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
+import { Plus, Wallet } from "lucide-react";
 import { useId, useState } from "react";
 
 import { PageContent } from "../../../components/layout/AppShell";
@@ -22,6 +13,7 @@ import { useToast } from "../../../components/ui/Toast";
 import { errorMessage } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
 import { formatBRL } from "../../../lib/money";
+import { ACCOUNT_TYPE_ICONS } from "../account-type-icons";
 import {
   useAccounts,
   useArchiveAccount,
@@ -30,7 +22,7 @@ import {
   useUnarchiveAccount,
   useUpdateAccount,
 } from "../hooks/useAccounts";
-import { ACCOUNT_TYPE_LABELS, type Account, type AccountInput, type AccountType } from "../types";
+import { ACCOUNT_TYPE_LABELS, type Account, type AccountInput } from "../types";
 import { AccountForm } from "./AccountForm";
 
 interface AccountRowsProps {
@@ -45,19 +37,11 @@ interface AccountEditorProps {
   onClose: () => void;
 }
 
-const typeIcons: Record<AccountType, LucideIcon> = {
-  checking: Landmark,
-  credit_card: CreditCard,
-  cash: Banknote,
-  savings: PiggyBank,
-  investment: TrendingUp,
-};
-
 function AccountRows({ accounts, onSelect }: AccountRowsProps) {
   return (
     <ul>
       {accounts.map((account) => {
-        const Icon = typeIcons[account.type];
+        const Icon = ACCOUNT_TYPE_ICONS[account.type];
         return (
           <li key={account.id} className="border-b border-border last:border-b-0">
             <button

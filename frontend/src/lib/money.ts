@@ -71,3 +71,21 @@ export function centsFromTypedText(text: string, previous: number): number {
   const cents = Number(digits || "0");
   return cents > MAX_AMOUNT_CENTS ? previous : cents;
 }
+
+const compactFormat = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+
+/**
+ * Valor redondo e curto para o eixo de um gráfico: `R$ 500`, `R$ 2 mil`, `R$ 1,5 mi`. Zero vira
+ * `0`. Só para marcas de eixo: todo valor lido pelo usuário usa `formatBRL`, com os centavos.
+ */
+export function formatCompactBRL(cents: number): string {
+  const reais = Math.trunc(Math.abs(cents) / 100);
+  if (reais === 0) return "0";
+  const sign = cents < 0 ? MINUS : "";
+  // Espaços não separáveis: a marca do eixo nunca quebra em duas linhas.
+  if (reais >= 1_000_000) {
+    return `${sign}R$${NBSP}${compactFormat.format(reais / 1_000_000)}${NBSP}mi`;
+  }
+  if (reais >= 1_000) return `${sign}R$${NBSP}${compactFormat.format(reais / 1_000)}${NBSP}mil`;
+  return `${sign}R$${NBSP}${reais}`;
+}
