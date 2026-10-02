@@ -1,6 +1,40 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.0.0 → 1.0.1
+Bump rationale: PATCH. A lista de domínios do Princípio III ganha o módulo `categorization`. É um
+ajuste da lista, sem mudança de regra: o módulo segue a mesma estrutura dos demais (router →
+service → repository → models/schemas) e as mesmas regras de repositório, com `user_id`
+obrigatório.
+
+Justificativa (Complexity Tracking de specs/001-contai-mvp/plan.md; tarefa T055): a sugestão de
+categoria é usada por três módulos — `imports` (linhas propostas), `transactions` (aprender com
+correções) e `assistant` (lançamento por texto). Colocá-la em `categories` misturaria o cadastro
+de categorias com regras aprendidas e chamadas à IA; colocá-la em `imports` obrigaria
+`transactions` e `assistant` a depender de `imports`.
+
+Modified principles:
+  - III. Arquitetura — Backend: lista de domínios passa a incluir `categorization` (título e
+    demais regras inalterados).
+
+Added sections: nenhuma.
+
+Removed sections: nenhuma.
+
+Templates: não modificados. Os templates e comandos dependentes leem esta constituição em tempo
+de execução. Com a emenda, o desvio registrado no Complexity Tracking do plano deixa de ser um
+desvio; o plano não foi alterado por este comando.
+
+Follow-up TODOs:
+  - Governança pede ADR para emendas que mudam arquitetura. Esta foi classificada como PATCH
+    (ajuste de lista, sem regra nova); cabe ao mantenedor confirmar essa leitura ou pedir um ADR
+    do módulo `categorization` junto dos demais ADRs (T219).
+  - Continuam valendo as pendências externas da versão 1.0.0 que ainda estão abertas (valores
+    numéricos deixados para specs e ADRs).
+
+HISTÓRICO
+---------
+1.0.0 (2026-10-01)
 Version change: (template não preenchido) → 1.0.0
 Bump rationale: ratificação inicial da constituição; primeira versão com princípios concretos.
 
@@ -86,8 +120,8 @@ componentes sejam previsíveis e testáveis.
 ### III. Arquitetura — Backend
 
 - O código DEVE ser organizado por domínio (`auth`, `users`, `accounts`, `categories`,
-  `transactions`, `imports`, `dashboard`, `assistant`), cada um com router → service →
-  repository → models/schemas.
+  `transactions`, `imports`, `categorization`, `dashboard`, `assistant`), cada um com router →
+  service → repository → models/schemas.
 - Repositórios DEVEM ser o único lugar que acessa o banco. Todo método de repositório que lida
   com dados do usuário DEVE receber o `user_id` como parâmetro obrigatório.
 - Importadores de documentos DEVEM ser módulos plugáveis que implementam uma interface comum:
@@ -328,4 +362,4 @@ constituição antes da implementação, e toda revisão de código DEVE verific
 princípios. Um desvio só é aceito quando documentado com justificativa e com a alternativa mais
 simples que foi rejeitada; desvios que enfraquecem a segurança seguem o Princípio V.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-01
+**Version**: 1.0.1 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-01
