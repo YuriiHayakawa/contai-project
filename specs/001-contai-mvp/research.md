@@ -514,3 +514,52 @@ Ele traz decisões que afetam a implementação além do visual.
 - Os arquivos de licença das duas fontes, ao copiá-las para o repositório.
 - O provedor de e-mail transacional e o de armazenamento de objetos para o backup, e as
   credenciais de cada um.
+
+## 28. Desempenho do painel e da lista: medição com 5.000 lançamentos
+
+Medição feita em 2 de outubro de 2026, depois do backend da US3, para conferir a SC-013 antes
+de construir as telas do painel.
+
+- **Massa**: um usuário de teste com 5.000 lançamentos espalhados por 24 meses (novembro de
+  2024 a outubro de 2026): 3.683 despesas, 581 receitas e 736 lados de transferência, em 4
+  contas e nas categorias padrão. A tabela `transactions` tinha 5.090 linhas no total.
+- **Ambiente**: o `docker compose` de desenvolvimento em uma máquina local (API com
+  `uvicorn --reload`, um processo, e PostgreSQL 17 no mesmo host). Não é o servidor de produção.
+- **Método**: 30 requisições por rota, depois de 3 de aquecimento, uma por vez. O tempo "no
+  servidor" é o `duration_ms` que a própria API registra em cada requisição (seção 21), casado
+  pelo `X-Request-ID`; inclui a autenticação, as consultas e a montagem da resposta.
+
+| Rota | Mediana | p95 | Máximo |
+|------|---------|-----|--------|
+| `GET /dashboard/summary` (um mês cheio) | 10 ms | 15 ms | 16 ms |
+| `GET /dashboard/categories` | 7 ms | 9 ms | 9 ms |
+| `GET /dashboard/trend`, 6 meses | 6 ms | 7 ms | 7 ms |
+| `GET /dashboard/trend`, 24 meses | 11 ms | 12 ms | 13 ms |
+| `GET /dashboard/top-expenses` | 5 ms | 8 ms | 8 ms |
+| `GET /transactions`, mês atual (padrão da tela) | 7 ms | 7 ms | 8 ms |
+| `GET /transactions`, um mês cheio | 8 ms | 9 ms | 13 ms |
+| `GET /transactions`, todo o período, 1ª página | 8 ms | 10 ms | 10 ms |
+| `GET /transactions`, todo o período, 2ª página (cursor) | 8 ms | 10 ms | 10 ms |
+| `GET /transactions`, todo o período, 200 por página | 12 ms | 14 ms | 48 ms |
+| `GET /transactions`, busca por texto em todo o período | 34 ms | 48 ms | 55 ms |
+| `GET /transactions`, categoria com subcategorias | 8 ms | 9 ms | 12 ms |
+| `GET /transactions`, conta e tipo | 8 ms | 9 ms | 9 ms |
+| `GET /accounts` (saldos) | 9 ms | 10 ms | 10 ms |
+
+- **Decision**: nenhum índice novo e nenhuma migração. O limite combinado para agir era 300 ms
+  no servidor em alguma rota; a mais lenta ficou em 55 ms. O painel inteiro (as quatro rotas,
+  mais a de contas) soma menos de 50 ms de servidor, bem abaixo dos 3 segundos da SC-013.
+- **Rationale**: os planos (`EXPLAIN ANALYZE`) mostram que todas as consultas do painel e da
+  lista já entram pelo índice `ix_transactions_user_id_date`: as de um mês leem só as linhas
+  do mês (cerca de 200), a primeira página da lista lê o índice de trás para a frente e para
+  em 51 linhas, e a contagem é feita só no índice. As consultas que percorrem os 5.000
+  lançamentos do usuário (evolução de 24 meses, saldos e busca por texto) levam de 2 a 9 ms no
+  banco. A busca por texto é a mais cara porque compara a descrição e a observação de cada
+  linha do usuário sem acentos, duas vezes (a página e a contagem); com este volume, não
+  justifica um índice de trigramas.
+- **Alternatives considered**: índice parcial por tipo (`user_id`, `date` só para despesa e
+  receita) e índice de trigramas para a busca. Os dois ficam para quando uma medição mostrar
+  necessidade: hoje só acrescentariam custo de escrita.
+- **A repetir**: a medição vale para um usuário com 5.000 lançamentos e pouca concorrência.
+  Repetir no servidor de produção, e de novo se um usuário passar de algumas dezenas de
+  milhares de lançamentos ou se a busca por texto ficar perceptível.
