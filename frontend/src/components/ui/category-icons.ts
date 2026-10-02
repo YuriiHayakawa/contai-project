@@ -102,6 +102,50 @@ export type CategoryIconName = keyof typeof CATEGORY_ICONS;
 
 export const CATEGORY_ICON_NAMES = Object.keys(CATEGORY_ICONS) as CategoryIconName[];
 
+/** Nome de cada ícone na escolha do usuário: o desenho sozinho não tem nome acessível. */
+export const CATEGORY_ICON_LABELS: Record<CategoryIconName, string> = {
+  utensils: "Talheres",
+  "shopping-cart": "Carrinho de mercado",
+  coffee: "Café",
+  car: "Carro",
+  bus: "Ônibus",
+  fuel: "Combustível",
+  plane: "Avião",
+  house: "Casa",
+  lightbulb: "Lâmpada",
+  zap: "Energia",
+  wifi: "Internet",
+  wrench: "Ferramenta",
+  "heart-pulse": "Saúde",
+  stethoscope: "Consulta",
+  pill: "Remédio",
+  dumbbell: "Academia",
+  "graduation-cap": "Formatura",
+  "book-open": "Livro",
+  ticket: "Ingresso",
+  film: "Cinema",
+  music: "Música",
+  "gamepad-2": "Jogos",
+  repeat: "Assinatura",
+  tv: "Televisão",
+  smartphone: "Celular",
+  "shopping-bag": "Sacola de compras",
+  shirt: "Roupa",
+  scissors: "Tesoura",
+  gift: "Presente",
+  baby: "Bebê",
+  "paw-print": "Animal de estimação",
+  banknote: "Dinheiro",
+  briefcase: "Trabalho",
+  "hand-coins": "Renda extra",
+  "trending-up": "Rendimentos",
+  "piggy-bank": "Cofrinho",
+  landmark: "Banco",
+  "credit-card": "Cartão",
+  receipt: "Recibo",
+  shapes: "Outros",
+};
+
 export const FALLBACK_CATEGORY_ICON: CategoryIconName = "shapes";
 
 export function isCategoryIconName(name: string): name is CategoryIconName {

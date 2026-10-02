@@ -1,4 +1,14 @@
-import { addDays, dayLabel, monthLabel, monthName, toISODate, today, yearMonthOf } from "./dates";
+import {
+  addDays,
+  addMonths,
+  dayLabel,
+  monthLabel,
+  monthName,
+  monthRange,
+  toISODate,
+  today,
+  yearMonthOf,
+} from "./dates";
 
 describe("today e toISODate", () => {
   it("usa o dia de São Paulo, e não o do UTC", () => {
@@ -68,5 +78,21 @@ describe("meses", () => {
 
   it("extrai o mês de uma data", () => {
     expect(yearMonthOf("2026-10-01")).toBe("2026-10");
+  });
+});
+
+describe("addMonths e monthRange", () => {
+  it("soma e subtrai meses atravessando o ano", () => {
+    expect(addMonths("2026-10", 1)).toBe("2026-11");
+    expect(addMonths("2026-12", 1)).toBe("2027-01");
+    expect(addMonths("2026-01", -1)).toBe("2025-12");
+    expect(addMonths("2026-10", -11)).toBe("2025-11");
+  });
+
+  it("dá o primeiro e o último dia do mês, com fevereiro bissexto", () => {
+    expect(monthRange("2026-10")).toEqual({ from: "2026-10-01", to: "2026-10-31" });
+    expect(monthRange("2026-02")).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(monthRange("2028-02")).toEqual({ from: "2028-02-01", to: "2028-02-29" });
+    expect(monthRange("2026-12")).toEqual({ from: "2026-12-01", to: "2026-12-31" });
   });
 });

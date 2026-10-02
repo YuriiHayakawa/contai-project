@@ -86,6 +86,36 @@ function fakeAuthRoute(path: string, body: Record<string, unknown> | null): Resp
   }
 }
 
+/** Dados de uma conta recém-criada: sem contas, sem lançamentos e com uma categoria pronta. */
+function fakeDataRoute(path: string): Response | null {
+  const [route] = path.split("?");
+  switch (route) {
+    case "/accounts":
+      return json(200, { items: [] });
+    case "/categories":
+      return json(200, {
+        expense: [
+          {
+            id: "cat-outros",
+            name: "Outros",
+            kind: "expense",
+            parent_id: null,
+            icon: "shapes",
+            color: "ardosia",
+            is_fallback: true,
+            archived: false,
+            children: [],
+          },
+        ],
+        income: [],
+      });
+    case "/transactions":
+      return json(200, { items: [], next_cursor: null, total_count: 0 });
+    default:
+      return null;
+  }
+}
+
 /** API falsa: com sessão, o refresh entrega um token e as rotas autenticadas respondem. */
 function fakeFetch(url: string, init: RequestInit): Promise<Response> {
   const path = url.replace("/api/v1", "");
@@ -103,8 +133,10 @@ function fakeFetch(url: string, init: RequestInit): Promise<Response> {
   if (server === "no-session") return Promise.resolve(unauthenticated());
   if (url === "/api/v1/auth/refresh") return Promise.resolve(json(200, { access_token: "t-1" }));
   const authorized = new Headers(init.headers).has("Authorization");
-  if (url === "/api/v1/users/me" && authorized) return Promise.resolve(json(200, marina));
-  return Promise.resolve(unauthenticated());
+  if (!authorized) return Promise.resolve(unauthenticated());
+  if (url === "/api/v1/users/me") return Promise.resolve(json(200, marina));
+  const data = fakeDataRoute(path);
+  return Promise.resolve(data ?? unauthenticated());
 }
 
 function AuthCapture() {
@@ -285,15 +317,57 @@ describe("navegação", () => {
     expect(router.state.location.pathname).toBe(paths.categories);
   });
 
-  it('"Lançar" e "Novo lançamento" disparam a mesma ação', async () => {
+  it('"Lançar" e "Novo lançamento" abrem a mesma folha de novo lançamento', async () => {
     const user = userEvent.setup();
     renderApp(paths.home);
     await screen.findByRole("heading", { name: "Início", level: 1 });
 
     await user.click(within(bottomNav()).getByRole("button", { name: "Lançar" }));
+    const sheet = await screen.findByRole("dialog", { name: "Novo lançamento" });
+    await user.click(within(sheet).getByRole("button", { name: "Fechar" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
     await user.click(within(sidebar()).getByRole("button", { name: "Novo lançamento" }));
 
-    expect(screen.getAllByRole("status")).toHaveLength(2);
+    expect(await screen.findByRole("dialog", { name: "Novo lançamento" })).toBeInTheDocument();
+  });
+
+  it("sem conta cadastrada, a folha de lançamento leva ao cadastro de conta", async () => {
+    const user = userEvent.setup();
+    const router = renderApp(paths.transactions);
+    await screen.findByRole("heading", { name: "Faça seu primeiro lançamento" });
+
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Lançar" }));
+    const sheet = await screen.findByRole("dialog", { name: "Novo lançamento" });
+    expect(
+      within(sheet).getByRole("heading", { name: "Cadastre uma conta primeiro" }),
+    ).toBeInTheDocument();
+
+    await user.click(within(sheet).getByRole("button", { name: "Cadastrar conta" }));
+
+    expect(await screen.findByRole("heading", { name: "Contas", level: 1 })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(paths.accounts);
+    expect(
+      screen.getByRole("heading", { name: "Cadastre sua primeira conta" }),
+    ).toBeInTheDocument();
+  });
+
+  it("as telas de contas, categorias e lançamentos estão nas rotas", async () => {
+    const router = renderApp(paths.categories);
+
+    expect(await screen.findByRole("heading", { name: "Categorias", level: 1 })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Nova categoria" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Outros" })).toBeInTheDocument();
+
+    await act(() => router.navigate("/lancamentos?q=padaria"));
+
+    expect(await screen.findByRole("searchbox", { name: "Buscar lançamentos" })).toHaveValue(
+      "padaria",
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Nenhum lançamento encontrado" }),
+    ).toBeInTheDocument();
+    expect(requestsTo("/transactions?q=padaria")).not.toHaveLength(0);
   });
 });
 
