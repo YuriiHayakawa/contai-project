@@ -206,8 +206,9 @@ Arquivar uma categoria mãe arquiva as filhas.
   uma `out` e uma `in`, em contas diferentes do mesmo usuário; criar, editar e apagar valem para
   as duas (FR-033, FR-034). Nunca entra em totais de receita ou despesa.
 - Compra parcelada: só em conta `credit_card`; `total // n` por parcela, com o resto de centavos
-  na primeira; a parcela k tem a data da compra deslocada em k − 1 meses. Edição e exclusão
-  aceitam o escopo "só esta" ou "todas" (FR-032).
+  na primeira; a parcela k tem a data da compra deslocada em k − 1 meses, no último dia do
+  mês quando o dia não existe nele. Edição e exclusão aceitam o escopo "só esta" ou "esta e as
+  seguintes"; as anteriores nunca mudam (FR-032).
 - A conta e a categoria de uma transação nova precisam estar ativas.
 - Fatura (derivada): ver a seção 17 de [research.md](./research.md).
 
