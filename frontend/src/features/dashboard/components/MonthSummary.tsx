@@ -5,6 +5,7 @@ import { cn } from "../../../lib/cn";
 import { monthName, type YearMonth } from "../../../lib/dates";
 import { formatBRL, formatCentsAsDecimal } from "../../../lib/money";
 import { cascadeItem } from "../../../lib/motion";
+import { REFUNDS_IN_FAVOR } from "../spending";
 import type { PeriodTotals } from "../types";
 
 export interface MonthSummaryProps {
@@ -18,6 +19,8 @@ interface FlowProps {
   icon: LucideIcon;
   /** Cor do rótulo e da seta; o valor fica em tinta comum. */
   tone: string;
+  /** O que o valor quer dizer, quando só o número não basta. */
+  note?: string;
 }
 
 // A partir daqui o número principal não cabe em 320px no tamanho de destaque.
@@ -31,7 +34,7 @@ function sentence(month: YearMonth, { income_cents, expense_cents, net_cents }: 
   return `Em ${name} as entradas e as saídas empataram.`;
 }
 
-function Flow({ label, cents, icon: Icon, tone }: FlowProps) {
+function Flow({ label, cents, icon: Icon, tone, note }: FlowProps) {
   return (
     <div
       className={cn(
@@ -43,8 +46,9 @@ function Flow({ label, cents, icon: Icon, tone }: FlowProps) {
         <Icon aria-hidden="true" className="size-4" />
         {label}
       </dt>
-      <dd className="money text-money-md text-ink sm:mt-0.5 sm:text-money-lg">
-        {formatBRL(cents)}
+      <dd className="grid justify-items-end sm:mt-0.5 sm:justify-items-start">
+        <span className="money text-money-md text-ink sm:text-money-lg">{formatBRL(cents)}</span>
+        {note && <span className="text-small text-ink-muted">{note}</span>}
       </dd>
     </div>
   );
@@ -94,7 +98,15 @@ export function MonthSummary({ month, totals }: MonthSummaryProps) {
       >
         <dl className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
           <Flow label="Entradas" cents={totals.income_cents} icon={ArrowUp} tone="text-income" />
-          <Flow label="Saídas" cents={totals.expense_cents} icon={ArrowDown} tone="text-expense" />
+          {/* Com mais estornos do que gastos, as saídas ficam negativas: o valor aparece sem
+              o sinal de menos, como dinheiro a favor. */}
+          <Flow
+            label="Saídas"
+            cents={Math.abs(totals.expense_cents)}
+            icon={ArrowDown}
+            tone="text-expense"
+            note={totals.expense_cents < 0 ? REFUNDS_IN_FAVOR : undefined}
+          />
         </dl>
       </motion.section>
     </div>

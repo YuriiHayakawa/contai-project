@@ -689,7 +689,10 @@ os 7 dias, não consegue mais entrar.
   ao total de saídas. Na importação, uma entrada DEVE vir sugerida como estorno, na categoria
   da compra, quando a descrição normalizada dela tem regra para uma categoria de despesa,
   ignorados os prefixos comuns de estorno ("estorno", "est", "reembolso", "devolucao",
-  "cancelamento"). Uma despesa NÃO PODE ser lançada em categoria de receita.
+  "cancelamento"), reconhecidos só como palavra inteira no começo da descrição: "estacionamento"
+  não é um estorno. Uma despesa NÃO PODE ser lançada em categoria de receita. Quando os estornos
+  do mês passam do que foi gasto, o painel DEVE mostrar as saídas sem sinal de menos, como um
+  valor "a seu favor, de estornos"; o cálculo não muda.
 - **FR-057**: O painel DEVE mostrar a evolução de entradas e saídas nos últimos 6 meses e os
   maiores gastos do mês.
 - **FR-058**: Para cada cartão de crédito, o painel DEVE mostrar o valor da fatura atual e o
