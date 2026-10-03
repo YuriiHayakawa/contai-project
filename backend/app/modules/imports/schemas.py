@@ -2,9 +2,9 @@
 
 import datetime as dt
 import uuid
-from typing import Self
+from typing import Annotated, Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.modules.imports.mapping import MappingSuggestion
 from app.modules.imports.models import (
@@ -67,6 +67,33 @@ class MappingPreviewRead(BaseModel):
     suggestion: MappingSuggestion
 
 
+class TotalCheck(BaseModel):
+    """O total impresso no documento contra a soma das linhas extraídas (FR-043)."""
+
+    document_total_cents: int
+    extracted_total_cents: int
+    matches: bool
+
+
+class BalanceCheck(BaseModel):
+    """O saldo informado pelo banco contra o saldo calculado da conta na mesma data (FR-082).
+
+    Na revisão, o saldo calculado é o da conta mais as linhas marcadas. Quando o usuário marca
+    ou desmarca uma linha, a conta se refaz com `account_balance_cents` mais as linhas marcadas
+    que têm data de `counted_from` a `bank_balance_date`.
+    """
+
+    bank_balance_cents: int
+    bank_balance_date: dt.date
+    # Saldo da conta nessa data, sem as linhas deste arquivo.
+    account_balance_cents: int
+    # Data de referência do saldo inicial da conta: linhas anteriores a ela não mudam o saldo.
+    counted_from: dt.date
+    # Com as linhas marcadas por padrão; depois da confirmação, o saldo da conta nessa data.
+    computed_balance_cents: int
+    matches: bool
+
+
 class ImportRead(BaseModel):
     id: uuid.UUID
     account_id: uuid.UUID
@@ -90,3 +117,38 @@ class ImportRead(BaseModel):
     mapping_preview: MappingPreviewRead | None = None
     # Só em `awaiting_review`.
     items: list[ImportItemRead] | None = None
+    # Só quando o documento traz um total.
+    total_check: TotalCheck | None = None
+    # Só quando o arquivo informa o saldo, em `awaiting_review` e em `completed`.
+    balance_check: BalanceCheck | None = None
+
+
+class ImportPage(BaseModel):
+    """Uma página do histórico, da importação mais nova para a mais antiga."""
+
+    items: list[ImportRead]
+    # Passe em `cursor` para buscar a página seguinte; `null` na última.
+    next_cursor: str | None
+
+
+class ConfirmItem(BaseModel):
+    """A decisão final de uma linha da revisão.
+
+    Os campos de uma linha desmarcada não são conferidos: ela não vira transação.
+    """
+
+    id: uuid.UUID
+    selected: bool
+    type: TransactionType | None = None
+    amount_cents: int | None = None
+    date: dt.date | None = None
+    description: str | None = None
+    # Obrigatória em despesa e receita.
+    category_id: uuid.UUID | None = None
+    # Obrigatória em transferência: a outra conta, como o cartão em um pagamento de fatura.
+    counter_account_id: uuid.UUID | None = None
+
+
+class ImportConfirm(BaseModel):
+    # Todas as linhas da revisão, cada uma uma vez.
+    items: Annotated[list[ConfirmItem], Field(max_length=5_000)]

@@ -151,6 +151,10 @@ no início da implementação.
     valor.
   - O acesso às tabelas `jobs` e `worker_heartbeats` fica só em `worker/repository.py`; os jobs
     chamam serviços dos módulos e nunca consultam o banco direto.
+  - Quando a fila desiste de um job (erro definitivo ou tentativas esgotadas), o worker avisa
+    o módulo dono dele, se ele registrou esse aviso. É assim que uma importação cujo
+    processamento não terminou vai para `failed` com `processing_error`, em vez de ficar presa
+    em `queued` ou `processing`.
 - **Rationale**: é a fila exigida pela constituição (Princípio III), sem broker externo.
 - **Alternatives considered**: `LISTEN/NOTIFY` para acordar o worker (complexidade sem
   necessidade; a espera de 1 a 2 segundos é imperceptível); bibliotecas de fila sobre PostgreSQL
@@ -177,7 +181,12 @@ no início da implementação.
   transação de banco. O arquivo é apagado quando a importação chega a `awaiting_review` ou
   `failed`; em `awaiting_mapping` ele é mantido até o usuário mapear, por no máximo 24 horas. Uma
   importação em `awaiting_review` expira depois de 7 dias sem confirmação (FR-083). Os
-  `import_items` são apagados na confirmação. O frontend acompanha o estado consultando
+  `import_items` são apagados na confirmação. A tarefa periódica de limpeza roda a cada 10
+  minutos: expira as importações vencidas, apaga o arquivo de quem já não precisa dele e os
+  arquivos com mais de uma hora que nenhuma importação guarda. Na confirmação, a decisão de
+  todas as linhas vem junto, e uma linha recusada não deixa nenhuma entrar. O pagamento de
+  fatura é sugerido para o cartão cuja fatura fechada em aberto (ou, sem ela, o total devido)
+  tem o valor mais próximo do pago. O frontend acompanha o estado consultando
   `GET /imports/{id}` a cada 2 segundos enquanto o estado não é final.
 - **Rationale**: o estado `awaiting_mapping` é necessário porque o mapeamento de colunas acontece
   depois do envio. Manter as edições da revisão só no navegador evita endpoints por linha; o
@@ -265,7 +274,12 @@ no início da implementação.
   o restante vai em um único lote à IA, que recebe só as descrições distintas e a lista de
   categorias do usuário, e devolve um índice por descrição; o que a IA não resolver, ou devolver
   inválido, fica em "Outros". Uma correção do usuário grava ou substitui a regra como `user`,
-  que a IA nunca sobrescreve.
+  que a IA nunca sobrescreve. O lote vai em pedidos de até 150 descrições, no máximo 4 por
+  importação; o que passar disso fica em "Outros". A IA recebe descrições normalizadas e nomes
+  de categorias, e nunca valores, datas ou contas. Se o provedor falhar, a importação segue com
+  "Outros". Na confirmação de uma importação, só uma categoria diferente da sugerida vira
+  regra do usuário, e ela vale para a descrição como veio do banco: aceitar o palpite da IA ou
+  o "Outros" não ensina nada. Ao lançar à mão, a categoria escolhida sempre vira regra.
 - **Rationale**: atende FR-047, FR-048 e o Princípio VII. O cache das respostas da IA poupa a
   cota gratuita em importações repetidas do mesmo comércio.
 - **Alternatives considered**: semelhança aproximada entre descrições (resultados imprevisíveis;

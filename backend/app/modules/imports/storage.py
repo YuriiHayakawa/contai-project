@@ -7,6 +7,7 @@ apagado depois do processamento (FR-053).
 """
 
 import asyncio
+import datetime as dt
 import hashlib
 import io
 import re
@@ -186,6 +187,22 @@ async def store(content: bytes) -> str:
     stored_filename = uuid.uuid4().hex
     await asyncio.to_thread(_write, _path(stored_filename), content)
     return stored_filename
+
+
+def _older_than(cutoff: float) -> list[str]:
+    folder = get_settings().upload_dir
+    if not folder.is_dir():
+        return []
+    return [
+        path.name
+        for path in folder.iterdir()
+        if _STORED_NAME.fullmatch(path.name) and path.stat().st_mtime < cutoff
+    ]
+
+
+async def stored_before(moment: dt.datetime) -> list[str]:
+    """Os arquivos guardados aqui antes de `moment`, para a limpeza dos que ficaram sem dono."""
+    return await asyncio.to_thread(_older_than, moment.timestamp())
 
 
 async def read(stored_filename: str) -> bytes:

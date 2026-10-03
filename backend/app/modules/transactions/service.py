@@ -14,6 +14,7 @@ from app.modules.accounts.models import Account, AccountType
 from app.modules.accounts.repository import AccountRepository
 from app.modules.categories.models import Category
 from app.modules.categories.repository import CategoryRepository
+from app.modules.categorization.service import CategorizationService
 from app.modules.transactions.models import Transaction, TransactionType, TransferDirection
 from app.modules.transactions.normalize import fingerprint, normalize_description
 from app.modules.transactions.repository import (
@@ -86,6 +87,7 @@ class TransactionService:
         self._transactions = TransactionRepository(session)
         self._accounts = AccountRepository(session)
         self._categories = CategoryRepository(session)
+        self._categorization = CategorizationService(session)
 
     # ---------- consulta
 
@@ -244,6 +246,12 @@ class TransactionService:
             notes=data.notes,
             category_id=category.id,
         )
+        # A categoria escolhida vale para os próximos lançamentos com esta descrição (FR-048).
+        await self._categorization.learn(
+            user_id,
+            description_normalized=transaction.description_normalized,
+            category_id=category.id,
+        )
         return TransactionRead.from_transaction(transaction)
 
     async def create_installments(
@@ -347,6 +355,7 @@ class TransactionService:
         """Aplica a edição a uma despesa ou receita, sem gravar."""
         sent = data.model_fields_set
         is_installment = transaction.installment_group_id is not None
+        before = (transaction.category_id, transaction.description_normalized)
 
         # Conta e categoria só são conferidas de novo se mudarem: um lançamento antigo continua
         # editável mesmo com a conta ou a categoria dele arquivada (FR-026).
@@ -382,6 +391,14 @@ class TransactionService:
         if "notes" in sent:
             transaction.notes = data.notes or None
         self._refresh_fingerprint(transaction)
+        # Trocar a categoria ou a descrição ensina a regra da descrição que ficou (FR-048).
+        after = (transaction.category_id, transaction.description_normalized)
+        if after != before and transaction.category_id is not None:
+            await self._categorization.learn(
+                user_id,
+                description_normalized=transaction.description_normalized,
+                category_id=transaction.category_id,
+            )
 
     async def _update_following(
         self, user_id: uuid.UUID, transaction: Transaction, data: TransactionUpdate

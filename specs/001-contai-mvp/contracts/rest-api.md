@@ -119,12 +119,12 @@ redefinir a senha ou depois de 24 horas sem erros.
 | Método e rota | Corpo | Resposta | Notas |
 |---------------|-------|----------|-------|
 | `POST /imports` | `multipart`: `file`, `account_id`, `kind` (`statement` ou `receipt`; padrão `statement`) | `202` com a importação em `queued` | `413`; `415 unsupported_file` (vazio, tipo não aceito pelo conteúdo ou `.xls` antigo); `422` em `account_id` para conta de outro usuário, inexistente ou arquivada; `429 rate_limited` pelo limite de envios; `403 ai_consent_required` para PDF ou imagem sem aceite; `429 ai_limit_reached` |
-| `GET /imports` | — | histórico paginado (FR-051) | |
+| `GET /imports` | `?limit=` e `?cursor=` | histórico paginado, da importação mais nova para a mais antiga (FR-051), sem `items` nem `mapping_preview` | uma importação expirada aparece como `failed`, com `error_code` em `mapping_expired` ou `review_expired` (FR-083) |
 | `GET /imports/{id}` | — | importação; em `awaiting_mapping`, traz `mapping_preview` e a sugestão de colunas; em `awaiting_review`, traz `items`, `total_check` e `balance_check`; nos dois estados traz `expires_at` (FR-083) | é a rota consultada periodicamente pelo frontend |
 | `POST /imports/{id}/mapping` | `date_column`, `description_column` e `amount_column` (ou `income_column` e `expense_column`), pela posição da coluna a partir de zero; `date_format` (`dmy`, `mdy`, `ymd`); `decimal_separator` (`,` ou `.`); `sign_convention` (`negative_is_expense` ou `positive_is_expense`) | `202`, volta para `queued` | salva o modelo (FR-039); `409 import_not_awaiting_mapping` fora de `awaiting_mapping`; `422` com o campo a corrigir. Se o modelo não ler o arquivo, a importação volta a `awaiting_mapping` com `error_code = mapping_mismatch`, sem novo envio |
-| `POST /imports/{id}/confirm` | `items`: lista de `{ id, selected, type, amount_cents, date, description, category_id, counter_account_id }` | importação em `completed` com `imported_count` | tudo em uma transação de banco (FR-046); `409` se o estado não for `awaiting_review` |
-| `POST /imports/{id}/undo` | — | importação em `undone` | remove todas as transações dela de uma vez (FR-052) |
-| `DELETE /imports/{id}` | — | `204` | descarta uma importação ainda não confirmada |
+| `POST /imports/{id}/confirm` | `items`: lista de `{ id, selected, type, amount_cents, date, description, category_id, counter_account_id }`, com todas as linhas da revisão, cada uma uma vez | importação em `completed` com `imported_count`, o número de linhas salvas | tudo em uma transação de banco (FR-046). Só as linhas marcadas são conferidas e salvas: despesa e receita pedem `category_id`; transferência pede `counter_account_id` e cria os dois lados. `422` com o campo a corrigir em `items.N.campo`, ou em `items` se a lista não corresponde às linhas da importação; `409 import_not_awaiting_review` fora de `awaiting_review`; `409 account_archived` se a conta de destino foi arquivada. Uma categoria diferente da sugerida grava a regra de categoria (FR-048) |
+| `POST /imports/{id}/undo` | — | importação em `undone` | remove todas as transações dela de uma vez (FR-052); `409 import_not_completed` fora de `completed` |
+| `DELETE /imports/{id}` | — | `204` | descarta uma importação ainda não confirmada, com o arquivo e as linhas propostas; `409 import_already_confirmed` em `completed` e `undone` |
 
 A importação traz `status`, `error_code` e `error_message` (o que fazer, em português),
 `item_count`, `imported_count`, `expires_at` e `already_imported_at` (quando o mesmo arquivo já
@@ -135,8 +135,13 @@ de `items` traz `id`, `row_index`, `type`, `amount_cents`, `date`, `description`
 `duplicate_of_id` e `selected_by_default`.
 
 `total_check`: `{ "document_total_cents", "extracted_total_cents", "matches" }` ou nulo.
-`balance_check`: `{ "bank_balance_cents", "bank_balance_date", "computed_balance_cents", "matches" }`
-ou nulo.
+`balance_check`: `{ "bank_balance_cents", "bank_balance_date", "account_balance_cents",
+"counted_from", "computed_balance_cents", "matches" }` ou nulo. `account_balance_cents` é o saldo
+da conta na data do saldo do banco, sem as linhas do arquivo; `computed_balance_cents` soma a
+ele as linhas marcadas por padrão que têm data de `counted_from` (a data de referência do saldo
+inicial) até `bank_balance_date`. Quando o usuário marca ou desmarca uma linha, a tela refaz essa
+soma. Depois da confirmação, vale o saldo da conta nessa data. É nulo quando o arquivo não
+informa o saldo ou quando a data dele é anterior à data de referência da conta.
 
 ## Painel
 

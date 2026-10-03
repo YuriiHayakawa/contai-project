@@ -68,24 +68,24 @@ _LOOKS_LIKE_AMOUNT = re.compile(r"[-+(]?\s*(R\$)?\s*[-+]?\d[\d.,]*\)?\s*-?")
 _NOT_AMOUNT_CHARS = re.compile(r"[^\d.,]")
 _DEBIT_SUFFIX = re.compile(r"\bD\s*$", re.IGNORECASE)
 
-_DATE_WORDS = frozenset({"data", "date", "dt", "dia"})
-_DESCRIPTION_WORDS = frozenset(
-    {
-        "descricao",
-        "historico",
-        "lancamento",
-        "memo",
-        "estabelecimento",
-        "detalhe",
-        "detalhes",
-        "titulo",
-        "description",
-        "title",
-    }
+# Em ordem de preferência: quando o arquivo tem "Histórico" (o tipo da operação) e "Descrição"
+# (o estabelecimento), a descrição é a que serve para reconhecer e categorizar o lançamento.
+_DATE_WORDS = ("data", "date", "dt", "dia")
+_DESCRIPTION_WORDS = (
+    "descricao",
+    "description",
+    "estabelecimento",
+    "titulo",
+    "title",
+    "detalhe",
+    "detalhes",
+    "historico",
+    "memo",
+    "lancamento",
 )
-_AMOUNT_WORDS = frozenset({"valor", "amount", "montante", "quantia", "value"})
-_INCOME_WORDS = frozenset({"entrada", "entradas", "credito", "creditos", "credit"})
-_EXPENSE_WORDS = frozenset({"saida", "saidas", "debito", "debitos", "debit"})
+_AMOUNT_WORDS = ("valor", "amount", "montante", "quantia", "value")
+_INCOME_WORDS = ("entrada", "entradas", "credito", "creditos", "credit")
+_EXPENSE_WORDS = ("saida", "saidas", "debito", "debitos", "debit")
 # "Saldo" também é dinheiro, mas não é o valor do lançamento.
 _BALANCE_WORDS = frozenset({"saldo", "balance"})
 
@@ -236,12 +236,14 @@ def _render(cell: Cell) -> str:
     return str(cell)
 
 
-def _find_column(columns: Sequence[str], words: frozenset[str], taken: set[int]) -> int | None:
-    for index, name in enumerate(columns):
-        tokens = set(_plain(name).split())
-        if index not in taken and tokens & words and not tokens & _BALANCE_WORDS:
-            taken.add(index)
-            return index
+def _find_column(columns: Sequence[str], words: Sequence[str], taken: set[int]) -> int | None:
+    """A primeira coluna livre cujo nome tem a palavra mais preferida entre as de `words`."""
+    names = [set(_plain(name).split()) for name in columns]
+    for word in words:
+        for index, tokens in enumerate(names):
+            if index not in taken and word in tokens and not tokens & _BALANCE_WORDS:
+                taken.add(index)
+                return index
     return None
 
 
