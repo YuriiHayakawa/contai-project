@@ -341,4 +341,17 @@ async def transfer_from_or_to_another_users_account(context: IsolationContext) -
     assert to_a.json()["error"] == unknown.json()["error"]
     seen_by_a = await context.client_a.get(f"{ACCOUNTS}/{account_of_a['id']}")
     assert seen_by_a.json()["balance_cents"] == account_of_a["balance_cents"]
+    # Nem procurando pelo grupo de uma transferência de A.
+    account_two_of_a = await create_account(context.client_a, name=_unique("Poupança"))
+    transfer_of_a = await context.client_a.post(
+        f"{TRANSACTIONS}/transfers",
+        json={
+            **payload,
+            "from_account_id": account_of_a["id"],
+            "to_account_id": account_two_of_a["id"],
+        },
+    )
+    group_of_a = transfer_of_a.json()["items"][0]["transfer_group_id"]
+    by_group = await context.client_b.get(TRANSACTIONS, params={"transfer_group_id": group_of_a})
+    assert by_group.json() == {"items": [], "next_cursor": None, "total_count": 0}
     assert "Intrusa" not in (await context.client_b.get(TRANSACTIONS)).text

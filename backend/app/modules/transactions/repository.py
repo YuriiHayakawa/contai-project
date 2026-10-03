@@ -34,6 +34,7 @@ class TransactionFilters:
     transaction_type: TransactionType | None = None
     text: str | None = None
     installment_group_id: uuid.UUID | None = None
+    transfer_group_id: uuid.UUID | None = None
     ids: list[uuid.UUID] | None = field(default=None)
 
 
@@ -70,6 +71,8 @@ def _conditions(user_id: uuid.UUID, filters: TransactionFilters) -> list[ColumnE
         conditions.append(Transaction.type == filters.transaction_type)
     if filters.installment_group_id is not None:
         conditions.append(Transaction.installment_group_id == filters.installment_group_id)
+    if filters.transfer_group_id is not None:
+        conditions.append(Transaction.transfer_group_id == filters.transfer_group_id)
     if filters.ids is not None:
         conditions.append(Transaction.id.in_(filters.ids))
     if filters.text:
