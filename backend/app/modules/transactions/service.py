@@ -109,6 +109,7 @@ class TransactionService:
         transaction_type: TransactionType | None = None,
         text: str | None = None,
         installment_group_id: uuid.UUID | None = None,
+        transfer_group_id: uuid.UUID | None = None,
         ids: list[uuid.UUID] | None = None,
         limit: int = 50,
         cursor: str | None = None,
@@ -126,6 +127,7 @@ class TransactionService:
             transaction_type=transaction_type,
             text=text.strip() if text else None,
             installment_group_id=installment_group_id,
+            transfer_group_id=transfer_group_id,
             ids=ids,
         )
         after = decode_cursor(cursor) if cursor else None

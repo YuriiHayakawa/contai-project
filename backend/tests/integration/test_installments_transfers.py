@@ -488,6 +488,9 @@ async def test_a_transfer_creates_two_linked_lines_and_moves_both_balances(
     assert out["transfer_group_id"] == received["transfer_group_id"]
     after = (await balance_of(client_a, checking), await balance_of(client_a, savings))
     assert after == (before[0] - 50_000, before[1] + 50_000)
+    # A lista acha os dois lados pelo grupo da transferência.
+    pair = await _all(client_a, transfer_group_id=out["transfer_group_id"])
+    assert sorted(line["id"] for line in pair) == sorted([out["id"], received["id"]])
 
 
 async def test_a_transfer_never_counts_as_income_or_expense(

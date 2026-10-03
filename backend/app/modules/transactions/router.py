@@ -72,6 +72,9 @@ async def list_transactions(
         Query(max_length=100, description="Texto procurado na descrição e na observação"),
     ] = None,
     installment_group_id: uuid.UUID | None = None,
+    transfer_group_id: Annotated[
+        uuid.UUID | None, Query(description="Os dois lados de uma transferência")
+    ] = None,
     ids: Annotated[list[uuid.UUID] | None, Query(max_length=MAX_PAGE_SIZE)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     cursor: Annotated[str | None, Query(max_length=200)] = None,
@@ -85,6 +88,7 @@ async def list_transactions(
         transaction_type=type,
         text=q,
         installment_group_id=installment_group_id,
+        transfer_group_id=transfer_group_id,
         ids=ids,
         limit=limit,
         cursor=cursor,
