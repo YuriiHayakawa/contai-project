@@ -13,6 +13,8 @@ import { useToast } from "../../../components/ui/Toast";
 import { errorMessage } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
 import { formatBRL } from "../../../lib/money";
+import { useNewTransaction } from "../../transactions/hooks/useNewTransaction";
+import { invoicePaymentPreset } from "../../transactions/presets";
 import { ACCOUNT_TYPE_ICONS } from "../account-type-icons";
 import {
   useAccounts,
@@ -88,6 +90,7 @@ function AccountEditor({ open, account, onClose }: AccountEditorProps) {
   const archive = useArchiveAccount();
   const unarchive = useUnarchiveAccount();
   const remove = useDeleteAccount();
+  const openNewTransaction = useNewTransaction();
   const [dirty, setDirty] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -163,9 +166,21 @@ function AccountEditor({ open, account, onClose }: AccountEditorProps) {
         />
         {account && (
           <div className="mt-4 flex flex-wrap gap-x-2 border-t border-border pt-2">
+            {account.type === "credit_card" && !account.archived && (
+              <Button
+                variant="ghost"
+                className="-ml-5"
+                onClick={() => {
+                  close();
+                  openNewTransaction(invoicePaymentPreset(account));
+                }}
+              >
+                Pagar fatura
+              </Button>
+            )}
             <Button
               variant="ghost"
-              className="-ml-5"
+              className={account.type === "credit_card" && !account.archived ? undefined : "-ml-5"}
               loading={archive.isPending || unarchive.isPending}
               onClick={() => toggleArchived(account)}
             >

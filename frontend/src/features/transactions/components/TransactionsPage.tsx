@@ -400,7 +400,7 @@ export function TransactionsPage() {
               title={`Nada lançado em ${monthName(currentMonth)}`}
               description="Anote uma despesa ou uma receita, ou escolha outro período para ver os lançamentos de antes."
               actionLabel="Lançar"
-              onAction={openNewTransaction}
+              onAction={() => openNewTransaction()}
             />
           )
         }
@@ -449,7 +449,7 @@ export function TransactionsPage() {
       <TransactionDetail
         open={detailOpen}
         transaction={selected}
-        account={selected ? accountsMap.get(selected.account_id) : undefined}
+        accounts={accountsMap}
         category={selected?.category_id ? categoriesMap.get(selected.category_id) : undefined}
         onClose={() => setDetailOpen(false)}
         onEdit={(transaction) => {

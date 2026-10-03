@@ -5,6 +5,7 @@ import {
   formatCentsAsDecimal,
   formatCompactBRL,
   parseBRLToCents,
+  splitInstallments,
 } from "./money";
 
 describe("formatBRL", () => {
@@ -119,5 +120,24 @@ describe("formatCompactBRL", () => {
 
   it("negativo leva o sinal de menos tipográfico", () => {
     expect(formatCompactBRL(-200_000)).toBe("−R$ 2 mil");
+  });
+});
+
+describe("splitInstallments", () => {
+  it.each([
+    [10_000, 3, [3_334, 3_333, 3_333]],
+    [10_000, 2, [5_000, 5_000]],
+    [123_457, 48, [2_573, ...Array<number>(47).fill(2_572)]],
+    [3, 3, [1, 1, 1]],
+  ])("%i centavos em %i parcelas", (total, count, expected) => {
+    const parts = splitInstallments(total, count);
+
+    expect(parts).toEqual(expected);
+    expect(parts.reduce((sum, part) => sum + part, 0)).toBe(total);
+  });
+
+  it("sem valor ou sem parcelas, não há prévia", () => {
+    expect(splitInstallments(0, 3)).toEqual([]);
+    expect(splitInstallments(100, 0)).toEqual([]);
   });
 });

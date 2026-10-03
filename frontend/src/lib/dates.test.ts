@@ -1,6 +1,7 @@
 import {
   addDays,
   addMonths,
+  addMonthsToDate,
   dayLabel,
   monthLabel,
   monthName,
@@ -94,5 +95,15 @@ describe("addMonths e monthRange", () => {
     expect(monthRange("2026-02")).toEqual({ from: "2026-02-01", to: "2026-02-28" });
     expect(monthRange("2028-02")).toEqual({ from: "2028-02-01", to: "2028-02-29" });
     expect(monthRange("2026-12")).toEqual({ from: "2026-12-01", to: "2026-12-31" });
+  });
+});
+
+describe("addMonthsToDate", () => {
+  it("cai no último dia de um mês mais curto e volta ao dia original depois", () => {
+    expect(addMonthsToDate("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addMonthsToDate("2026-01-31", 2)).toBe("2026-03-31");
+    expect(addMonthsToDate("2028-01-31", 1)).toBe("2028-02-29");
+    expect(addMonthsToDate("2026-12-15", 1)).toBe("2027-01-15");
+    expect(addMonthsToDate("2026-10-20", 0)).toBe("2026-10-20");
   });
 });

@@ -12,23 +12,65 @@ import { paths } from "../../../lib/paths";
 import { activeAccounts, useAccounts } from "../../accounts/hooks/useAccounts";
 import { useCategories } from "../../categories/hooks/useCategories";
 import { isDateShown, monthSearch, readListView } from "../filters";
+import { useCreateInstallments } from "../hooks/useCreateInstallments";
 import { useCreateTransaction } from "../hooks/useCreateTransaction";
+import { useCreateTransfer } from "../hooks/useCreateTransfer";
+import { useRelatedTransactions } from "../hooks/useTransactions";
 import { useUpdateTransaction } from "../hooks/useUpdateTransaction";
-import type { Transaction, TransactionInput } from "../types";
-import { TransactionForm } from "./TransactionForm";
+import type { EditScope, Transaction, TransactionPatch, TransactionPreset } from "../types";
+import { ScopeDialog } from "./ScopeDialog";
+import {
+  TransactionForm,
+  type TransactionSubmission,
+  type TransferAccounts,
+} from "./TransactionForm";
 
 export interface TransactionSheetProps {
   open: boolean;
   /** Lançamento em edição; sem ele, a folha cria um lançamento novo. */
   transaction?: Transaction;
+  /** O que já vem preenchido em um lançamento novo, como no "Pagar fatura" de um cartão. */
+  preset?: TransactionPreset;
   onClose: () => void;
+}
+
+type ScopeAnswer = (scope: EditScope | null) => void;
+
+/** Só os campos que mudaram: uma parcela editada com as seguintes não leva junto o resto. */
+function changedFields(
+  transaction: Transaction,
+  submission: TransactionSubmission,
+): TransactionPatch {
+  const input = submission.input;
+  const patch: TransactionPatch = {};
+  if ("type" in input && input.type !== transaction.type) patch.type = input.type;
+  if ("amount_cents" in input && input.amount_cents !== transaction.amount_cents) {
+    patch.amount_cents = input.amount_cents;
+  }
+  if (input.date !== transaction.date) patch.date = input.date;
+  if (input.description !== transaction.description) patch.description = input.description;
+  if ("account_id" in input && input.account_id !== transaction.account_id) {
+    patch.account_id = input.account_id;
+  }
+  if ("category_id" in input && input.category_id !== transaction.category_id) {
+    patch.category_id = input.category_id;
+  }
+  if (input.notes !== transaction.notes) patch.notes = input.notes;
+  return patch;
+}
+
+function transferAccountsOf(lines: readonly Transaction[]): TransferAccounts | undefined {
+  const out = lines.find((line) => line.transfer_direction === "out");
+  const received = lines.find((line) => line.transfer_direction === "in");
+  if (!out || !received) return undefined;
+  return { fromAccountId: out.account_id, toAccountId: received.account_id };
 }
 
 /**
  * Folha do formulário de lançamento. Fica montada mesmo fechada: assim as contas e as
  * categorias já estão carregadas quando o usuário toca em "Lançar".
  */
-export function TransactionSheet({ open, transaction, onClose }: TransactionSheetProps) {
+export function TransactionSheet({ open, transaction, preset, onClose }: TransactionSheetProps) {
   const formId = useId();
   const amountRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
@@ -36,9 +78,14 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
   const location = useLocation();
   const accounts = useAccounts();
   const categories = useCategories();
+  const related = useRelatedTransactions(transaction);
   const create = useCreateTransaction();
+  const createInstallments = useCreateInstallments();
+  const createTransfer = useCreateTransfer();
   const update = useUpdateTransaction();
   const [dirty, setDirty] = useState(false);
+  const [scopeAnswer, setScopeAnswer] = useState<ScopeAnswer | null>(null);
+  const [pendingScope, setPendingScope] = useState<EditScope | null>(null);
   // Cada abertura começa com o formulário em branco, mesmo reaberta antes de terminar de sair.
   const [opening, setOpening] = useState(0);
   const [wasOpen, setWasOpen] = useState(open);
@@ -47,7 +94,20 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
     if (open) setOpening(opening + 1);
   }
 
-  const saving = create.isPending || update.isPending;
+  const saving =
+    create.isPending ||
+    createInstallments.isPending ||
+    createTransfer.isPending ||
+    update.isPending;
+  const isTransfer = transaction?.type === "transfer";
+  const number = transaction?.installment_number ?? null;
+  const count = transaction?.installment_count ?? null;
+  // Quantas parcelas sobram desta em diante: alguma pode já ter sido excluída.
+  const following =
+    number === null
+      ? 0
+      : (related.data?.filter((line) => (line.installment_number ?? 0) >= number).length ??
+        (count ?? number) - number + 1);
 
   const close = (): void => {
     setDirty(false);
@@ -76,12 +136,64 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
     });
   };
 
-  const save = async (input: TransactionInput): Promise<void> => {
+  /** Pergunta, em uma parcela, se a mudança vale só para ela ou também para as próximas. */
+  const askScope = (): Promise<EditScope | null> =>
+    new Promise((resolve) => {
+      setScopeAnswer(() => resolve);
+    });
+
+  const answerScope = (scope: EditScope | null): void => {
+    scopeAnswer?.(scope);
+    if (scope === null) setScopeAnswer(null);
+    setPendingScope(scope);
+  };
+
+  const saveEdit = async (current: Transaction, submission: TransactionSubmission) => {
+    const patch = changedFields(current, submission);
+    if (Object.keys(patch).length === 0) {
+      close();
+      return;
+    }
+    let scope: EditScope = "single";
+    if (current.installment_group_id && following > 1) {
+      const chosen = await askScope();
+      if (chosen === null) return;
+      scope = chosen;
+    }
+    try {
+      const updated = await update.mutateAsync({ id: current.id, input: patch, scope });
+      const first = updated[0];
+      if (updated.length > 1) toast.success(`${updated.length} parcelas atualizadas.`);
+      else if (first && isTransfer) {
+        announce(
+          first.date,
+          "Transferência atualizada.",
+          "Transferência atualizada. Agora ela está em",
+        );
+      } else if (first) {
+        announce(first.date, "Lançamento atualizado.", "Lançamento atualizado. Agora ele está em");
+      }
+      close();
+    } finally {
+      setScopeAnswer(null);
+      setPendingScope(null);
+    }
+  };
+
+  const save = async (submission: TransactionSubmission): Promise<void> => {
     if (transaction) {
-      const updated = await update.mutateAsync({ id: transaction.id, input });
-      announce(updated.date, "Lançamento atualizado.", "Lançamento atualizado. Agora ele está em");
+      await saveEdit(transaction, submission);
+      return;
+    }
+    if (submission.kind === "installments") {
+      const parcels = await createInstallments.mutateAsync(submission.input);
+      const what = `Compra em ${parcels.length}x salva.`;
+      announce(parcels[0]?.date ?? submission.input.date, what, `${what} A 1ª parcela está em`);
+    } else if (submission.kind === "transfer") {
+      await createTransfer.mutateAsync(submission.input);
+      announce(submission.input.date, "Transferência salva.", "Transferência salva em");
     } else {
-      const created = await create.mutateAsync(input);
+      const created = await create.mutateAsync(submission.input);
       announce(created.date, "Lançamento salvo.", "Lançamento salvo em");
     }
     close();
@@ -89,8 +201,9 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
 
   let body: ReactNode;
   let hasForm = false;
-  if (!accounts.data || !categories.data) {
-    const loadError = accounts.error ?? categories.error;
+  const waitingRelated = isTransfer && related.data === undefined;
+  if (!accounts.data || !categories.data || waitingRelated) {
+    const loadError = accounts.error ?? categories.error ?? related.error;
     body = loadError ? (
       <EmptyState
         kind="error"
@@ -99,6 +212,7 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
         onAction={() => {
           void accounts.refetch();
           void categories.refetch();
+          void related.refetch();
         }}
       />
     ) : (
@@ -130,6 +244,8 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
         accounts={accounts.data}
         categories={categories.data}
         transaction={transaction}
+        transferAccounts={isTransfer ? transferAccountsOf(related.data ?? []) : undefined}
+        preset={transaction ? undefined : preset}
         amountRef={amountRef}
         onSubmit={save}
         onDirtyChange={setDirty}
@@ -137,29 +253,52 @@ export function TransactionSheet({ open, transaction, onClose }: TransactionShee
     );
   }
 
+  let title = "Novo lançamento";
+  if (isTransfer) title = "Editar transferência";
+  else if (number !== null && count !== null) title = `Editar parcela ${number} de ${count}`;
+  else if (transaction) title = "Editar lançamento";
+  else if (preset?.type === "transfer") title = "Nova transferência";
+
   return (
-    <Modal
-      open={open}
-      onClose={close}
-      title={transaction ? "Editar lançamento" : "Novo lançamento"}
-      size="form"
-      // Um lançamento novo abre com o foco no valor; na edição, o teclado não sobe sozinho.
-      initialFocusRef={transaction ? undefined : amountRef}
-      preventDismiss={dirty || saving}
-      footer={
-        hasForm && (
-          <>
-            <Button type="submit" form={formId} loading={saving}>
-              Salvar lançamento
-            </Button>
-            <Button variant="secondary" disabled={saving} onClick={close}>
-              Cancelar
-            </Button>
-          </>
-        )
-      }
-    >
-      {body}
-    </Modal>
+    <>
+      <Modal
+        open={open}
+        onClose={close}
+        title={title}
+        size="form"
+        // Um lançamento novo abre com o foco no valor; na edição, o teclado não sobe sozinho.
+        initialFocusRef={transaction ? undefined : amountRef}
+        preventDismiss={dirty || saving}
+        footer={
+          hasForm && (
+            <>
+              <Button type="submit" form={formId} loading={saving}>
+                {isTransfer || preset?.type === "transfer"
+                  ? "Salvar transferência"
+                  : "Salvar lançamento"}
+              </Button>
+              <Button variant="secondary" disabled={saving} onClick={close}>
+                Cancelar
+              </Button>
+            </>
+          )
+        }
+      >
+        {body}
+      </Modal>
+
+      {number !== null && count !== null && (
+        <ScopeDialog
+          open={open && scopeAnswer !== null}
+          action="edit"
+          number={number}
+          count={count}
+          following={following}
+          pending={pendingScope}
+          onChoose={answerScope}
+          onCancel={() => answerScope(null)}
+        />
+      )}
+    </>
   );
 }

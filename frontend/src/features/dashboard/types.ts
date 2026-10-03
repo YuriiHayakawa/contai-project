@@ -1,5 +1,5 @@
 // Tipos das rotas do Painel (contracts/rest-api.md). Os nomes dos campos são os da API.
-import type { YearMonth } from "../../lib/dates";
+import type { ISODate, YearMonth } from "../../lib/dates";
 import type { AccountType } from "../accounts/types";
 import type { Transaction } from "../transactions/types";
 
@@ -59,4 +59,37 @@ export interface DashboardTopExpenses {
   month: YearMonth;
   /** Da maior despesa para a menor. */
   items: Transaction[];
+}
+
+/** Fatura de um cartão: as compras de `period_start` a `period_end`, inclusive. */
+export interface InvoiceSummary {
+  period_start: ISODate;
+  period_end: ISODate;
+  closing_date: ISODate;
+  due_date: ISODate;
+  /** Compras menos estornos do período; o pagamento da fatura não entra. */
+  amount_cents: number;
+}
+
+export interface MonthAmount {
+  month: YearMonth;
+  amount_cents: number;
+}
+
+export interface CardSummary {
+  account_id: string;
+  name: string;
+  closing_day: number;
+  due_day: number;
+  current_invoice: InvoiceSummary;
+  future_installments: {
+    total_cents: number;
+    /** Por mês de vencimento da fatura em que cada parcela cai. */
+    months: MonthAmount[];
+  };
+}
+
+export interface DashboardCards {
+  /** Cartões ativos, em ordem alfabética. */
+  items: CardSummary[];
 }

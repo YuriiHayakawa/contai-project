@@ -6,8 +6,8 @@ import { ApiError } from "../../../lib/api-client";
 import { today } from "../../../lib/dates";
 import type { Account } from "../../accounts/types";
 import type { Category, CategoryTree } from "../../categories/types";
-import type { Transaction, TransactionInput } from "../types";
-import { TransactionForm } from "./TransactionForm";
+import type { Transaction } from "../types";
+import { TransactionForm, type TransactionSubmission } from "./TransactionForm";
 
 const LAST_ACCOUNT_STORAGE_KEY = "contai-last-account";
 const FORM_ID = "lancamento";
@@ -87,7 +87,7 @@ const saved: Transaction = {
   created_at: "2026-09-28T15:00:00Z",
 };
 
-type SubmitHandler = (input: TransactionInput) => Promise<unknown>;
+type SubmitHandler = (submission: TransactionSubmission) => Promise<unknown>;
 
 function renderForm(
   transaction?: Transaction,
@@ -174,9 +174,10 @@ describe("TransactionForm: lançamento novo", () => {
     await user.click(saveButton());
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-    const [input] = onSubmit.mock.calls[0] ?? [];
-    expect(input?.amount_cents).toBe(4590);
-    expect(Number.isInteger(input?.amount_cents)).toBe(true);
+    const [submission] = onSubmit.mock.calls[0] ?? [];
+    if (submission?.kind !== "entry") throw new Error("o envio não foi de uma despesa");
+    expect(submission.input.amount_cents).toBe(4590);
+    expect(Number.isInteger(submission.input.amount_cents)).toBe(true);
   });
 
   it("envia a despesa com todos os campos, no formato da API", async () => {
@@ -190,13 +191,16 @@ describe("TransactionForm: lançamento novo", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith({
-        type: "expense",
-        amount_cents: 4590,
-        date: today(),
-        description: "iFood",
-        account_id: "acc-conta",
-        category_id: "cat-delivery",
-        notes: null,
+        kind: "entry",
+        input: {
+          type: "expense",
+          amount_cents: 4590,
+          date: today(),
+          description: "iFood",
+          account_id: "acc-conta",
+          category_id: "cat-delivery",
+          notes: null,
+        },
       }),
     );
   });
@@ -220,13 +224,16 @@ describe("TransactionForm: lançamento novo", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith({
-        type: "income",
-        amount_cents: 350000,
-        date: today(),
-        description: "Salário de setembro",
-        account_id: "acc-conta",
-        category_id: "cat-salario",
-        notes: "Com o adiantamento",
+        kind: "entry",
+        input: {
+          type: "income",
+          amount_cents: 350000,
+          date: today(),
+          description: "Salário de setembro",
+          account_id: "acc-conta",
+          category_id: "cat-salario",
+          notes: "Com o adiantamento",
+        },
       }),
     );
   });
@@ -328,13 +335,16 @@ describe("TransactionForm: edição", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith({
-        type: "expense",
-        amount_cents: 12099,
-        date: "2026-09-28",
-        description: "Mensalidade do clube",
-        account_id: "acc-antiga",
-        category_id: "cat-clube",
-        notes: null,
+        kind: "entry",
+        input: {
+          type: "expense",
+          amount_cents: 12099,
+          date: "2026-09-28",
+          description: "Mensalidade do clube",
+          account_id: "acc-antiga",
+          category_id: "cat-clube",
+          notes: null,
+        },
       }),
     );
   });

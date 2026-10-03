@@ -209,7 +209,7 @@ describe("TransactionSheet", () => {
   });
 
   it("edição: envia a mudança para o lançamento certo e avisa", async () => {
-    updateTransaction.mockResolvedValue({ ...saved, description: "iFood do almoço" });
+    updateTransaction.mockResolvedValue([{ ...saved, description: "iFood do almoço" }]);
     const user = renderSheet(saved);
     await user.click(trigger());
     const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
@@ -222,15 +222,12 @@ describe("TransactionSheet", () => {
     await user.click(within(sheet).getByRole("button", { name: "Salvar lançamento" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(updateTransaction).toHaveBeenCalledWith("tx-1", {
-      type: "expense",
-      amount_cents: 4590,
-      date: "2026-09-28",
-      description: "iFood do almoço",
-      account_id: "acc-conta",
-      category_id: "cat-outros",
-      notes: null,
-    });
+    // Só o que mudou vai para o servidor.
+    expect(updateTransaction).toHaveBeenCalledWith(
+      "tx-1",
+      { description: "iFood do almoço" },
+      "single",
+    );
     expect(createTransaction).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toHaveTextContent("Lançamento atualizado.");
   });
@@ -308,11 +305,14 @@ describe("TransactionSheet", () => {
     });
 
     it("edição que muda a data para outro mês avisa onde o lançamento está", async () => {
-      updateTransaction.mockResolvedValue({ ...saved, date: otherDate });
+      updateTransaction.mockResolvedValue([{ ...saved, date: otherDate }]);
       const user = renderSheet(saved);
       await user.click(trigger());
       const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
       await within(sheet).findByRole("textbox", { name: "Descrição" });
+      const dateField = within(sheet).getByLabelText("Data");
+      await user.clear(dateField);
+      await user.type(dateField, otherDate);
 
       await user.click(within(sheet).getByRole("button", { name: "Salvar lançamento" }));
 
@@ -321,5 +321,116 @@ describe("TransactionSheet", () => {
         `Lançamento atualizado. Agora ele está em ${monthName(otherMonth)}`,
       );
     });
+  });
+});
+
+describe("TransactionSheet: parcela", () => {
+  const parcel = (number: number): Transaction => ({
+    ...saved,
+    id: `p${number}`,
+    amount_cents: number === 1 ? 3_334 : 3_333,
+    date: `2026-${String(8 + number).padStart(2, "0")}-20`,
+    description: "Tênis",
+    installment_group_id: "grupo",
+    installment_number: number,
+    installment_count: 4,
+  });
+  const parcels = [1, 2, 3, 4].map(parcel);
+  const second = parcel(2);
+  const last = parcel(4);
+
+  beforeEach(() => {
+    vi.mocked(transactionsService.listTransactions).mockResolvedValue({
+      items: parcels,
+      next_cursor: null,
+      total_count: 4,
+    });
+  });
+
+  async function editDescription(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(trigger());
+    const sheet = await screen.findByRole("dialog", { name: "Editar parcela 2 de 4" });
+    const description = await within(sheet).findByRole("textbox", { name: "Descrição" });
+    await user.clear(description);
+    await user.type(description, "Tênis de corrida");
+    await user.click(within(sheet).getByRole("button", { name: "Salvar lançamento" }));
+    return screen.findByRole("dialog", { name: "Salvar a parcela 2 de 4" });
+  }
+
+  it("pergunta o alcance, mostrando quantas parcelas cada escolha muda", async () => {
+    const user = renderSheet(second);
+
+    const scope = await editDescription(user);
+
+    expect(scope).toHaveTextContent("Só esta: muda apenas a parcela 2.");
+    expect(scope).toHaveTextContent("Esta e as próximas: muda 3 parcelas, da 2 à 4.");
+    expect(within(scope).getByRole("button", { name: "Cancelar" })).toHaveFocus();
+    expect(updateTransaction).not.toHaveBeenCalled();
+  });
+
+  it('"esta e as próximas" envia só o que mudou, com o alcance', async () => {
+    updateTransaction.mockResolvedValue(
+      parcels.slice(1).map((item) => ({ ...item, description: "Tênis de corrida" })),
+    );
+    const user = renderSheet(second);
+    const scope = await editDescription(user);
+
+    await user.click(
+      within(scope).getByRole("button", { name: "Salvar nesta e nas próximas (3 parcelas)" }),
+    );
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // O valor não vai junto: cada parcela guarda o dela (a primeira tem os centavos a mais).
+    expect(updateTransaction).toHaveBeenCalledWith(
+      "p2",
+      { description: "Tênis de corrida" },
+      "following",
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("3 parcelas atualizadas.");
+  });
+
+  it('"só nesta" muda só a parcela escolhida', async () => {
+    updateTransaction.mockResolvedValue([{ ...second, description: "Tênis de corrida" }]);
+    const user = renderSheet(second);
+    const scope = await editDescription(user);
+
+    await user.click(within(scope).getByRole("button", { name: "Salvar só nesta" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(updateTransaction).toHaveBeenCalledWith(
+      "p2",
+      { description: "Tênis de corrida" },
+      "single",
+    );
+  });
+
+  it("cancelar a escolha não salva nada e mantém a edição aberta", async () => {
+    const user = renderSheet(second);
+    const scope = await editDescription(user);
+
+    await user.click(within(scope).getByRole("button", { name: "Cancelar" }));
+
+    expect(updateTransaction).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Editar parcela 2 de 4" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Descrição" })).toHaveValue("Tênis de corrida");
+  });
+
+  it("a última parcela não pergunta: só ela pode mudar", async () => {
+    updateTransaction.mockResolvedValue([{ ...last, description: "Tênis de corrida" }]);
+    const user = renderSheet(last);
+    await user.click(trigger());
+    const sheet = await screen.findByRole("dialog", { name: "Editar parcela 4 de 4" });
+    const description = await within(sheet).findByRole("textbox", { name: "Descrição" });
+    await user.clear(description);
+    await user.type(description, "Tênis de corrida");
+
+    await user.click(within(sheet).getByRole("button", { name: "Salvar lançamento" }));
+
+    await waitFor(() => expect(updateTransaction).toHaveBeenCalledTimes(1));
+    expect(updateTransaction).toHaveBeenCalledWith(
+      "p4",
+      { description: "Tênis de corrida" },
+      "single",
+    );
   });
 });

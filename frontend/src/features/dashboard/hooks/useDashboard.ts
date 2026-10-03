@@ -3,8 +3,15 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { YearMonth } from "../../../lib/dates";
 import { useTransactionCount } from "../../transactions/hooks/useTransactions";
 import { dashboardQueryKey } from "../query-key";
-import { getCategories, getSummary, getTopExpenses, getTrend } from "../services/dashboardService";
+import {
+  getCards,
+  getCategories,
+  getSummary,
+  getTopExpenses,
+  getTrend,
+} from "../services/dashboardService";
 import type {
+  DashboardCards,
   DashboardCategories,
   DashboardSummary,
   DashboardTopExpenses,
@@ -16,6 +23,7 @@ interface DashboardData {
   categories: DashboardCategories;
   trend: DashboardTrend;
   topExpenses: DashboardTopExpenses;
+  cards: DashboardCards;
 }
 
 /**
@@ -58,15 +66,21 @@ export function useDashboard(month: YearMonth): Dashboard {
     queryFn: ({ signal }) => getTopExpenses(month, signal),
     ...ALWAYS_FRESH,
   });
+  const cards = useQuery({
+    queryKey: [...dashboardQueryKey, "cards", month],
+    queryFn: ({ signal }) => getCards(month, signal),
+    ...ALWAYS_FRESH,
+  });
   const transactionCount = useTransactionCount();
 
-  const queries = [summary, categories, trend, topExpenses, transactionCount];
+  const queries = [summary, categories, trend, topExpenses, cards, transactionCount];
 
   if (
     summary.data === undefined ||
     categories.data === undefined ||
     trend.data === undefined ||
     topExpenses.data === undefined ||
+    cards.data === undefined ||
     transactionCount.data === undefined
   ) {
     const failed = queries.find((query) => query.isError);
@@ -84,10 +98,13 @@ export function useDashboard(month: YearMonth): Dashboard {
 
   return {
     status: transactionCount.data === 0 ? "welcome" : "ready",
-    isUpdating: [summary, categories, trend, topExpenses].some((query) => query.isPlaceholderData),
+    isUpdating: [summary, categories, trend, topExpenses, cards].some(
+      (query) => query.isPlaceholderData,
+    ),
     summary: summary.data,
     categories: categories.data,
     trend: trend.data,
     topExpenses: topExpenses.data,
+    cards: cards.data,
   };
 }

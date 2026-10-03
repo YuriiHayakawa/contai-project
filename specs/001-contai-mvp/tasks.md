@@ -260,7 +260,7 @@ parcelas e uma transferência, e conferir fatura atual, parcelas futuras e resum
 - [X] T106 [P] [US4] Escrever `backend/tests/unit/test_invoices.py`: compra no dia 9 entra na fatura que fecha no dia 10 e compra no dia 10 entra na seguinte; fechamento nos dias 29, 30 e 31 em mês curto usa o último dia; fatura atual é a que contém hoje; parcelas futuras são as das faturas posteriores à atual
 - [X] T107 [P] [US4] Escrever `backend/tests/integration/test_installments_transfers.py`: R$ 100,00 em 3 parcelas gera R$ 33,34, R$ 33,33 e R$ 33,33 nas datas certas; parcelamento só em cartão, de 2 a 48 parcelas; edição e exclusão com escopo `single` ou `following` (esta e as seguintes, sem mudar as anteriores); transferência cria duas linhas, altera os dois saldos, não muda entradas nem saídas e é editada e excluída nos dois lados; compra de 28 de setembro conta em setembro
 - [X] T108 [P] [US4] Registrar em `backend/tests/isolation/test_accounts_categories_transactions.py` os casos de `POST /transactions/installments`, `POST /transactions/transfers` e `GET /dashboard/cards`
-- [ ] T109 [P] [US4] Escrever `frontend/src/features/transactions/components/TransactionForm.installments.test.tsx`: a compra parcelada só aparece para conta de cartão; de 2 a 48 parcelas; a prévia mostra o valor de cada parcela com o resto de centavos na primeira (R$ 100,00 em 3 mostra R$ 33,34 e 2 de R$ 33,33)
+- [X] T109 [P] [US4] Escrever `frontend/src/features/transactions/components/TransactionForm.installments.test.tsx`: a compra parcelada só aparece para conta de cartão; de 2 a 48 parcelas; a prévia mostra o valor de cada parcela com o resto de centavos na primeira (R$ 100,00 em 3 mostra R$ 33,34 e 2 de R$ 33,33)
 
 ### Implementation for User Story 4
 
@@ -269,10 +269,10 @@ parcelas e uma transferência, e conferir fatura atual, parcelas futuras e resum
 - [X] T112 [US4] Implementar em `backend/app/modules/transactions/service.py` e `repository.py` a transferência entre contas próprias (duas linhas com o mesmo `transfer_group_id`, `out` e `in`, contas diferentes) e sua edição e exclusão nos dois lados (FR-033, FR-034)
 - [X] T113 [US4] Acrescentar `POST /transactions/installments`, `POST /transactions/transfers` e o parâmetro `scope` de `PATCH` e `DELETE` em `backend/app/modules/transactions/router.py` e `schemas.py`
 - [X] T114 [US4] Implementar o resumo de cartões em `backend/app/modules/dashboard/service.py` e `repository.py` e a rota `GET /dashboard/cards` em `backend/app/modules/dashboard/router.py` (fatura atual e parcelas futuras por mês e no total, FR-058)
-- [ ] T115 [P] [US4] Acrescentar dia de fechamento e de vencimento, só para cartão, em `frontend/src/features/accounts/components/AccountForm.tsx`
-- [ ] T116 [US4] Acrescentar em `frontend/src/features/transactions/components/TransactionForm.tsx` a opção "Transferência" (conta de origem e de destino) e a compra parcelada (número de parcelas e prévia do valor de cada uma), com os hooks `hooks/useCreateInstallments.ts` e `hooks/useCreateTransfer.ts`
-- [ ] T117 [US4] Implementar `frontend/src/features/transactions/components/ScopeDialog.tsx` ("só esta parcela" ou "esta e as próximas") e usá-lo em `TransactionDetail.tsx`; mostrar transferência e "3/10" em `TransactionList.tsx`
-- [ ] T118 [US4] Implementar `frontend/src/features/dashboard/components/CardsCard.tsx` (fatura atual, fechamento, parcelas futuras e o gráfico de série única da seção 7.4 do `design-system.md`) e incluí-lo em `DashboardPage.tsx`
+- [X] T115 [P] [US4] Acrescentar dia de fechamento e de vencimento, só para cartão, em `frontend/src/features/accounts/components/AccountForm.tsx`
+- [X] T116 [US4] Acrescentar em `frontend/src/features/transactions/components/TransactionForm.tsx` a opção "Transferência" (conta de origem e de destino) e a compra parcelada (número de parcelas e prévia do valor de cada uma), com os hooks `hooks/useCreateInstallments.ts` e `hooks/useCreateTransfer.ts`
+- [X] T117 [US4] Implementar `frontend/src/features/transactions/components/ScopeDialog.tsx` ("só esta parcela" ou "esta e as próximas") e usá-lo em `TransactionDetail.tsx`; mostrar transferência e "3/10" em `TransactionList.tsx`
+- [X] T118 [US4] Implementar `frontend/src/features/dashboard/components/CardsCard.tsx` (fatura atual, fechamento, parcelas futuras e o gráfico de série única da seção 7.4 do `design-system.md`) e incluí-lo em `DashboardPage.tsx`
 
 **Checkpoint**: histórias 1 a 4 funcionam; números de cartão e transferências batem com o painel
 

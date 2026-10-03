@@ -8,7 +8,7 @@ import {
 import { accountsQueryKey } from "../../accounts/hooks/useAccounts";
 import { dashboardQueryKey } from "../../dashboard/query-key";
 import { countTransactions, listTransactions } from "../services/transactionsService";
-import type { TransactionFilters } from "../types";
+import type { Transaction, TransactionFilters } from "../types";
 
 export const transactionsQueryKey = ["transactions"] as const;
 
@@ -24,6 +24,25 @@ export function useTransactions(filters: TransactionFilters) {
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor,
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Lançamentos ligados a este: as parcelas da mesma compra ou os dois lados da mesma
+ * transferência. Lista vazia para uma despesa ou receita avulsa.
+ */
+export function useRelatedTransactions(transaction: Transaction | undefined) {
+  let filters: TransactionFilters | null = null;
+  if (transaction?.installment_group_id) {
+    filters = { installment_group_id: transaction.installment_group_id };
+  } else if (transaction?.transfer_group_id) {
+    filters = { transfer_group_id: transaction.transfer_group_id };
+  }
+  return useQuery({
+    queryKey: [...transactionsQueryKey, "related", filters],
+    queryFn: async ({ signal }) =>
+      filters ? (await listTransactions(filters, null, signal)).items : [],
+    enabled: filters !== null,
   });
 }
 

@@ -127,6 +127,8 @@ function fakeDataRoute(path: string): Response | null {
       return json(200, { month: yearMonthOf(), total_cents: 0, items: [] });
     case "/dashboard/trend":
       return json(200, { items: [] });
+    case "/dashboard/cards":
+      return json(200, { items: [] });
     case "/dashboard/top-expenses":
       return json(200, { month: yearMonthOf(), items: [] });
     default:
