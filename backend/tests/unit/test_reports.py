@@ -16,7 +16,12 @@ from app.core.errors import ValidationFailed
 from app.modules.accounts.models import Account, AccountType
 from app.modules.accounts.repository import AccountRepository
 from app.modules.categories.models import Category, CategoryColor, CategoryKind
-from app.modules.dashboard.service import Period, ReportingService, resolve_month
+from app.modules.dashboard.service import (
+    Period,
+    ReportingService,
+    card_reference_date,
+    resolve_month,
+)
 from app.modules.transactions.models import Transaction, TransactionType, TransferDirection
 from app.modules.users.models import User
 
@@ -448,3 +453,12 @@ def test_a_month_in_another_format_is_refused_with_a_message(value: str) -> None
         resolve_month(value, field="until")
 
     assert "AAAA-MM" in refused.value.details["fields"]["until"]
+
+
+def test_card_invoice_is_seen_from_today_or_from_the_edge_of_another_month(
+    frozen_time: datetime,
+) -> None:
+    # Hoje é 1º de outubro de 2026.
+    assert card_reference_date(date(2026, 10, 1)) == date(2026, 10, 1)
+    assert card_reference_date(date(2026, 2, 1)) == date(2026, 2, 28)
+    assert card_reference_date(date(2026, 12, 1)) == date(2026, 12, 1)

@@ -12,12 +12,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_session
 from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.dashboard.schemas import (
+    DashboardCards,
     DashboardCategories,
     DashboardSummary,
     DashboardTopExpenses,
     DashboardTrend,
 )
-from app.modules.dashboard.service import Period, ReportingService, month_label, resolve_month
+from app.modules.dashboard.service import (
+    Period,
+    ReportingService,
+    card_reference_date,
+    month_label,
+    resolve_month,
+)
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
@@ -100,3 +107,18 @@ async def get_top_expenses(
         month=month_label(first_day),
         items=await service.top_expenses(current.id, Period.of_month(first_day), limit=limit),
     )
+
+
+@router.get(
+    "/cards",
+    summary="Fatura atual e parcelas futuras de cada cartão",
+    description=(
+        "No mês atual, a fatura é a que contém hoje; em um mês que já passou, a que estava aberta "
+        "no último dia dele."
+    ),
+)
+async def get_cards(
+    current: CurrentUserDep, service: ReportingServiceDep, month: MonthParam = None
+) -> DashboardCards:
+    reference = card_reference_date(resolve_month(month))
+    return DashboardCards(items=await service.cards(current.id, reference=reference))

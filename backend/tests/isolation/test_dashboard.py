@@ -90,3 +90,23 @@ async def top_expenses(context: IsolationContext) -> None:
 
     seen_by_a = (await context.client_a.get(f"{DASHBOARD}/top-expenses", params=params)).json()
     assert transaction["id"] in [item["id"] for item in seen_by_a["items"]]
+
+
+@isolation_case("GET", "/api/v1/dashboard/cards")
+async def cards(context: IsolationContext) -> None:
+    before = await context.client_b.get(f"{DASHBOARD}/cards")
+    card_of_a = await create_account(
+        context.client_a, name=_unique("Cartão"), type="credit_card", closing_day=3, due_day=10
+    )
+    category_of_a = await create_category(context.client_a, name=_unique("Categoria"))
+    await create_transaction(
+        context.client_a, card_of_a, category_of_a, amount_cents=45_678, date="2026-10-01"
+    )
+    after = await context.client_b.get(f"{DASHBOARD}/cards")
+
+    assert before.status_code == after.status_code == 200
+    assert after.json() == before.json()
+    assert card_of_a["id"] not in after.text
+    assert card_of_a["name"] not in after.text
+    seen_by_a = (await context.client_a.get(f"{DASHBOARD}/cards")).json()
+    assert card_of_a["id"] in [item["account_id"] for item in seen_by_a["items"]]

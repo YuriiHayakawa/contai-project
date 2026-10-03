@@ -15,18 +15,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
 from app.core.errors import ValidationFailed
+from app.modules.accounts.models import AccountType
 from app.modules.accounts.service import AccountService
 from app.modules.categories.models import Category
 from app.modules.categories.repository import CategoryRepository
 from app.modules.dashboard.repository import ReportRepository
 from app.modules.dashboard.schemas import (
     AccountBalance,
+    CardSummary,
     CategoryBreakdown,
     CategorySpending,
+    FutureInstallments,
+    InvoiceSummary,
+    MonthAmount,
     MonthTotals,
     PeriodTotals,
     SubcategorySpending,
 )
+from app.modules.transactions.invoices import current_invoice, invoice_for
 from app.modules.transactions.models import TransactionType
 from app.modules.transactions.schemas import TransactionRead
 
@@ -64,6 +70,15 @@ def resolve_month(value: str | None, *, field: str = "month") -> dt.date:
 def month_label(day: dt.date) -> str:
     """O mês de `day` como aparece nas respostas: `AAAA-MM`."""
     return f"{day.year:04d}-{day.month:02d}"
+
+
+def card_reference_date(first_day: dt.date) -> dt.date:
+    """Dia em que se olha a fatura de um mês: hoje, no mês atual; o último dia, num mês que já
+    passou; o primeiro dia, num mês que ainda vem."""
+    today = clock.today()
+    if (first_day.year, first_day.month) == (today.year, today.month):
+        return today
+    return clock.month_bounds(first_day)[1] if first_day < today else first_day
 
 
 def _totals(income_cents: int, expense_cents: int) -> dict[str, int]:
@@ -200,3 +215,49 @@ class ReportingService:
             user_id, start=period.start, end=period.end, limit=limit
         )
         return [TransactionRead.from_transaction(transaction) for transaction in transactions]
+
+    async def cards(self, user_id: uuid.UUID, *, reference: dt.date) -> list[CardSummary]:
+        """Por cartão ativo: a fatura que contém `reference` e as parcelas das faturas
+        seguintes, por mês de vencimento e no total (FR-058)."""
+        summaries: list[CardSummary] = []
+        for card in await self._accounts.list(user_id):
+            if card.type != AccountType.CREDIT_CARD:
+                continue
+            if card.closing_day is None or card.due_day is None:  # pragma: no cover - CHECK
+                continue
+            days = {"closing_day": card.closing_day, "due_day": card.due_day}
+            invoice = current_invoice(reference, **days)
+            by_type = await self._reports.account_totals_by_type(
+                user_id, card.id, start=invoice.period_start, end=invoice.period_end
+            )
+            by_month: dict[str, int] = {}
+            for day, amount in await self._reports.installments_from(
+                user_id, card.id, start=invoice.closing_date
+            ):
+                label = month_label(invoice_for(day, **days).due_date)
+                by_month[label] = by_month.get(label, 0) + amount
+            summaries.append(
+                CardSummary(
+                    account_id=card.id,
+                    name=card.name,
+                    closing_day=card.closing_day,
+                    due_day=card.due_day,
+                    current_invoice=InvoiceSummary(
+                        period_start=invoice.period_start,
+                        period_end=invoice.period_end,
+                        closing_date=invoice.closing_date,
+                        due_date=invoice.due_date,
+                        # Compras menos estornos; o pagamento é transferência e não entra.
+                        amount_cents=by_type.get(TransactionType.EXPENSE, 0)
+                        - by_type.get(TransactionType.INCOME, 0),
+                    ),
+                    future_installments=FutureInstallments(
+                        total_cents=sum(by_month.values()),
+                        months=[
+                            MonthAmount(month=month, amount_cents=amount)
+                            for month, amount in sorted(by_month.items())
+                        ],
+                    ),
+                )
+            )
+        return summaries

@@ -261,3 +261,84 @@ async def delete_transaction(context: IsolationContext) -> None:
 
     await _same_as_unknown(context.client_b, "DELETE", url_of_a)
     assert (await context.client_a.get(url_of_a)).status_code == 200
+
+
+# ---------- compras parceladas e transferências
+
+
+async def _card_of(client: AsyncClient) -> Json:
+    return await create_account(
+        client, name=_unique("Cartão"), type="credit_card", closing_day=3, due_day=10
+    )
+
+
+@isolation_case("POST", "/api/v1/transactions/installments")
+async def create_installments_in_another_users_card_or_category(
+    context: IsolationContext,
+) -> None:
+    card_of_a = await _card_of(context.client_a)
+    category_of_a = await _category_of_a(context)
+    card_of_b = await _card_of(context.client_b)
+    category_of_b = await create_category(context.client_b, name=_unique("Categoria de B"))
+    payload = {
+        "total_cents": 30_000,
+        "installments": 3,
+        "date": "2026-10-01",
+        "description": "Intrusa parcelada",
+    }
+
+    in_card_of_a = await context.client_b.post(
+        f"{TRANSACTIONS}/installments",
+        json={**payload, "account_id": card_of_a["id"], "category_id": category_of_b["id"]},
+    )
+    in_category_of_a = await context.client_b.post(
+        f"{TRANSACTIONS}/installments",
+        json={**payload, "account_id": card_of_b["id"], "category_id": category_of_a["id"]},
+    )
+
+    assert in_card_of_a.status_code == in_category_of_a.status_code == 422
+    assert "account_id" in in_card_of_a.json()["error"]["details"]["fields"]
+    assert "category_id" in in_category_of_a.json()["error"]["details"]["fields"]
+    assert "Intrusa" not in (await context.client_a.get(TRANSACTIONS)).text
+    assert "Intrusa" not in (await context.client_b.get(TRANSACTIONS)).text
+
+
+@isolation_case("POST", "/api/v1/transactions/transfers")
+async def transfer_from_or_to_another_users_account(context: IsolationContext) -> None:
+    account_of_a = await _account_of_a(context)
+    account_of_b = await create_account(context.client_b, name=_unique("Conta de B"))
+    payload = {"amount_cents": 999, "date": "2026-10-01", "description": "Intrusa"}
+
+    from_a = await context.client_b.post(
+        f"{TRANSACTIONS}/transfers",
+        json={
+            **payload,
+            "from_account_id": account_of_a["id"],
+            "to_account_id": account_of_b["id"],
+        },
+    )
+    to_a = await context.client_b.post(
+        f"{TRANSACTIONS}/transfers",
+        json={
+            **payload,
+            "from_account_id": account_of_b["id"],
+            "to_account_id": account_of_a["id"],
+        },
+    )
+    unknown = await context.client_b.post(
+        f"{TRANSACTIONS}/transfers",
+        json={
+            **payload,
+            "from_account_id": account_of_b["id"],
+            "to_account_id": str(uuid.uuid4()),
+        },
+    )
+
+    assert from_a.status_code == to_a.status_code == 422
+    assert "from_account_id" in from_a.json()["error"]["details"]["fields"]
+    assert "to_account_id" in to_a.json()["error"]["details"]["fields"]
+    # A conta de outro usuário é recusada do mesmo jeito que uma conta que não existe.
+    assert to_a.json()["error"] == unknown.json()["error"]
+    seen_by_a = await context.client_a.get(f"{ACCOUNTS}/{account_of_a['id']}")
+    assert seen_by_a.json()["balance_cents"] == account_of_a["balance_cents"]
+    assert "Intrusa" not in (await context.client_b.get(TRANSACTIONS)).text
