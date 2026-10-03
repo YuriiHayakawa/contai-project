@@ -309,7 +309,6 @@ async def test_a_rule_of_another_kind_does_not_apply_to_the_line(
         description_normalized="livraria letras",
         category_id=categories[EXPENSE, "Lazer"].id,
     )
-    fake_llm.queue_structured_error(LLMUnavailable("fora do ar"))
 
     suggestions = await _suggest(
         session, user_a, _line("livraria letras"), _line("livraria letras", INCOME)
@@ -319,6 +318,69 @@ async def test_a_rule_of_another_kind_does_not_apply_to_the_line(
         (categories[EXPENSE, "Lazer"].id, USER_RULE),
         (categories[INCOME, "Outros"].id, FALLBACK),
     ]
+    # A descrição já tem regra: ela não vai à IA só por causa do estorno.
+    assert fake_llm.calls == []
+
+
+async def test_equal_lines_go_to_the_ai_once_and_all_get_the_answer(
+    session: AsyncSession,
+    user_a: User,
+    categories: Categories,
+    numbers: Numbers,
+    fake_llm: FakeLLMProvider,
+) -> None:
+    _assign(fake_llm, (0, numbers["Alimentação > Restaurante"]), (1, numbers["Lazer"]))
+
+    suggestions = await _suggest(
+        session,
+        user_a,
+        _line("cafe da esquina"),
+        _line("cinema do bairro"),
+        _line("cafe da esquina"),
+        _line("cafe da esquina"),
+    )
+
+    # Quatro linhas, duas descrições: cada uma foi enviada uma vez.
+    [call] = fake_llm.calls
+    assert _described(call.prompt) == ["cafe da esquina", "cinema do bairro"]
+    restaurant = (categories[EXPENSE, "Restaurante"].id, AI)
+    assert suggestions == [
+        restaurant,
+        (categories[EXPENSE, "Lazer"].id, AI),
+        restaurant,
+        restaurant,
+    ]
+
+
+async def test_a_description_in_both_kinds_goes_once_with_the_kind_it_appears_most(
+    session: AsyncSession,
+    user_a: User,
+    categories: Categories,
+    numbers: Numbers,
+    fake_llm: FakeLLMProvider,
+) -> None:
+    _assign(fake_llm, (0, numbers["Lazer"]))
+
+    suggestions = await _suggest(
+        session,
+        user_a,
+        _line("livraria letras", INCOME),
+        _line("livraria letras"),
+        _line("livraria letras"),
+    )
+
+    # A compra aparece duas vezes e o estorno, uma: a descrição vai uma vez, como despesa.
+    [call] = fake_llm.calls
+    assert call.prompt.count("livraria letras") == 1
+    assert "0 | despesa | livraria letras" in call.prompt
+    leisure = (categories[EXPENSE, "Lazer"].id, AI)
+    assert suggestions == [(categories[INCOME, "Outros"].id, FALLBACK), leisure, leisure]
+    # A regra guardada é uma por descrição.
+    [rule] = await CategorizationRepository(session).list_all(user_a.id)
+    assert (rule.description_normalized, rule.category_id) == (
+        "livraria letras",
+        categories[EXPENSE, "Lazer"].id,
+    )
 
 
 async def test_a_description_with_only_numbers_goes_to_outros_without_the_ai(

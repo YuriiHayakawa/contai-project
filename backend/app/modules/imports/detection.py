@@ -22,6 +22,16 @@ INVOICE_PAYMENT_TERMS = (
 )
 
 
+# Aviso da revisão para a linha que parece pagamento de fatura e ficou como despesa porque o
+# usuário não tem cartão cadastrado.
+INVOICE_PAYMENT_WITHOUT_CARD = "invoice_payment_without_card"
+INVOICE_PAYMENT_WITHOUT_CARD_MESSAGE = (
+    "Esta linha parece o pagamento de uma fatura de cartão. Se você também lança as compras do "
+    "cartão no Contaí, cadastre o cartão e marque esta linha como pagamento de fatura, para não "
+    "contar o gasto duas vezes."
+)
+
+
 @dataclass(frozen=True)
 class CardInvoice:
     """Um cartão do usuário e quanto está em aberto na fatura dele."""

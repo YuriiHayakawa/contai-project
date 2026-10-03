@@ -259,6 +259,8 @@ async def test_an_invoice_payment_is_suggested_as_a_transfer_to_the_card(
     payment = _by_description(record)["PAGAMENTO FATURA CARTÃO"]
     assert (payment["type"], payment["transfer_direction"]) == ("transfer", "out")
     assert payment["suggested_counter_account_id"] == card["id"]
+    # Com o cartão cadastrado não há o que avisar.
+    assert all(item["warning_code"] is None for item in record["items"])
     # Transferência não tem categoria.
     assert (payment["suggested_category_id"], payment["category_source"]) == (None, None)
     others = [item for item in record["items"] if item["id"] != payment["id"]]
@@ -274,6 +276,49 @@ async def test_without_a_card_the_payment_stays_as_an_expense(
     payment = _by_description(record)["PAGAMENTO FATURA CARTÃO"]
     assert (payment["type"], payment["suggested_counter_account_id"]) == ("expense", None)
     assert payment["suggested_category_id"] == categories["expense:Outros"]
+    assert payment["selected_by_default"] is True
+    # A linha segue como despesa, com o aviso de que pode estar contando o gasto duas vezes.
+    assert payment["warning_code"] == "invoice_payment_without_card"
+    assert "cadastre o cartão" in payment["warning_message"]
+    assert "marque esta linha como pagamento de fatura" in payment["warning_message"]
+    assert "duas vezes" in payment["warning_message"]
+    others = [item for item in record["items"] if item["id"] != payment["id"]]
+    assert all((item["warning_code"], item["warning_message"]) == (None, None) for item in others)
+
+
+async def test_after_registering_the_card_the_line_can_be_marked_as_an_invoice_payment(
+    client_a: AsyncClient, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    checking = await create_account(
+        client_a, name="Conta de setembro", initial_balance_date="2026-09-01"
+    )
+    record = await _review(client_a, run_jobs, checking, "banco_azul.ofx")
+    # O aviso levou o usuário a cadastrar o cartão no meio da revisão.
+    card = await create_account(
+        client_a,
+        name="Cartão Verde",
+        type="credit_card",
+        closing_day=3,
+        due_day=10,
+        initial_balance_cents=-80_000,
+        initial_balance_date="2026-09-01",
+    )
+
+    await confirm(
+        client_a,
+        record,
+        _decision(
+            record,
+            "PAGAMENTO FATURA CARTÃO",
+            type="transfer",
+            category_id=None,
+            counter_account_id=card["id"],
+        ),
+    )
+
+    # O pagamento virou transferência para o cartão e saiu das despesas do mês.
+    assert await balance_of(client_a, card) == 0
+    assert await _month_totals(client_a, "2026-09") == (545_000, 4_590 + 18_937 + 1_200)
 
 
 async def test_with_two_cards_the_one_with_the_closest_open_invoice_is_suggested(
