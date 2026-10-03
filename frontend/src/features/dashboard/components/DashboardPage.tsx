@@ -21,6 +21,7 @@ import { useNewTransaction } from "../../transactions/hooks/useNewTransaction";
 import { useDashboard } from "../hooks/useDashboard";
 import { TREND_MONTHS } from "../services/dashboardService";
 import { AccountsCard } from "./AccountsCard";
+import { CardsCard } from "./CardsCard";
 import { CategoryRanking } from "./CategoryRanking";
 import { FirstSteps } from "./FirstSteps";
 import { MonthSummary } from "./MonthSummary";
@@ -83,7 +84,7 @@ export function DashboardPage() {
     );
   }
 
-  const { summary, trend, topExpenses } = dashboard;
+  const { summary, trend, topExpenses, cards } = dashboard;
 
   if (dashboard.status === "welcome") {
     const firstName = user?.name.trim().split(/\s+/)[0];
@@ -99,7 +100,10 @@ export function DashboardPage() {
           </p>
         </header>
         <div className="grid gap-6">
-          <FirstSteps hasAccount={summary.accounts.length > 0} onLaunch={openNewTransaction} />
+          <FirstSteps
+            hasAccount={summary.accounts.length > 0}
+            onLaunch={() => openNewTransaction()}
+          />
           {summary.accounts.length > 0 && <AccountsCard accounts={summary.accounts} />}
         </div>
       </PageContent>
@@ -128,7 +132,7 @@ export function DashboardPage() {
             <CategoryRanking
               month={dashboard.categories.month}
               categories={dashboard.categories}
-              onLaunch={openNewTransaction}
+              onLaunch={() => openNewTransaction()}
             />
           </motion.div>
 
@@ -146,8 +150,17 @@ export function DashboardPage() {
                 </Suspense>
               </Card>
             </motion.div>
-            <motion.div variants={cascadeItem}>
+            {/* Contas e cartões entram juntos: a cascata tem no máximo seis passos (seção 9.2). */}
+            <motion.div variants={cascadeItem} className="grid gap-6">
               <AccountsCard accounts={summary.accounts} />
+              {cards.items.map((card) => (
+                <CardsCard
+                  key={card.account_id}
+                  card={card}
+                  balance={summary.accounts.find((account) => account.id === card.account_id)}
+                  onPay={openNewTransaction}
+                />
+              ))}
             </motion.div>
             <motion.div variants={cascadeItem}>
               <TopExpenses

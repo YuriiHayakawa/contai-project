@@ -144,7 +144,7 @@ function AppFrame() {
   return (
     <AppShell
       userName={user?.name ?? ""}
-      onNewTransaction={openNewTransaction}
+      onNewTransaction={() => openNewTransaction()}
       onSignOut={() => logout.mutate()}
     >
       {/* A casca fica na tela; só o miolo espera o código da tela chegar. */}

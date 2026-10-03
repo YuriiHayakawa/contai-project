@@ -103,3 +103,25 @@ export function addMonths(yearMonth: YearMonth, months: number): YearMonth {
 export function monthRange(yearMonth: YearMonth): { from: ISODate; to: ISODate } {
   return { from: `${yearMonth}-01`, to: addDays(`${addMonths(yearMonth, 1)}-01`, -1) };
 }
+
+/**
+ * Soma meses a uma data; em mês sem aquele dia, usa o último dia dele (31 de janeiro mais um
+ * mês é 28 ou 29 de fevereiro). É a regra das parcelas no servidor.
+ */
+export function addMonthsToDate(iso: ISODate, months: number): ISODate {
+  const day = Number(iso.slice(8, 10));
+  const month = addMonths(yearMonthOf(iso), months);
+  const lastDay = Number(monthRange(month).to.slice(8, 10));
+  return `${month}-${pad(Math.min(day, lastDay), 2)}`;
+}
+
+const shortDayFormat = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "UTC",
+  day: "numeric",
+  month: "short",
+});
+
+/** Dia e mês curtos, como "3 de out.", para datas de fatura. */
+export function shortDate(iso: ISODate): string {
+  return shortDayFormat.format(calendarDate(iso));
+}

@@ -41,6 +41,8 @@ interface DayGroup {
 interface TransactionRowProps {
   transaction: Transaction;
   account: Account | undefined;
+  /** Em transferência: a conta do outro lado, quando a outra linha já foi carregada. */
+  otherAccount?: Account;
   category: CategoryOption | undefined;
   onSelect: (transaction: Transaction) => void;
 }
@@ -76,11 +78,25 @@ function countLabel(loaded: number, total: number): string {
   return loaded < total ? `Mostrando ${loaded} de ${total} ${noun}` : `${total} ${noun}`;
 }
 
-function TransactionRow({ transaction, account, category, onSelect }: TransactionRowProps) {
+function TransactionRow({
+  transaction,
+  account,
+  otherAccount,
+  category,
+  onSelect,
+}: TransactionRowProps) {
   const isTransfer = transaction.type === "transfer";
+  // Transferência diz de onde saiu e para onde foi o dinheiro.
+  let route: string | undefined;
+  if (isTransfer && account && otherAccount) {
+    route =
+      transaction.transfer_direction === "out"
+        ? `${account.name} → ${otherAccount.name}`
+        : `${otherAccount.name} → ${account.name}`;
+  }
   const details = [
     isTransfer ? "Transferência" : category?.category.name,
-    account?.name,
+    route ?? account?.name,
     transaction.installment_number && transaction.installment_count
       ? `${transaction.installment_number}/${transaction.installment_count}`
       : null,
@@ -192,6 +208,21 @@ export function TransactionList({
   if (transactions.length === 0) return empty;
 
   const groups = groupByDay(transactions);
+  // Os dois lados de cada transferência que estão na tela, para a linha mostrar o caminho.
+  const transferSides = new Map<string, Transaction[]>();
+  for (const transaction of transactions) {
+    if (!transaction.transfer_group_id) continue;
+    const sides = transferSides.get(transaction.transfer_group_id) ?? [];
+    sides.push(transaction);
+    transferSides.set(transaction.transfer_group_id, sides);
+  }
+  const otherSide = (transaction: Transaction): Account | undefined => {
+    if (!transaction.transfer_group_id) return undefined;
+    const other = transferSides
+      .get(transaction.transfer_group_id)
+      ?.find((side) => side.id !== transaction.id);
+    return other ? accounts.get(other.account_id) : undefined;
+  };
 
   return (
     // `overflow-clip` arredonda os cantos sem criar uma área de rolagem, que soltaria os
@@ -230,6 +261,7 @@ export function TransactionList({
                   key={transaction.id}
                   transaction={transaction}
                   account={accounts.get(transaction.account_id)}
+                  otherAccount={otherSide(transaction)}
                   category={
                     transaction.category_id ? categories.get(transaction.category_id) : undefined
                   }

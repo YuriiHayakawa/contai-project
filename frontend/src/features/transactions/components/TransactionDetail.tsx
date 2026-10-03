@@ -12,14 +12,17 @@ import { dayLabel } from "../../../lib/dates";
 import type { Account } from "../../accounts/types";
 import type { CategoryOption } from "../../categories/hooks/useCategories";
 import { useDeleteTransaction } from "../hooks/useDeleteTransaction";
-import type { Transaction, TransactionType } from "../types";
+import { useRelatedTransactions } from "../hooks/useTransactions";
+import type { EditScope, Transaction, TransactionType } from "../types";
+import { ScopeDialog } from "./ScopeDialog";
 import { signedAmount } from "./TransactionList";
 
 export interface TransactionDetailProps {
   open: boolean;
   /** Fica guardado depois de fechar, para a folha não esvaziar enquanto sai da tela. */
   transaction?: Transaction;
-  account?: Account;
+  /** Todas as contas por id, inclusive as arquivadas. */
+  accounts: ReadonlyMap<string, Account>;
   category?: CategoryOption;
   onClose: () => void;
   /** Abre o formulário de edição do lançamento. */
@@ -48,60 +51,89 @@ function DetailRow({ label, children }: DetailRowProps) {
   );
 }
 
-/** Detalhe de um lançamento, com as ações de editar e de excluir (com confirmação). */
+function accountName(account: Account | undefined): string {
+  if (!account) return "Conta não encontrada";
+  return account.archived ? `${account.name}${ARCHIVED_SUFFIX}` : account.name;
+}
+
+/**
+ * Detalhe de um lançamento, com as ações de editar e de excluir. Uma parcela pergunta se a
+ * exclusão vale só para ela ou também para as próximas; uma transferência sai dos dois lados.
+ */
 export function TransactionDetail({
   open,
   transaction,
-  account,
+  accounts,
   category,
   onClose,
   onEdit,
 }: TransactionDetailProps) {
   const toast = useToast();
   const remove = useDeleteTransaction();
+  const related = useRelatedTransactions(transaction);
   const [confirming, setConfirming] = useState(false);
+  const [pendingScope, setPendingScope] = useState<EditScope | null>(null);
 
   if (!transaction) return null;
 
   const { label: typeLabel, icon: TypeIcon } = typeAppearance[transaction.type];
-  // Transferência tem tela própria de edição, nos dois lados de uma vez.
-  const isEntry = transaction.type !== "transfer";
+  const isTransfer = transaction.type === "transfer";
+  const number = transaction.installment_number;
+  const count = transaction.installment_count;
+  const following =
+    number === null
+      ? 0
+      : (related.data?.filter((line) => (line.installment_number ?? 0) >= number).length ??
+        (count ?? number) - number + 1);
+  const asksScope = number !== null && count !== null && following > 1;
+  const out = related.data?.find((line) => line.transfer_direction === "out");
+  const received = related.data?.find((line) => line.transfer_direction === "in");
 
   const close = (): void => {
     setConfirming(false);
     onClose();
   };
 
-  const confirmDelete = (): void => {
-    remove.mutate(transaction.id, {
-      onSuccess: () => {
-        toast.success("Lançamento excluído.");
-        close();
+  const confirmDelete = (scope: EditScope = "single"): void => {
+    setPendingScope(scope);
+    remove.mutate(
+      { id: transaction.id, scope },
+      {
+        onSuccess: () => {
+          if (isTransfer) toast.success("Transferência excluída das duas contas.");
+          else if (scope === "following") toast.success(`${following} parcelas excluídas.`);
+          else toast.success("Lançamento excluído.");
+          close();
+        },
+        onError: (error) => {
+          setConfirming(false);
+          toast.error(errorMessage(error));
+        },
+        onSettled: () => setPendingScope(null),
       },
-      onError: (error) => {
-        setConfirming(false);
-        toast.error(errorMessage(error));
-      },
-    });
+    );
   };
+
+  const transferAccounts =
+    out && received
+      ? `${accountName(accounts.get(out.account_id))} e ${accountName(accounts.get(received.account_id))}`
+      : "as duas contas";
 
   return (
     <>
       <Modal
         open={open}
         onClose={close}
-        title="Lançamento"
+        title={isTransfer ? "Transferência" : "Lançamento"}
         footer={
-          isEntry && (
-            <>
-              <Button icon={<Pencil />} onClick={() => onEdit(transaction)}>
-                Editar lançamento
-              </Button>
-              <Button variant="secondary" icon={<Trash2 />} onClick={() => setConfirming(true)}>
-                Excluir lançamento
-              </Button>
-            </>
-          )
+          <>
+            <Button icon={<Pencil />} onClick={() => onEdit(transaction)}>
+              {isTransfer ? "Editar transferência" : "Editar lançamento"}
+            </Button>
+            <Button variant="secondary" icon={<Trash2 />} onClick={() => setConfirming(true)}>
+              {isTransfer ? "Excluir transferência" : "Excluir lançamento"}
+            </Button>
+          </>
         }
       >
         <p className="flex items-center gap-1.5 text-label text-ink-muted">
@@ -119,6 +151,11 @@ export function TransactionDetail({
         <p className="mt-1 wrap-break-word text-body font-bold text-ink">
           {transaction.description}
         </p>
+        {isTransfer && (
+          <p className="mt-1 text-small text-ink-muted">
+            Não conta como gasto nem como receita: só move dinheiro entre as suas contas.
+          </p>
+        )}
 
         <dl className="mt-3 border-t border-border">
           {category && (
@@ -134,16 +171,30 @@ export function TransactionDetail({
               </span>
             </DetailRow>
           )}
-          <DetailRow label="Conta">
-            <span className="min-w-0 wrap-break-word">
-              {account?.name ?? "Conta não encontrada"}
-              {account?.archived && ARCHIVED_SUFFIX}
-            </span>
-          </DetailRow>
+          {isTransfer ? (
+            <>
+              <DetailRow label="Sai de">
+                <span className="min-w-0 wrap-break-word">
+                  {out ? accountName(accounts.get(out.account_id)) : "…"}
+                </span>
+              </DetailRow>
+              <DetailRow label="Entra em">
+                <span className="min-w-0 wrap-break-word">
+                  {received ? accountName(accounts.get(received.account_id)) : "…"}
+                </span>
+              </DetailRow>
+            </>
+          ) : (
+            <DetailRow label="Conta">
+              <span className="min-w-0 wrap-break-word">
+                {accountName(accounts.get(transaction.account_id))}
+              </span>
+            </DetailRow>
+          )}
           <DetailRow label="Data">{dayLabel(transaction.date)}</DetailRow>
-          {transaction.installment_number && transaction.installment_count && (
+          {number !== null && count !== null && (
             <DetailRow label="Parcela">
-              {transaction.installment_number} de {transaction.installment_count}
+              {number} de {count}
             </DetailRow>
           )}
           {transaction.notes && (
@@ -156,15 +207,32 @@ export function TransactionDetail({
         </dl>
       </Modal>
 
-      <ConfirmDialog
-        open={open && confirming}
-        title="Excluir este lançamento?"
-        description="Ele sai da lista e o saldo da conta volta a ser o de antes dele. Não dá para desfazer."
-        confirmLabel="Excluir lançamento"
-        loading={remove.isPending}
-        onConfirm={confirmDelete}
-        onCancel={() => setConfirming(false)}
-      />
+      {asksScope ? (
+        <ScopeDialog
+          open={open && confirming}
+          action="delete"
+          number={number}
+          count={count}
+          following={following}
+          pending={pendingScope}
+          onChoose={confirmDelete}
+          onCancel={() => setConfirming(false)}
+        />
+      ) : (
+        <ConfirmDialog
+          open={open && confirming}
+          title={isTransfer ? "Excluir esta transferência?" : "Excluir este lançamento?"}
+          description={
+            isTransfer
+              ? `Ela sai das duas contas, ${transferAccounts}, e os dois saldos voltam a ser os de antes. Não dá para desfazer.`
+              : "Ele sai da lista e o saldo da conta volta a ser o de antes dele. Não dá para desfazer."
+          }
+          confirmLabel={isTransfer ? "Excluir transferência" : "Excluir lançamento"}
+          loading={remove.isPending}
+          onConfirm={() => confirmDelete()}
+          onCancel={() => setConfirming(false)}
+        />
+      )}
     </>
   );
 }

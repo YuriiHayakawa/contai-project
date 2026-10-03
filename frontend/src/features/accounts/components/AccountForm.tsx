@@ -175,6 +175,10 @@ export function AccountForm({ id, account, onSubmit, onDirtyChange }: AccountFor
             error={errors.dueDay?.message}
             {...field("dueDay")}
           />
+          <p className="col-span-2 text-small text-ink-muted">
+            Compras a partir do dia do fechamento já vão para a fatura seguinte; o vencimento é o
+            dia de pagar. Ex.: fecha dia 3 e vence dia 10.
+          </p>
         </div>
       )}
     </form>

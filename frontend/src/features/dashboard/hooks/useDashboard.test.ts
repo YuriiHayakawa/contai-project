@@ -20,6 +20,7 @@ const getSummary = vi.mocked(dashboardService.getSummary);
 const getCategories = vi.mocked(dashboardService.getCategories);
 const getTrend = vi.mocked(dashboardService.getTrend);
 const getTopExpenses = vi.mocked(dashboardService.getTopExpenses);
+const getCards = vi.mocked(dashboardService.getCards);
 const countTransactions = vi.mocked(transactionsService.countTransactions);
 
 function summaryOf(month: string, expense: number): DashboardSummary {
@@ -64,6 +65,7 @@ function answerEveryMonth(): void {
   getCategories.mockImplementation((month) => Promise.resolve(categoriesOf(month, 397_240)));
   getTrend.mockImplementation((month) => Promise.resolve(trendOf(month)));
   getTopExpenses.mockImplementation((month) => Promise.resolve(topOf(month)));
+  getCards.mockResolvedValue({ items: [] });
   countTransactions.mockResolvedValue(42);
 }
 

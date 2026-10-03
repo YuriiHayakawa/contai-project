@@ -2,6 +2,7 @@
 import { api } from "../../../lib/api-client";
 import type { YearMonth } from "../../../lib/dates";
 import type {
+  DashboardCards,
   DashboardCategories,
   DashboardSummary,
   DashboardTopExpenses,
@@ -38,4 +39,9 @@ export function getTopExpenses(
     params: { month, limit: TOP_EXPENSES_LIMIT },
     signal,
   });
+}
+
+/** Fatura e parcelas futuras de cada cartão, como estavam no mês exibido. */
+export function getCards(month: YearMonth, signal?: AbortSignal): Promise<DashboardCards> {
+  return api.get<DashboardCards>("/dashboard/cards", { params: { month }, signal });
 }

@@ -1,6 +1,16 @@
 // Chamadas HTTP de lançamentos. Só os hooks desta feature chamam este módulo.
 import { api } from "../../../lib/api-client";
-import type { Transaction, TransactionFilters, TransactionInput, TransactionPage } from "../types";
+import type {
+  EditScope,
+  InstallmentsInput,
+  Transaction,
+  TransactionFilters,
+  TransactionInput,
+  TransactionList,
+  TransactionPage,
+  TransactionPatch,
+  TransferInput,
+} from "../types";
 
 /** Uma página de lançamentos, da data mais nova para a mais antiga. */
 export function listTransactions(
@@ -21,12 +31,36 @@ export function createTransaction(input: TransactionInput): Promise<Transaction>
   return api.post<Transaction>("/transactions", input);
 }
 
-export function updateTransaction(id: string, input: TransactionInput): Promise<Transaction> {
-  return api.patch<Transaction>(`/transactions/${id}`, input);
+/** Compra parcelada no cartão: devolve as parcelas, em ordem. */
+export async function createInstallments(input: InstallmentsInput): Promise<Transaction[]> {
+  const { items } = await api.post<TransactionList>("/transactions/installments", input);
+  return items;
 }
 
-export function deleteTransaction(id: string): Promise<void> {
-  return api.delete(`/transactions/${id}`);
+/** Transferência entre contas próprias: devolve a linha de saída e a de entrada. */
+export async function createTransfer(input: TransferInput): Promise<Transaction[]> {
+  const { items } = await api.post<TransactionList>("/transactions/transfers", input);
+  return items;
+}
+
+/**
+ * Edita um lançamento e devolve o que mudou: uma linha, ou várias quando a edição alcança as
+ * parcelas seguintes. Em transferência, valor, data e descrição mudam nos dois lados.
+ */
+export async function updateTransaction(
+  id: string,
+  input: TransactionPatch,
+  scope: EditScope = "single",
+): Promise<Transaction[]> {
+  const body = await api.patch<Transaction | TransactionList>(`/transactions/${id}`, input, {
+    params: { scope },
+  });
+  return "items" in body ? body.items : [body];
+}
+
+/** Exclui um lançamento; a transferência sai dos dois lados. */
+export function deleteTransaction(id: string, scope: EditScope = "single"): Promise<void> {
+  return api.delete(`/transactions/${id}`, { params: { scope } });
 }
 
 // ---------- última conta usada

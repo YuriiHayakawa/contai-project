@@ -89,3 +89,16 @@ export function formatCompactBRL(cents: number): string {
   if (reais >= 1_000) return `${sign}R$${NBSP}${compactFormat.format(reais / 1_000)}${NBSP}mil`;
   return `${sign}R$${NBSP}${reais}`;
 }
+
+/**
+ * Divide um total em parcelas iguais; os centavos que sobram vão para a primeira, e a soma é
+ * sempre o total. É a mesma regra do servidor: a prévia mostra o que será gravado.
+ */
+export function splitInstallments(totalCents: number, count: number): number[] {
+  if (!Number.isInteger(totalCents) || totalCents <= 0 || !Number.isInteger(count) || count < 1) {
+    return [];
+  }
+  const base = Math.floor(totalCents / count);
+  const remainder = totalCents - base * count;
+  return Array.from({ length: count }, (_, index) => (index === 0 ? base + remainder : base));
+}
