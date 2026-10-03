@@ -1,7 +1,7 @@
 """Dinheiro: sempre inteiros em centavos. `float` não é usado em nenhum cálculo."""
 
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 NBSP = "\N{NO-BREAK SPACE}"
 MINUS = "\N{MINUS SIGN}"
@@ -17,6 +17,11 @@ def split_installments(total_cents: int, count: int) -> list[int]:
         raise ValueError("o número de parcelas precisa ser pelo menos 1")
     base, remainder = divmod(total_cents, count)
     return [base + remainder, *([base] * (count - 1))]
+
+
+def decimal_to_cents(value: Decimal) -> int:
+    """Um valor em reais, lido de um arquivo, em centavos. Meio centavo arredonda para cima."""
+    return int((value * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def format_brl(cents: int) -> str:

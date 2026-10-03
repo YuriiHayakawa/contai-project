@@ -12,7 +12,7 @@ Cada importador vive em `backend/app/modules/imports/importers/` e implementa tr
 
 ```python
 class Importer(Protocol):
-    format: ImportFormat
+    formats: frozenset[ImportFormat]
 
     def detect(self, head: bytes, filename: str) -> bool:
         """Diz se este importador reconhece o arquivo, pelos primeiros bytes."""
@@ -26,11 +26,13 @@ class Importer(Protocol):
 
 Regras:
 
-- `ImportContext` traz o tipo da conta de destino, o modelo de colunas (quando houver) e o
-  provedor de IA; nunca traz uma sessão de banco. Importadores não acessam o banco.
+- `ImportContext` traz o tipo da conta de destino, os modelos de colunas do usuário (pela
+  assinatura do cabeçalho) e, nos importadores que usam IA, o provedor; nunca traz uma sessão
+  de banco. Importadores não acessam o banco.
 - `extract` levanta `MappingRequired` (com a prévia do cabeçalho e das primeiras linhas) quando
-  um CSV ou planilha não tem modelo conhecido, e `ImportError` com um código quando o arquivo é
-  ilegível ou não tem transações.
+  um CSV ou planilha não tem modelo conhecido, e `ImportFailed` com um código quando o arquivo
+  é ilegível ou não tem transações. `normalize` levanta `MappingMismatch` quando o modelo de
+  colunas não lê uma data ou um valor; o serviço descarta o modelo e pede o mapeamento de novo.
 - `ProposedTransaction` tem `type`, `amount_cents` (inteiro, maior que zero), `date`,
   `description` e `external_id` opcional. Não tem categoria nem marca de duplicata.
 - O núcleo, que é o serviço de importação, faz o que é comum a todos: escolher o importador

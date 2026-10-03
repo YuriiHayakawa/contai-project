@@ -99,8 +99,10 @@ class Transaction(UUIDPrimaryKey, Timestamps, Base):
     installment_group_id: Mapped[uuid.UUID | None]
     installment_number: Mapped[int | None] = mapped_column(Integer)
     installment_count: Mapped[int | None] = mapped_column(Integer)
-    # A chave estrangeira para `imports` entra com a tabela, na migração das importações.
-    import_id: Mapped[uuid.UUID | None]
+    # Importação que criou a linha. Apagar a importação não apaga a transação.
+    import_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("imports.id", ondelete="SET NULL")
+    )
     external_id: Mapped[str | None] = mapped_column(String(255))
     # Hash de conta, data, tipo, valor e descrição normalizada.
     fingerprint: Mapped[str] = mapped_column(String(64))

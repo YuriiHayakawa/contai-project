@@ -7,6 +7,8 @@ from app.ai import models as ai_models
 from app.modules.accounts import models as accounts_models
 from app.modules.auth import models as auth_models
 from app.modules.categories import models as categories_models
+from app.modules.categorization import models as categorization_models
+from app.modules.imports import models as imports_models
 from app.modules.transactions import models as transactions_models
 from app.modules.users import models as users_models
 from app.worker import models as worker_models
@@ -16,6 +18,8 @@ __all__ = [
     "ai_models",
     "auth_models",
     "categories_models",
+    "categorization_models",
+    "imports_models",
     "transactions_models",
     "users_models",
     "worker_models",

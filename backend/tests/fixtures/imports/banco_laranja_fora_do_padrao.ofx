@@ -1,0 +1,13 @@
+<ofx>
+<signonmsgsrsv1><sonrs><status><code>0<severity>INFO</status><dtserver>30/09/2026<language>POR</sonrs></signonmsgsrsv1>
+<bankmsgsrsv1><stmttrnrs><trnuid>1<status><code>0<severity>INFO</status>
+<stmtrs><curdef>BRL
+<bankacctfrom><bankid>0888<acctid>98765<accttype>CHECKING</bankacctfrom>
+<banktranlist><dtstart>01/09/2026<dtend>30/09/2026
+<stmttrn><trntype>PAYMENT<dtposted>03/09/2026<trnamt>-1.250,00<fitid>N1001<memo>ALUGUEL IMOBILIÁRIA CENTRAL
+<stmttrn><trntype>DEP<dtposted>2026-09-07<trnamt>350,00<memo>PIX RECEBIDO MARINA D
+<stmttrn><trntype>DEBIT<dtposted>20260911230000[-3:BRT]<trnamt>-32,40<fitid>N1003<name>FARMACIA<memo>FARMÁCIA POPULAR 24H
+<stmttrn><trntype>OTHER<dtposted>20260912<trnamt>0,00<fitid>N1004<memo>SALDO ANTERIOR
+</banktranlist>
+</stmtrs></stmttrnrs></bankmsgsrsv1>
+</ofx>

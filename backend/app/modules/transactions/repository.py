@@ -193,6 +193,34 @@ class TransactionRepository:
         )
         return list(result.scalars())
 
+    async def possible_duplicates(
+        self,
+        user_id: uuid.UUID,
+        account_id: uuid.UUID,
+        *,
+        date_from: dt.date,
+        date_to: dt.date,
+        external_ids: list[str],
+    ) -> list[Transaction]:
+        """Transações da conta que podem ser as mesmas de um arquivo importado.
+
+        São as do intervalo de datas e, em qualquer data, as que têm um dos identificadores
+        externos do arquivo. Da mais antiga para a mais nova.
+        """
+        in_period = Transaction.date.between(date_from, date_to)
+        result = await self._session.execute(
+            select(Transaction)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                or_(in_period, Transaction.external_id.in_(external_ids))
+                if external_ids
+                else in_period,
+            )
+            .order_by(Transaction.date, Transaction.created_at, Transaction.id)
+        )
+        return list(result.scalars())
+
     async def count(self, user_id: uuid.UUID, filters: TransactionFilters) -> int:
         result = await self._session.execute(
             select(func.count()).select_from(Transaction).where(*_conditions(user_id, filters))

@@ -118,13 +118,21 @@ redefinir a senha ou depois de 24 horas sem erros.
 
 | Método e rota | Corpo | Resposta | Notas |
 |---------------|-------|----------|-------|
-| `POST /imports` | `multipart`: `file`, `account_id`, `kind` (`statement` ou `receipt`) | `202` com a importação em `queued` | `413`; `415 unsupported_file`; `403 ai_consent_required` para PDF ou imagem sem aceite; `429 ai_limit_reached` |
+| `POST /imports` | `multipart`: `file`, `account_id`, `kind` (`statement` ou `receipt`; padrão `statement`) | `202` com a importação em `queued` | `413`; `415 unsupported_file` (vazio, tipo não aceito pelo conteúdo ou `.xls` antigo); `422` em `account_id` para conta de outro usuário, inexistente ou arquivada; `429 rate_limited` pelo limite de envios; `403 ai_consent_required` para PDF ou imagem sem aceite; `429 ai_limit_reached` |
 | `GET /imports` | — | histórico paginado (FR-051) | |
 | `GET /imports/{id}` | — | importação; em `awaiting_mapping`, traz `mapping_preview` e a sugestão de colunas; em `awaiting_review`, traz `items`, `total_check` e `balance_check`; nos dois estados traz `expires_at` (FR-083) | é a rota consultada periodicamente pelo frontend |
-| `POST /imports/{id}/mapping` | colunas, formato de data, separador decimal, convenção de sinal | `202`, volta para `queued` | salva o modelo (FR-039) |
+| `POST /imports/{id}/mapping` | `date_column`, `description_column` e `amount_column` (ou `income_column` e `expense_column`), pela posição da coluna a partir de zero; `date_format` (`dmy`, `mdy`, `ymd`); `decimal_separator` (`,` ou `.`); `sign_convention` (`negative_is_expense` ou `positive_is_expense`) | `202`, volta para `queued` | salva o modelo (FR-039); `409 import_not_awaiting_mapping` fora de `awaiting_mapping`; `422` com o campo a corrigir. Se o modelo não ler o arquivo, a importação volta a `awaiting_mapping` com `error_code = mapping_mismatch`, sem novo envio |
 | `POST /imports/{id}/confirm` | `items`: lista de `{ id, selected, type, amount_cents, date, description, category_id, counter_account_id }` | importação em `completed` com `imported_count` | tudo em uma transação de banco (FR-046); `409` se o estado não for `awaiting_review` |
 | `POST /imports/{id}/undo` | — | importação em `undone` | remove todas as transações dela de uma vez (FR-052) |
 | `DELETE /imports/{id}` | — | `204` | descarta uma importação ainda não confirmada |
+
+A importação traz `status`, `error_code` e `error_message` (o que fazer, em português),
+`item_count`, `imported_count`, `expires_at` e `already_imported_at` (quando o mesmo arquivo já
+foi importado na conta). `mapping_preview`: `{ "columns", "rows", "suggestion" }`, com as
+primeiras linhas como estão no arquivo e o palpite no formato do corpo do mapeamento. Cada item
+de `items` traz `id`, `row_index`, `type`, `amount_cents`, `date`, `description`,
+`suggested_category_id`, `category_source`, `suggested_counter_account_id`, `duplicate_status`,
+`duplicate_of_id` e `selected_by_default`.
 
 `total_check`: `{ "document_total_cents", "extracted_total_cents", "matches" }` ou nulo.
 `balance_check`: `{ "bank_balance_cents", "bank_balance_date", "computed_balance_cents", "matches" }`

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?OFX OFXHEADER="200" VERSION="211" SECURITY="NONE" OLDFILEUID="NONE" NEWFILEUID="NONE"?>
+<OFX>
+  <SIGNONMSGSRSV1>
+    <SONRS>
+      <STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>
+      <DTSERVER>20261003</DTSERVER>
+      <LANGUAGE>POR</LANGUAGE>
+    </SONRS>
+  </SIGNONMSGSRSV1>
+  <CREDITCARDMSGSRSV1>
+    <CCSTMTTRNRS>
+      <TRNUID>1</TRNUID>
+      <STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>
+      <CCSTMTRS>
+        <CURDEF>BRL</CURDEF>
+        <CCACCTFROM><ACCTID>XXXX-1234</ACCTID></CCACCTFROM>
+        <BANKTRANLIST>
+          <DTSTART>20260903</DTSTART>
+          <DTEND>20261002</DTEND>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260912</DTPOSTED>
+            <TRNAMT>-59.90</TRNAMT>
+            <FITID>a1b2c3d4-0001</FITID>
+            <NAME>Livraria Letras &amp; Cia</NAME>
+            <MEMO>Livraria Letras &amp; Cia</MEMO>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260918</DTPOSTED>
+            <TRNAMT>-7.50</TRNAMT>
+            <FITID>a1b2c3d4-0002</FITID>
+            <NAME>Café da Esquina</NAME>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20260918</DTPOSTED>
+            <TRNAMT>-7.50</TRNAMT>
+            <FITID>a1b2c3d4-0003</FITID>
+            <NAME>Café da Esquina</NAME>
+          </STMTTRN>
+          <STMTTRN>
+            <TRNTYPE>CREDIT</TRNTYPE>
+            <DTPOSTED>20260925</DTPOSTED>
+            <TRNAMT>59.90</TRNAMT>
+            <FITID>a1b2c3d4-0004</FITID>
+            <NAME>Estorno Livraria Letras &amp; Cia</NAME>
+          </STMTTRN>
+        </BANKTRANLIST>
+        <LEDGERBAL>
+          <BALAMT>-15.00</BALAMT>
+          <DTASOF>20261002</DTASOF>
+        </LEDGERBAL>
+      </CCSTMTRS>
+    </CCSTMTTRNRS>
+  </CREDITCARDMSGSRSV1>
+</OFX>
