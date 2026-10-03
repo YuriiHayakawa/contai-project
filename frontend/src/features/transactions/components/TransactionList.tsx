@@ -9,6 +9,7 @@ import { errorMessage } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
 import { dayLabel, type ISODate } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
+import { ACCOUNT_TYPE_ICONS } from "../../accounts/account-type-icons";
 import type { Account } from "../../accounts/types";
 import type { CategoryOption } from "../../categories/hooks/useCategories";
 import type { Transaction } from "../types";
@@ -41,10 +42,22 @@ interface DayGroup {
 interface TransactionRowProps {
   transaction: Transaction;
   account: Account | undefined;
-  /** Em transferência: a conta do outro lado, quando a outra linha já foi carregada. */
-  otherAccount?: Account;
   category: CategoryOption | undefined;
   onSelect: (transaction: Transaction) => void;
+}
+
+interface TransferRowProps {
+  /** A linha que sai da conta de origem. */
+  out: Transaction;
+  /** A linha que entra na conta de destino. */
+  received: Transaction;
+  accounts: ReadonlyMap<string, Account>;
+  onSelect: (transaction: Transaction) => void;
+}
+
+interface TransferLegProps {
+  side: Transaction;
+  account: Account | undefined;
 }
 
 function groupByDay(transactions: readonly Transaction[]): DayGroup[] {
@@ -73,30 +86,108 @@ export function signedAmount(transaction: Transaction): string {
   return formatBRL(transaction.amount_cents, { sign: "never" });
 }
 
+/** Um lado de transferência visto da própria conta: `−` na que sai e `+` na que entra. */
+function transferSideAmount(side: Transaction): string {
+  const cents = side.transfer_direction === "out" ? -side.amount_cents : side.amount_cents;
+  return formatBRL(cents, { sign: "always" });
+}
+
+const OTHER_ACCOUNT = "outra conta";
+
+const transferVerb = (side: Transaction): string =>
+  side.transfer_direction === "out" ? "Saiu de" : "Entrou em";
+
+/** Com um lado só na tela: "saiu de Investimento" ou "entrou em Conta Principal". */
+function transferSideLabel(side: Transaction, account: Account | undefined): string {
+  return `${transferVerb(side).toLowerCase()} ${account?.name ?? OTHER_ACCOUNT}`;
+}
+
+function TransferSeal({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex size-9 items-center justify-center rounded-full bg-bg-sunken text-ink-muted",
+        className,
+      )}
+    >
+      <ArrowLeftRight className="size-4.5" />
+    </span>
+  );
+}
+
 function countLabel(loaded: number, total: number): string {
   const noun = total === 1 ? "lançamento" : "lançamentos";
   return loaded < total ? `Mostrando ${loaded} de ${total} ${noun}` : `${total} ${noun}`;
 }
 
-function TransactionRow({
-  transaction,
-  account,
-  otherAccount,
-  category,
-  onSelect,
-}: TransactionRowProps) {
+/**
+ * Os dois lados de uma transferência em uma linha só, como um trajeto de mapa: a conta de onde
+ * saiu e a em que entrou são duas paradas ligadas por um pontilhado, cada uma com o seu sinal.
+ * A linha abre o detalhe da transferência.
+ */
+function TransferRow({ out, received, accounts, onSelect }: TransferRowProps) {
+  return (
+    <li className="border-b border-border last:border-b-0">
+      <button
+        type="button"
+        onClick={() => onSelect(out)}
+        className={cn(
+          "grid min-h-16 w-full grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5",
+          "px-3 py-2.5 text-left transition-colors duration-fast ease-out hover:bg-bg-sunken",
+        )}
+      >
+        <TransferSeal className="row-span-2" />
+        <span className="line-clamp-2 min-w-0 pl-2 wrap-break-word text-body font-bold text-ink">
+          <span className="sr-only">Transferência: </span>
+          {out.description}
+        </span>
+        <span className="relative grid min-w-0 gap-3 pl-2 text-small text-ink-muted">
+          {/* O pontilhado passa por trás das paradas, de um centro ao outro. */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-2.75 left-4.5 border-l-2 border-dotted border-ink-subtle"
+          />
+          <TransferLeg side={out} account={accounts.get(out.account_id)} />
+          <TransferLeg side={received} account={accounts.get(received.account_id)} />
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/** Uma parada do trajeto: o ícone da conta, o nome e o valor com sinal, alinhado à direita. */
+function TransferLeg({ side, account }: TransferLegProps) {
+  const Icon = account ? ACCOUNT_TYPE_ICONS[account.type] : undefined;
+  const isOut = side.transfer_direction === "out";
+  return (
+    <span className="grid grid-cols-[1.375rem_minmax(0,1fr)_auto] items-center gap-2">
+      {/* A origem é vazada e o destino, em azul: o dinheiro chega lá. */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "relative flex size-5.5 items-center justify-center rounded-full border-[1.5px]",
+          isOut
+            ? "border-border-strong bg-surface text-ink-muted"
+            : "border-primary bg-primary-soft text-primary",
+        )}
+      >
+        {Icon && <Icon className="size-3" />}
+      </span>
+      <span className="truncate">
+        {transferVerb(side)} {account?.name ?? OTHER_ACCOUNT}
+      </span>
+      <span className="money text-money-sm">{transferSideAmount(side)}</span>
+    </span>
+  );
+}
+
+function TransactionRow({ transaction, account, category, onSelect }: TransactionRowProps) {
   const isTransfer = transaction.type === "transfer";
-  // Transferência diz de onde saiu e para onde foi o dinheiro.
-  let route: string | undefined;
-  if (isTransfer && account && otherAccount) {
-    route =
-      transaction.transfer_direction === "out"
-        ? `${account.name} → ${otherAccount.name}`
-        : `${otherAccount.name} → ${account.name}`;
-  }
   const details = [
     isTransfer ? "Transferência" : category?.category.name,
-    route ?? account?.name,
+    // Só um lado da transferência está na tela: diz o que aconteceu nesta conta.
+    isTransfer ? transferSideLabel(transaction, account) : account?.name,
     transaction.installment_number && transaction.installment_count
       ? `${transaction.installment_number}/${transaction.installment_count}`
       : null,
@@ -113,12 +204,7 @@ function TransactionRow({
         )}
       >
         {isTransfer ? (
-          <span
-            aria-hidden="true"
-            className="flex size-9 items-center justify-center rounded-full bg-bg-sunken text-ink-muted"
-          >
-            <ArrowLeftRight className="size-4.5" />
-          </span>
+          <TransferSeal />
         ) : (
           <CategoryChip
             color={category?.category.color ?? "ardosia"}
@@ -139,7 +225,7 @@ function TransactionRow({
             isTransfer && "text-ink-muted",
           )}
         >
-          {signedAmount(transaction)}
+          {isTransfer ? transferSideAmount(transaction) : signedAmount(transaction)}
         </span>
       </button>
     </li>
@@ -208,7 +294,8 @@ export function TransactionList({
   if (transactions.length === 0) return empty;
 
   const groups = groupByDay(transactions);
-  // Os dois lados de cada transferência que estão na tela, para a linha mostrar o caminho.
+  // Os dois lados de cada transferência que estão na tela. Com os dois carregados, a
+  // transferência vira uma linha só, no lugar do primeiro deles.
   const transferSides = new Map<string, Transaction[]>();
   for (const transaction of transactions) {
     if (!transaction.transfer_group_id) continue;
@@ -216,12 +303,34 @@ export function TransactionList({
     sides.push(transaction);
     transferSides.set(transaction.transfer_group_id, sides);
   }
-  const otherSide = (transaction: Transaction): Account | undefined => {
-    if (!transaction.transfer_group_id) return undefined;
-    const other = transferSides
-      .get(transaction.transfer_group_id)
-      ?.find((side) => side.id !== transaction.id);
-    return other ? accounts.get(other.account_id) : undefined;
+
+  const renderRow = (transaction: Transaction): ReactNode => {
+    const sides = transaction.transfer_group_id
+      ? transferSides.get(transaction.transfer_group_id)
+      : undefined;
+    const out = sides?.find((side) => side.transfer_direction === "out");
+    const received = sides?.find((side) => side.transfer_direction === "in");
+    if (sides && out && received) {
+      if (transaction.id !== sides[0]?.id) return null;
+      return (
+        <TransferRow
+          key={transaction.id}
+          out={out}
+          received={received}
+          accounts={accounts}
+          onSelect={onSelect}
+        />
+      );
+    }
+    return (
+      <TransactionRow
+        key={transaction.id}
+        transaction={transaction}
+        account={accounts.get(transaction.account_id)}
+        category={transaction.category_id ? categories.get(transaction.category_id) : undefined}
+        onSelect={onSelect}
+      />
+    );
   };
 
   return (
@@ -255,20 +364,7 @@ export function TransactionList({
                 </p>
               )}
             </header>
-            <ul>
-              {group.transactions.map((transaction) => (
-                <TransactionRow
-                  key={transaction.id}
-                  transaction={transaction}
-                  account={accounts.get(transaction.account_id)}
-                  otherAccount={otherSide(transaction)}
-                  category={
-                    transaction.category_id ? categories.get(transaction.category_id) : undefined
-                  }
-                  onSelect={onSelect}
-                />
-              ))}
-            </ul>
+            <ul>{group.transactions.map(renderRow)}</ul>
           </section>
         );
       })}
