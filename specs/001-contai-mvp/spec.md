@@ -218,7 +218,8 @@ do mês.
 5. **Given** uma fatura de cartão, **When** o usuário registra o pagamento a partir da conta
    corrente, **Then** o pagamento é uma transferência e não conta como nova despesa.
 6. **Given** uma parcela de uma compra parcelada, **When** o usuário a edita ou exclui,
-   **Then** escolhe se a mudança vale só para aquela parcela ou para todas as parcelas da compra.
+   **Then** escolhe se a mudança vale só para aquela parcela ou para ela e as parcelas seguintes
+   da compra; as parcelas anteriores não mudam.
 7. **Given** uma compra no cartão feita em 28 de setembro, cuja fatura vence em novembro,
    **When** o usuário vê o painel de setembro, **Then** a compra conta nas saídas de setembro, e
    não nas de outubro ou novembro.
@@ -442,7 +443,11 @@ os 7 dias, não consegue mais entrar.
   os códigos, pede a desativação das duas etapas pelo e-mail e aguarda 72 horas.
 - **Pedido de desativação das duas etapas feito por outra pessoa**: o dono da conta recebe os
   avisos por e-mail e cancela o pedido dentro das 72 horas; as duas etapas continuam ativas.
-- **Dia de fechamento 29, 30 ou 31** em mês mais curto: vale o último dia do mês.
+- **Dia de fechamento ou de vencimento 29, 30 ou 31** em mês mais curto: vale o último dia do
+  mês.
+- **Compra no próprio dia de fechamento**: entra na fatura seguinte.
+- **Parcela em dia que não existe no mês** (compra em 31 de janeiro): a parcela cai no último
+  dia do mês (28 ou 29 de fevereiro), e as seguintes voltam ao dia 31 quando ele existe.
 - **Parcelas com divisão não exata**: os centavos de diferença vão para a primeira parcela, e a
   soma das parcelas é sempre igual ao total.
 - **Transação com data futura** (parcelas): aparece no mês a que pertence e nas parcelas
@@ -588,7 +593,8 @@ os 7 dias, não consegue mais entrar.
   DEVE contar como despesa no mês da data da compra (cada parcela no mês da sua própria data), e
   não no mês de vencimento da fatura.
 - **FR-032**: Ao editar ou excluir uma parcela, o usuário DEVE escolher se a mudança vale só
-  para aquela parcela ou para todas as parcelas da compra.
+  para aquela parcela ou para ela e as parcelas seguintes da compra. As parcelas anteriores
+  nunca mudam, porque podem estar em faturas já fechadas ou pagas.
 - **FR-033**: O usuário DEVE poder registrar transferências entre suas contas, inclusive o
   pagamento da fatura do cartão; transferências DEVEM alterar os saldos das duas contas e NÃO
   DEVEM contar como receita nem como despesa em nenhum relatório ou resposta.
