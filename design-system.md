@@ -460,6 +460,10 @@ Feitos com Recharts, sempre dentro de um cartão (`--surface`).
 
 - **A forma vem antes da cor.** Um número sozinho é um número, não um gráfico: o resumo do mês
   é `money-hero` com marca-texto, mais entradas e saídas em `money-lg`.
+- **Saídas negativas não levam sinal de menos.** Em um mês com mais estornos do que gastos, as
+  saídas aparecem pelo valor, seguido de "a seu favor, de estornos" em `small` `--ink-muted`:
+  no resumo do mês, no resumo em texto, na dica e na tabela da evolução. No gráfico, esse mês
+  fica sem barra de saídas. O cálculo não muda.
 - **Texto usa tokens de texto.** Rótulos, valores, eixos e legendas ficam em `--ink`,
   `--ink-muted` ou `--ink-subtle`. A cor fica só na marca.
 - **Marcas finas**: barras com no máximo 24px de espessura, ponta arredondada em 4px e base

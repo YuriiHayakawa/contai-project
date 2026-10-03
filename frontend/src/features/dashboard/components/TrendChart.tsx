@@ -4,6 +4,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 import { monthLabel, monthName, type YearMonth } from "../../../lib/dates";
 import { formatBRL, formatCompactBRL } from "../../../lib/money";
+import { spendingText } from "../spending";
 import type { MonthTotals } from "../types";
 
 export interface TrendChartProps {
@@ -53,7 +54,7 @@ function summaryOf(trend: readonly MonthTotals[], selected: MonthTotals | undefi
   if (!selected) return range;
   return (
     `${range} Em ${monthName(selected.month)}: entradas de ${formatBRL(selected.income_cents)} ` +
-    `e saídas de ${formatBRL(selected.expense_cents)}.`
+    `e saídas de ${spendingText(selected.expense_cents)}.`
   );
 }
 
@@ -66,7 +67,9 @@ function TrendTooltip({ item }: TrendTooltipProps) {
         <dt>Entradas</dt>
         <dd className="money text-right text-money-sm text-ink">{formatBRL(item.income_cents)}</dd>
         <dt>Saídas</dt>
-        <dd className="money text-right text-money-sm text-ink">{formatBRL(item.expense_cents)}</dd>
+        <dd className="money text-right text-money-sm text-ink">
+          {spendingText(item.expense_cents)}
+        </dd>
         <dt>Saldo</dt>
         <dd className="money text-right text-money-sm text-ink">{formatBRL(item.net_cents)}</dd>
       </dl>
@@ -82,14 +85,16 @@ function TrendTooltip({ item }: TrendTooltipProps) {
 export function TrendChart({ trend, month, onSelectMonth }: TrendChartProps) {
   const reducedMotion = useReducedMotion();
   const selected = trend.find((item) => item.month === month);
-  const largest = Math.max(...trend.flatMap((item) => [item.income_cents, item.expense_cents]), 0);
+  // Saídas negativas, de um mês com mais estornos do que gastos, não têm barra: o valor
+  // aparece por escrito, no resumo, na dica e na tabela.
+  const data = trend.map((item) => ({ ...item, expense_cents: Math.max(item.expense_cents, 0) }));
+  const largest = Math.max(...data.flatMap((item) => [item.income_cents, item.expense_cents]), 0);
 
   if (largest === 0) {
     return <p className="text-body text-ink-muted">Sem entradas nem saídas nestes meses.</p>;
   }
 
   const ticks = axisTicks(largest);
-  const data = trend.map((item) => ({ ...item }));
 
   const renderMonthTick = ({ x, y, payload }: MonthTickProps) => {
     if (!payload) return null;
@@ -229,7 +234,7 @@ export function TrendChart({ trend, month, onSelectMonth }: TrendChartProps) {
                   </button>
                 </th>
                 <td className="money py-2 text-right">{formatBRL(item.income_cents)}</td>
-                <td className="money py-2 text-right">{formatBRL(item.expense_cents)}</td>
+                <td className="money py-2 text-right">{spendingText(item.expense_cents)}</td>
               </tr>
             ))}
           </tbody>

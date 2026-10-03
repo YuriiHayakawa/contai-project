@@ -285,7 +285,8 @@ no início da implementação.
   o "Outros" não ensina nada. Ao lançar à mão, a categoria escolhida sempre vira regra.
   Para uma entrada, vale também a regra da compra original: a regra de categoria de despesa
   da mesma descrição, ou da descrição sem o prefixo de estorno ("estorno", "est", "reembolso",
-  "devolucao", "cancelamento", seguidos ou não de "de", "da", "do" ou "compra"). A entrada vem
+  "devolucao", "cancelamento", seguidos ou não de "de", "da", "do" ou "compra"). O prefixo é a
+  primeira palavra, inteira: "estacionamento" não começa com o prefixo "est". A entrada vem
   então sugerida como estorno, na categoria da compra. A regra da própria descrição do estorno,
   quando existe, vem antes. A IA não sugere estorno: para ela, receita vai com categoria de
   receita.

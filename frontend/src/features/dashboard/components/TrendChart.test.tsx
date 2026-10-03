@@ -68,6 +68,25 @@ describe("TrendChart", () => {
     expect(onSelectMonth).toHaveBeenCalledWith("2026-06");
   });
 
+  it("saídas negativas por estornos aparecem como dinheiro a favor, sem sinal de menos", () => {
+    // Outubro só teve o estorno de uma compra de setembro.
+    const withRefund: MonthTotals[] = [
+      ...trend.slice(-1),
+      { month: "2026-10", income_cents: 0, expense_cents: -4_590, net_cents: 4_590 },
+    ];
+    render(<TrendChart trend={withRefund} month="2026-10" onSelectMonth={vi.fn()} />);
+
+    expect(screen.getByRole("img")).toHaveAccessibleName(
+      "Entradas e saídas de setembro a outubro de 2026. " +
+        "Em outubro: entradas de R$ 0,00 e saídas de R$ 45,90 a seu favor, de estornos.",
+    );
+    const rows = within(screen.getByRole("table", { hidden: true })).getAllByRole("row", {
+      hidden: true,
+    });
+    expect(rows.at(-1)).toHaveTextContent("OutubroR$ 0,00R$ 45,90 a seu favor, de estornos");
+    expect(rows.at(-1)).not.toHaveTextContent("−");
+  });
+
   it("sem entradas nem saídas nos meses, mostra a frase no lugar dos eixos", () => {
     const empty = trend.map((item) => ({
       ...item,

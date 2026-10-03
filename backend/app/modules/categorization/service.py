@@ -77,7 +77,8 @@ class CategorizationAnswer(BaseModel):
 def without_refund_prefix(description_normalized: str) -> str | None:
     """A descrição da compra a que um estorno se refere, ou `None` se ela não começa como um.
 
-    "estorno de compra livraria letras" vira "livraria letras".
+    "estorno de compra livraria letras" vira "livraria letras". O prefixo é a primeira palavra,
+    inteira: "estacionamento" não começa com o prefixo "est".
     """
     words = description_normalized.split()
     if not words or words[0] not in REFUND_PREFIXES:

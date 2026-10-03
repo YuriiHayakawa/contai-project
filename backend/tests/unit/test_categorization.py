@@ -366,10 +366,46 @@ async def test_a_refund_uses_the_rule_of_the_original_purchase(
         ("estorno de compra", None),
         ("estornos diversos", None),
         ("", None),
+        # O prefixo é uma palavra inteira, no começo: palavras que só começam igual não contam.
+        ("estacionamento shopping centro", None),
+        ("estetica bela vida", None),
+        ("estrela posto", None),
+        ("reembolsos empresa", None),
+        ("devolucoes loja", None),
+        ("cancelamentos assinatura", None),
+        ("est", None),
+        ("posto est livraria", None),
+        ("restaurante est", None),
     ],
 )
 def test_without_refund_prefix(description: str, purchase: str | None) -> None:
     assert without_refund_prefix(description) == purchase
+
+
+async def test_a_word_that_only_starts_like_a_refund_prefix_is_not_a_refund(
+    session: AsyncSession, user_a: User, categories: Categories, fake_llm: FakeLLMProvider
+) -> None:
+    service = CategorizationService(session)
+    # Regras de compras cujas descrições "sobrariam" se "est" fosse cortado de dentro da palavra.
+    for description in ("acionamento shopping centro", "shopping centro", "rela posto"):
+        await service.learn(
+            user_a.id,
+            description_normalized=description,
+            category_id=categories[EXPENSE, "Transporte"].id,
+        )
+    fake_llm.queue_structured_error(LLMUnavailable("fora do ar"))
+
+    suggestions = await _suggest(
+        session,
+        user_a,
+        _line("estacionamento shopping centro", INCOME),
+        _line("estrela posto", INCOME),
+        _line("est shopping centro", INCOME),
+    )
+
+    outros = (categories[INCOME, "Outros"].id, FALLBACK)
+    # Só a última começa com o prefixo "est" como palavra inteira: é o estorno da compra.
+    assert suggestions == [outros, outros, (categories[EXPENSE, "Transporte"].id, USER_RULE)]
 
 
 async def test_the_refund_prefix_is_only_ignored_for_inflows(
