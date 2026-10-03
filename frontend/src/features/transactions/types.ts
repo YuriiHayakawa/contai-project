@@ -75,6 +75,14 @@ export interface TransactionList {
   items: Transaction[];
 }
 
+/** No "Pagar fatura": o que se deve no cartão, para o formulário explicar o valor sugerido. */
+export interface InvoicePaymentContext {
+  /** A última fatura fechada que ainda não foi paga; sem ela, a atual ainda não fechou. */
+  closedInvoice: { dueDate: ISODate; amountCents: number } | null;
+  /** Tudo o que se deve no cartão hoje. */
+  totalDueCents: number;
+}
+
 /**
  * O que já vem preenchido ao abrir a folha de lançamento, como no "Pagar fatura" de um cartão:
  * uma transferência para o cartão, com o valor da fatura.
@@ -85,6 +93,7 @@ export interface TransactionPreset {
   description?: string;
   fromAccountId?: string;
   toAccountId?: string;
+  invoicePayment?: InvoicePaymentContext;
 }
 
 /** Filtros de `GET /transactions`: só voltam os lançamentos que atendem a todos. */

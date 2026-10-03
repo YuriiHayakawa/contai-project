@@ -3,13 +3,14 @@ import { ArrowDown, Info } from "lucide-react";
 import { useEffect, useId, useState, type RefObject } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 
+import { Button } from "../../../components/ui/Button";
 import { MoneyInput } from "../../../components/ui/MoneyInput";
 import { Notice } from "../../../components/ui/Notice";
 import { SegmentedControl } from "../../../components/ui/SegmentedControl";
 import { Select, type SelectOption } from "../../../components/ui/Select";
 import { TextField } from "../../../components/ui/TextField";
 import { errorMessage, fieldErrors } from "../../../lib/api-client";
-import { addMonthsToDate, monthLabel, today, yearMonthOf } from "../../../lib/dates";
+import { addMonthsToDate, monthLabel, shortDate, today, yearMonthOf } from "../../../lib/dates";
 import { formatBRL, splitInstallments } from "../../../lib/money";
 import type { Account } from "../../accounts/types";
 import { categoryOptions } from "../../categories/hooks/useCategories";
@@ -18,6 +19,7 @@ import { transactionSchema, type TransactionFormValues } from "../schemas";
 import { getLastUsedAccountId } from "../services/transactionsService";
 import type {
   InstallmentsInput,
+  InvoicePaymentContext,
   Transaction,
   TransactionInput,
   TransactionPreset,
@@ -55,6 +57,12 @@ export interface TransactionFormProps {
   onSubmit: (submission: TransactionSubmission) => Promise<unknown>;
   /** Avisa quando há dados digitados e não salvos, para a folha não fechar sem querer. */
   onDirtyChange?: (dirty: boolean) => void;
+}
+
+interface InvoicePaymentHintProps {
+  payment: InvoicePaymentContext;
+  amountCents: number;
+  onChooseAmount: (amountCents: number) => void;
 }
 
 interface InstallmentPreviewProps {
@@ -189,6 +197,47 @@ function InstallmentPreview({ totalCents, count, date }: InstallmentPreviewProps
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/**
+ * No "Pagar fatura": de onde vem o valor sugerido. Com uma fatura fechada em aberto, um toque
+ * troca o valor por tudo o que se deve no cartão, e outro volta para a fatura.
+ */
+function InvoicePaymentHint({ payment, amountCents, onChooseAmount }: InvoicePaymentHintProps) {
+  const { closedInvoice: closed, totalDueCents: totalDue } = payment;
+  if (!closed) {
+    return (
+      <p className="rounded-md bg-bg-sunken p-3 text-small text-ink-muted">
+        {totalDue > 0
+          ? "A fatura atual ainda não fechou. O valor é tudo o que você deve hoje neste cartão."
+          : "Você não deve nada neste cartão hoje."}
+      </p>
+    );
+  }
+  const payingAll = amountCents === totalDue;
+  return (
+    <div className="grid justify-items-start gap-2 rounded-md bg-bg-sunken p-3">
+      <p className="grid text-small">
+        <span className="text-ink">
+          Fatura fechada: falta pagar{" "}
+          <span className="money font-bold">{formatBRL(closed.amountCents)}</span>
+        </span>
+        <span className="text-ink-muted">
+          {closed.dueDate < today() ? "Venceu" : "Vence"} em {shortDate(closed.dueDate)}
+        </span>
+      </p>
+      {totalDue > closed.amountCents && (
+        <Button
+          variant="secondary"
+          onClick={() => onChooseAmount(payingAll ? closed.amountCents : totalDue)}
+        >
+          {payingAll
+            ? `Pagar só a fatura fechada: ${formatBRL(closed.amountCents)}`
+            : `Pagar tudo o que devo: ${formatBRL(totalDue)}`}
+        </Button>
+      )}
     </div>
   );
 }
@@ -347,6 +396,9 @@ export function TransactionForm({
 
   const from = byId.get(fromAccountId);
   const to = byId.get(toAccountId);
+  // O aviso do "Pagar fatura" vale enquanto o destino é o cartão que se foi pagar.
+  const invoicePayment =
+    !editing && preset?.toAccountId === toAccountId ? preset.invoicePayment : undefined;
 
   return (
     <form id={id} noValidate onSubmit={(event) => void submit(event)} className="grid gap-4">
@@ -388,6 +440,15 @@ export function TransactionForm({
 
       {isTransfer ? (
         <>
+          {invoicePayment && (
+            <InvoicePaymentHint
+              payment={invoicePayment}
+              amountCents={amountCents}
+              onChooseAmount={(next) =>
+                setValue("amountCents", next, { shouldDirty: true, shouldValidate: true })
+              }
+            />
+          )}
           <p className="flex items-start gap-2 rounded-md bg-primary-soft p-3 text-small text-ink">
             <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
             Transferência só move dinheiro entre as suas contas: não conta como gasto nem como

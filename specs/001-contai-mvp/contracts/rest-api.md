@@ -141,7 +141,7 @@ intervalo de datas (FR-059); períodos personalizados são atendidos pelo assist
 | `GET /dashboard/categories` | gastos por categoria, com subcategorias, valor e percentual (FR-056) |
 | `GET /dashboard/trend?months=6&until=YYYY-MM` | entradas e saídas por mês (FR-057) |
 | `GET /dashboard/top-expenses?limit=5` | maiores despesas do período (FR-057) |
-| `GET /dashboard/cards` | por cartão ativo: fatura atual (período, fechamento, vencimento, valor de compras menos estornos) e parcelas futuras por mês de vencimento da fatura e no total (FR-058); no mês atual a fatura é a que contém hoje, e em um mês passado, a que estava aberta no último dia dele |
+| `GET /dashboard/cards` | por cartão ativo: fatura atual (período, fechamento, vencimento, valor de compras menos estornos) e parcelas futuras por mês de vencimento da fatura e no total (FR-058); no mês atual a fatura é a que contém hoje, e em um mês passado, a que estava aberta no último dia dele. `payment`, sempre visto de hoje: `closed_invoice` (fechamento, vencimento e o que falta pagar da última fatura fechada, ou `null` se as fechadas estão pagas) e `total_due_cents` (tudo o que se deve no cartão), para o "Pagar fatura" (FR-033) |
 
 Transferências nunca entram em `income_cents` nem em `expense_cents`.
 

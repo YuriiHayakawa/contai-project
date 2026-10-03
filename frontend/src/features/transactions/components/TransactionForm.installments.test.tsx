@@ -2,7 +2,14 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Mock } from "vitest";
 
-import { addMonthsToDate, monthLabel, today, yearMonthOf } from "../../../lib/dates";
+import {
+  addDays,
+  addMonthsToDate,
+  monthLabel,
+  shortDate,
+  today,
+  yearMonthOf,
+} from "../../../lib/dates";
 import type { Account } from "../../accounts/types";
 import type { Category, CategoryTree } from "../../categories/types";
 import type { Transaction, TransactionPreset } from "../types";
@@ -79,6 +86,22 @@ function renderForm(
     </>,
   );
   return { user: userEvent.setup(), onSubmit };
+}
+
+/** O "Pagar fatura" do Cartão Nubank, que deve R$ 1.243,80 no total. */
+function payInvoice(
+  closed: { amountCents: number; dueDate: string } = {
+    amountCents: 44_090,
+    dueDate: addDays(today(), 8),
+  },
+): TransactionPreset {
+  return {
+    type: "transfer",
+    toAccountId: "acc-cartao",
+    amountCents: closed.amountCents,
+    description: "Pagamento da fatura Cartão Nubank",
+    invoicePayment: { closedInvoice: closed, totalDueCents: 124_380 },
+  };
 }
 
 const amountField = (): HTMLInputElement => screen.getByRole("textbox", { name: "Valor em reais" });
@@ -276,21 +299,88 @@ describe("TransactionForm: transferência", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('o "Pagar fatura" chega preenchido: da conta para o cartão, com o valor devido', () => {
-    renderForm({
-      preset: {
-        type: "transfer",
-        toAccountId: "acc-cartao",
-        amountCents: 124_380,
-        description: "Pagamento da fatura Cartão Nubank",
-      },
-    });
+  it('o "Pagar fatura" chega preenchido: da conta para o cartão, com a fatura fechada', () => {
+    renderForm({ preset: payInvoice() });
 
     expect(screen.getByRole("radio", { name: "Transferência" })).toBeChecked();
-    expect(amountField()).toHaveValue("1.243,80");
+    expect(amountField()).toHaveValue("440,90");
     expect(field("Sai de")).toHaveValue("acc-conta");
     expect(field("Entra em")).toHaveValue("acc-cartao");
     expect(field("Descrição")).toHaveValue("Pagamento da fatura Cartão Nubank");
+    expect(screen.getByText(`Vence em ${shortDate(addDays(today(), 8))}`)).toBeInTheDocument();
+    expect(screen.getByText(/^Fatura fechada: falta pagar/)).toHaveTextContent(
+      "Fatura fechada: falta pagar R$ 440,90",
+    );
+  });
+
+  it("fatura fechada já vencida diz que venceu", () => {
+    renderForm({ preset: payInvoice({ amountCents: 44_090, dueDate: addDays(today(), -2) }) });
+
+    expect(screen.getByText(`Venceu em ${shortDate(addDays(today(), -2))}`)).toBeInTheDocument();
+  });
+
+  it('"Pagar tudo o que devo" troca o valor pelo total em um toque, e dá para voltar', async () => {
+    const { user, onSubmit } = renderForm({ preset: payInvoice() });
+
+    await user.click(screen.getByRole("button", { name: "Pagar tudo o que devo: R$ 1.243,80" }));
+
+    expect(amountField()).toHaveValue("1.243,80");
+    await save(user);
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "transfer",
+        input: expect.objectContaining({ to_account_id: "acc-cartao", amount_cents: 124_380 }),
+      }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pagar só a fatura fechada: R$ 440,90" }));
+    expect(amountField()).toHaveValue("440,90");
+  });
+
+  it("quando a fatura fechada é tudo o que se deve, não oferece pagar tudo", () => {
+    renderForm({ preset: payInvoice({ amountCents: 124_380, dueDate: addDays(today(), 8) }) });
+
+    expect(screen.queryByRole("button", { name: /^Pagar tudo/ })).toBeNull();
+  });
+
+  it("sem fatura fechada em aberto, sugere o total e explica que a atual não fechou", () => {
+    renderForm({
+      preset: {
+        ...payInvoice(),
+        amountCents: 124_380,
+        invoicePayment: { closedInvoice: null, totalDueCents: 124_380 },
+      },
+    });
+
+    expect(amountField()).toHaveValue("1.243,80");
+    expect(
+      screen.getByText(
+        "A fatura atual ainda não fechou. O valor é tudo o que você deve hoje neste cartão.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Pagar tudo/ })).toBeNull();
+  });
+
+  it("sem nada a pagar, diz isso e deixa o valor zerado", () => {
+    renderForm({
+      preset: {
+        ...payInvoice(),
+        amountCents: undefined,
+        invoicePayment: { closedInvoice: null, totalDueCents: 0 },
+      },
+    });
+
+    expect(amountField()).toHaveValue("0,00");
+    expect(screen.getByText("Você não deve nada neste cartão hoje.")).toBeInTheDocument();
+  });
+
+  it("o aviso da fatura sai quando o destino deixa de ser o cartão", async () => {
+    const { user } = renderForm({ preset: payInvoice() });
+
+    await user.selectOptions(field("Entra em"), "acc-poupanca");
+
+    expect(screen.queryByText(/^Fatura fechada/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Pagar tudo/ })).toBeNull();
   });
 
   it("na edição, as contas aparecem e não mudam; valor e data podem mudar", () => {

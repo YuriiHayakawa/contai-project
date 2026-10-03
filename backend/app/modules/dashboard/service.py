@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import clock
 from app.core.errors import ValidationFailed
 from app.modules.accounts.models import AccountType
+from app.modules.accounts.schemas import AccountRead
 from app.modules.accounts.service import AccountService
 from app.modules.categories.models import Category
 from app.modules.categories.repository import CategoryRepository
@@ -25,7 +26,9 @@ from app.modules.dashboard.schemas import (
     CardSummary,
     CategoryBreakdown,
     CategorySpending,
+    ClosedInvoiceDue,
     FutureInstallments,
+    InvoicePayment,
     InvoiceSummary,
     MonthAmount,
     MonthTotals,
@@ -216,9 +219,46 @@ class ReportingService:
         )
         return [TransactionRead.from_transaction(transaction) for transaction in transactions]
 
+    async def invoice_payment(self, user_id: uuid.UUID, card: AccountRead) -> InvoicePayment:
+        """O que pagar no cartão hoje (FR-033): a última fatura fechada, se ainda falta pagar
+        algo dela, e o total devido.
+
+        Os pagamentos quitam primeiro as faturas mais antigas. Por isso o que falta das
+        fechadas é o total devido menos as compras da fatura aberta que já pesam no saldo.
+        """
+        if card.closing_day is None or card.due_day is None:  # pragma: no cover - CHECK
+            raise ValueError("só cartão de crédito tem fatura")
+        days = {"closing_day": card.closing_day, "due_day": card.due_day}
+        today = clock.today()
+        open_invoice = current_invoice(today, **days)
+        # O saldo só conta o que vem depois da data do saldo inicial e até hoje.
+        by_type = await self._reports.account_totals_by_type(
+            user_id,
+            card.id,
+            start=max(open_invoice.period_start, card.initial_balance_date),
+            end=today,
+        )
+        open_charges = by_type.get(TransactionType.EXPENSE, 0) - by_type.get(
+            TransactionType.INCOME, 0
+        )
+        debt = -card.balance_cents
+        # Um estorno na fatura aberta não faz a fechada passar do que se deve.
+        closed_due = min(debt - open_charges, debt)
+        closed = invoice_for(open_invoice.period_start - dt.timedelta(days=1), **days)
+        return InvoicePayment(
+            closed_invoice=ClosedInvoiceDue(
+                closing_date=closed.closing_date,
+                due_date=closed.due_date,
+                amount_cents=closed_due,
+            )
+            if closed_due > 0
+            else None,
+            total_due_cents=max(debt, 0),
+        )
+
     async def cards(self, user_id: uuid.UUID, *, reference: dt.date) -> list[CardSummary]:
         """Por cartão ativo: a fatura que contém `reference` e as parcelas das faturas
-        seguintes, por mês de vencimento e no total (FR-058)."""
+        seguintes, por mês de vencimento e no total (FR-058), e o que pagar nele hoje."""
         summaries: list[CardSummary] = []
         for card in await self._accounts.list(user_id):
             if card.type != AccountType.CREDIT_CARD:
@@ -258,6 +298,7 @@ class ReportingService:
                             for month, amount in sorted(by_month.items())
                         ],
                     ),
+                    payment=await self.invoice_payment(user_id, card),
                 )
             )
         return summaries

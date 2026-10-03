@@ -30,6 +30,10 @@ const card: CardSummary = {
       { month: "2027-02", amount_cents: 40_000 },
     ],
   },
+  payment: {
+    closed_invoice: { closing_date: "2026-09-03", due_date: "2026-09-10", amount_cents: 30_000 },
+    total_due_cents: 124_380,
+  },
 };
 
 describe("CardsCard", () => {
@@ -56,29 +60,42 @@ describe("CardsCard", () => {
     expect(screen.queryByText(/^gráfico/)).not.toBeInTheDocument();
   });
 
-  it('"Pagar fatura" abre a transferência para o cartão com o valor devido hoje', async () => {
+  it('"Pagar fatura" abre a transferência para o cartão com a última fatura fechada', async () => {
     const user = userEvent.setup();
     const onPay = vi.fn();
-    render(
-      <CardsCard
-        card={card}
-        balance={{
-          id: "acc-cartao",
-          name: "Cartão Nubank",
-          type: "credit_card",
-          balance_cents: -124_380,
-        }}
-        onPay={onPay}
-      />,
-    );
+    render(<CardsCard card={card} onPay={onPay} />);
 
     await user.click(screen.getByRole("button", { name: "Pagar fatura" }));
 
     expect(onPay).toHaveBeenCalledWith({
       type: "transfer",
       toAccountId: "acc-cartao",
-      amountCents: 124_380,
+      amountCents: 30_000,
       description: "Pagamento da fatura Cartão Nubank",
+      invoicePayment: {
+        closedInvoice: { dueDate: "2026-09-10", amountCents: 30_000 },
+        totalDueCents: 124_380,
+      },
     });
+  });
+
+  it('sem fatura fechada em aberto, "Pagar fatura" sugere tudo o que se deve', async () => {
+    const user = userEvent.setup();
+    const onPay = vi.fn();
+    render(
+      <CardsCard
+        card={{ ...card, payment: { closed_invoice: null, total_due_cents: 44_090 } }}
+        onPay={onPay}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pagar fatura" }));
+
+    expect(onPay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountCents: 44_090,
+        invoicePayment: { closedInvoice: null, totalDueCents: 44_090 },
+      }),
+    );
   });
 });

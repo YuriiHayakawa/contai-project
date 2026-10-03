@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Wallet } from "lucide-react";
 import { useId, useState } from "react";
 
@@ -12,7 +13,9 @@ import { SkeletonList } from "../../../components/ui/Skeleton";
 import { useToast } from "../../../components/ui/Toast";
 import { errorMessage } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
+import { yearMonthOf } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
+import { cardsQuery } from "../../dashboard/hooks/useDashboard";
 import { useNewTransaction } from "../../transactions/hooks/useNewTransaction";
 import { invoicePaymentPreset } from "../../transactions/presets";
 import { ACCOUNT_TYPE_ICONS } from "../account-type-icons";
@@ -91,8 +94,10 @@ function AccountEditor({ open, account, onClose }: AccountEditorProps) {
   const unarchive = useUnarchiveAccount();
   const remove = useDeleteAccount();
   const openNewTransaction = useNewTransaction();
+  const queryClient = useQueryClient();
   const [dirty, setDirty] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [loadingPayment, setLoadingPayment] = useState(false);
 
   const saving = create.isPending || update.isPending;
 
@@ -111,6 +116,24 @@ function AccountEditor({ open, account, onClose }: AccountEditorProps) {
       toast.success("Conta cadastrada.");
     }
     close();
+  };
+
+  // O valor a pagar vem do resumo de cartões, o mesmo do painel.
+  const payInvoice = async (card: Account): Promise<void> => {
+    setLoadingPayment(true);
+    try {
+      const cards = await queryClient.fetchQuery(cardsQuery(yearMonthOf()));
+      const payment = cards.items.find((item) => item.account_id === card.id)?.payment ?? {
+        closed_invoice: null,
+        total_due_cents: Math.max(0, -card.balance_cents),
+      };
+      close();
+      openNewTransaction(invoicePaymentPreset({ id: card.id, name: card.name, payment }));
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setLoadingPayment(false);
+    }
   };
 
   const toggleArchived = (target: Account): void => {
@@ -170,10 +193,8 @@ function AccountEditor({ open, account, onClose }: AccountEditorProps) {
               <Button
                 variant="ghost"
                 className="-ml-5"
-                onClick={() => {
-                  close();
-                  openNewTransaction(invoicePaymentPreset(account));
-                }}
+                loading={loadingPayment}
+                onClick={() => void payInvoice(account)}
               >
                 Pagar fatura
               </Button>

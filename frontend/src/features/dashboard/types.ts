@@ -76,6 +76,22 @@ export interface MonthAmount {
   amount_cents: number;
 }
 
+/** A última fatura fechada, com o que ainda falta pagar dela. */
+export interface ClosedInvoiceDue {
+  closing_date: ISODate;
+  due_date: ISODate;
+  /** O que se deve das faturas fechadas: as compras delas menos os pagamentos já feitos. */
+  amount_cents: number;
+}
+
+/** O que pagar no cartão hoje, seja qual for o mês exibido. */
+export interface InvoicePayment {
+  /** `null` quando as faturas fechadas já estão pagas e só a atual, ainda aberta, tem valor. */
+  closed_invoice: ClosedInvoiceDue | null;
+  /** Tudo o que se deve no cartão hoje, inclusive as compras da fatura que ainda não fechou. */
+  total_due_cents: number;
+}
+
 export interface CardSummary {
   account_id: string;
   name: string;
@@ -87,6 +103,7 @@ export interface CardSummary {
     /** Por mês de vencimento da fatura em que cada parcela cai. */
     months: MonthAmount[];
   };
+  payment: InvoicePayment;
 }
 
 export interface DashboardCards {

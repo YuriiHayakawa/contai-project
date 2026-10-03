@@ -113,6 +113,24 @@ class FutureInstallments(BaseModel):
     months: list[MonthAmount]
 
 
+class ClosedInvoiceDue(BaseModel):
+    """A última fatura fechada, com o que ainda falta pagar dela."""
+
+    closing_date: dt.date
+    due_date: dt.date
+    # O que se deve das faturas fechadas: as compras delas menos os pagamentos já feitos.
+    amount_cents: int
+
+
+class InvoicePayment(BaseModel):
+    """O que pagar no cartão hoje, seja qual for o mês pedido."""
+
+    # Null quando as faturas fechadas já estão pagas e só a atual, ainda aberta, tem valor.
+    closed_invoice: ClosedInvoiceDue | None
+    # Tudo o que se deve no cartão hoje, inclusive as compras da fatura que ainda não fechou.
+    total_due_cents: int
+
+
 class CardSummary(BaseModel):
     account_id: uuid.UUID
     name: str
@@ -120,6 +138,7 @@ class CardSummary(BaseModel):
     due_day: int
     current_invoice: InvoiceSummary
     future_installments: FutureInstallments
+    payment: InvoicePayment
 
 
 class DashboardCards(BaseModel):
