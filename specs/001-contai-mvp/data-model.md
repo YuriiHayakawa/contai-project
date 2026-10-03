@@ -235,7 +235,7 @@ Arquivar uma categoria mãe arquiva as filhas.
 | `bank_balance_cents` | BIGINT | saldo informado pelo arquivo, quando houver (FR-082) |
 | `bank_balance_date` | DATE | data do saldo informado |
 | `item_count` | inteiro | linhas propostas |
-| `imported_count` | inteiro | transações criadas na confirmação |
+| `imported_count` | inteiro | linhas salvas na confirmação; uma linha salva como transferência conta uma vez, embora crie as duas transações dela |
 | `waiting_since` | timestamptz | desde quando espera o usuário (mapeamento ou revisão); base do prazo do FR-083 |
 | `completed_at`, `undone_at` | timestamptz | |
 

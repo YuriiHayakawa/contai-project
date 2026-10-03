@@ -210,6 +210,20 @@ async def test_on_a_credit_card_positive_amounts_are_guessed_as_purchases() -> N
     assert checking.sign_convention == SignConvention.NEGATIVE_IS_EXPENSE
 
 
+async def test_the_guess_prefers_the_description_over_the_kind_of_operation() -> None:
+    # "Histórico" costuma trazer o tipo da operação ("Pix enviado"); o estabelecimento, que é o
+    # que serve para categorizar, vem em "Descrição".
+    content = "Data;Histórico;Descrição;Valor\n10/09/2026;Compra no débito;Padaria;-45,90\n"
+
+    suggestion = (await _preview(content.encode())).suggestion
+
+    assert (suggestion.date_column, suggestion.description_column, suggestion.amount_column) == (
+        0,
+        2,
+        3,
+    )
+
+
 async def test_columns_with_unknown_names_are_left_for_the_user_to_choose() -> None:
     suggestion = (await _preview(b"A;B;C\n01/09/2026;Padaria;-45,90\n")).suggestion
 

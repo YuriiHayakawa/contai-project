@@ -76,3 +76,36 @@ async def read_with(
     context = ImportContext(account_type=account_type, templates=templates or {})
     raw = await importer.extract(await stored_file(content), context)
     return importer.normalize(raw, context)
+
+
+def decisions(record: Json) -> list[Json]:
+    """A decisão final de cada linha como a revisão a sugere: as marcadas por padrão, com a
+    categoria ou a conta sugerida."""
+    return [
+        {
+            "id": item["id"],
+            "selected": item["selected_by_default"],
+            "type": item["type"],
+            "amount_cents": item["amount_cents"],
+            "date": item["date"],
+            "description": item["description"],
+            "category_id": item["suggested_category_id"],
+            "counter_account_id": item["suggested_counter_account_id"],
+        }
+        for item in record["items"]
+    ]
+
+
+async def send_confirmation(
+    client: AsyncClient, record: Json, items: list[Json] | None = None
+) -> Response:
+    """Confirma a revisão; sem `items`, do jeito que ela veio sugerida."""
+    body = {"items": decisions(record) if items is None else items}
+    return await client.post(f"{IMPORTS}/{record['id']}/confirm", json=body)
+
+
+async def confirm(client: AsyncClient, record: Json, items: list[Json] | None = None) -> Json:
+    response = await send_confirmation(client, record, items)
+    assert response.status_code == 200, response.text
+    body: Json = response.json()
+    return body

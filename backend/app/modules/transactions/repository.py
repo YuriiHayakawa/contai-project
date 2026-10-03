@@ -112,6 +112,8 @@ class TransactionRepository:
         installment_number: int | None = None,
         installment_count: int | None = None,
         source: TransactionSource = TransactionSource.MANUAL,
+        import_id: uuid.UUID | None = None,
+        external_id: str | None = None,
     ) -> Transaction:
         transaction = Transaction(
             user_id=user_id,
@@ -130,6 +132,8 @@ class TransactionRepository:
             installment_number=installment_number,
             installment_count=installment_count,
             source=source,
+            import_id=import_id,
+            external_id=external_id,
             # O instante vem do relógio da aplicação: é ele que ordena os lançamentos do dia.
             created_at=created_at,
             updated_at=created_at,
@@ -192,6 +196,30 @@ class TransactionRepository:
             .order_by(Transaction.transfer_direction.desc())
         )
         return list(result.scalars())
+
+    async def delete_by_import(self, user_id: uuid.UUID, import_id: uuid.UUID) -> int:
+        """Apaga, de uma vez, todas as transações criadas por uma importação (FR-052)."""
+        result = await self._session.execute(
+            delete(Transaction)
+            .where(Transaction.user_id == user_id, Transaction.import_id == import_id)
+            .returning(Transaction.id)
+        )
+        return len(result.scalars().all())
+
+    async def taken_external_ids(
+        self, user_id: uuid.UUID, account_id: uuid.UUID, external_ids: list[str]
+    ) -> set[str]:
+        """Dos identificadores externos informados, os que a conta já tem."""
+        if not external_ids:
+            return set()
+        result = await self._session.execute(
+            select(Transaction.external_id).where(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                Transaction.external_id.in_(external_ids),
+            )
+        )
+        return {external_id for external_id in result.scalars() if external_id is not None}
 
     async def possible_duplicates(
         self,

@@ -79,15 +79,20 @@ async def complete(session: AsyncSession, job: Job) -> None:
     await WorkerRepository(session).mark_succeeded(job.id)
 
 
-async def fail(session: AsyncSession, job: Job, error: JobError) -> None:
-    """Registra a falha: nova tentativa com espera, ou falha definitiva."""
+async def fail(session: AsyncSession, job: Job, error: JobError) -> bool:
+    """Registra a falha: nova tentativa com espera, ou falha definitiva.
+
+    Devolve `True` quando a fila desistiu do job: o erro é definitivo ou as tentativas
+    acabaram.
+    """
     repository = WorkerRepository(session)
     if isinstance(error, PermanentJobError) or job.attempts >= job.max_attempts:
         await repository.mark_failed(job.id, error.code)
-        return
+        return True
     delay = error.delay if isinstance(error, RetryableJobError) and error.delay else None
     run_at = clock.utcnow() + (delay or backoff_delay(job.attempts))
     await repository.reschedule(job.id, run_at, error.code)
+    return False
 
 
 async def recover_stuck(session: AsyncSession) -> int:

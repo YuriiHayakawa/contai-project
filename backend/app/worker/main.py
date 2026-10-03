@@ -26,6 +26,7 @@ POLL_INTERVAL_SECONDS = 2.0
 HEARTBEAT_INTERVAL = timedelta(seconds=15)
 STUCK_CHECK_INTERVAL = timedelta(minutes=1)
 LOGIN_ATTEMPT_PURGE_INTERVAL = timedelta(hours=1)
+IMPORT_CLEANUP_INTERVAL = timedelta(minutes=10)
 UNEXPECTED_ERROR_CODE = "unexpected_error"
 
 JobHandler = Callable[[AsyncSession, Job], Awaitable[None]]
@@ -52,10 +53,15 @@ class Worker:
     session_factory: SessionFactory = session_scope
     worker_id: str = field(default_factory=lambda: f"{socket.gethostname()}-{os.getpid()}")
     _handlers: dict[JobType, JobHandler] = field(default_factory=dict)
+    _give_up_handlers: dict[JobType, JobHandler] = field(default_factory=dict)
     _periodic: list[_Periodic] = field(default_factory=list)
 
     def register_handler(self, job_type: JobType, handler: JobHandler) -> None:
         self._handlers[job_type] = handler
+
+    def register_give_up_handler(self, job_type: JobType, handler: JobHandler) -> None:
+        """Registra o que fazer quando a fila desiste de um job deste tipo."""
+        self._give_up_handlers[job_type] = handler
 
     def register_periodic(self, name: str, interval: timedelta, task: PeriodicTask) -> None:
         self._periodic.append(_Periodic(name=name, interval=interval, run=task))
@@ -88,7 +94,15 @@ class Worker:
 
     async def _record_failure(self, job: Job, error: queue.JobError) -> None:
         async with self.session_factory() as session:
-            await queue.fail(session, job, error)
+            gave_up = await queue.fail(session, job, error)
+        handler = self._give_up_handlers.get(JobType(job.type))
+        if not gave_up or handler is None:
+            return
+        try:
+            async with self.session_factory() as session:
+                await handler(session, job)
+        except Exception:
+            logger.exception("give-up handler crashed", extra={"job_id": str(job.id)})
 
     async def run_periodic_tasks(self) -> None:
         now = clock.utcnow()
@@ -128,18 +142,21 @@ def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     """Monta o worker com tudo que ele executa."""
     # Importar o módulo registra os tipos de e-mail que o job sabe enviar.
     from app.modules.auth import emails as _auth_emails  # noqa: F401
+    from app.worker.jobs.cleanup import cleanup_imports
     from app.worker.jobs.login_attempts import purge_login_attempts
-    from app.worker.jobs.process_import import handle_process_import
+    from app.worker.jobs.process_import import handle_import_given_up, handle_process_import
     from app.worker.jobs.send_email import handle_send_email
 
     worker = Worker(session_factory=session_factory)
     worker.register_handler(JobType.SEND_EMAIL, handle_send_email)
     worker.register_handler(JobType.PROCESS_IMPORT, handle_process_import)
+    worker.register_give_up_handler(JobType.PROCESS_IMPORT, handle_import_given_up)
     worker.register_periodic("heartbeat", HEARTBEAT_INTERVAL, _heartbeat_task(worker))
     worker.register_periodic("recover_stuck_jobs", STUCK_CHECK_INTERVAL, _recover_stuck)
     worker.register_periodic(
         "purge_login_attempts", LOGIN_ATTEMPT_PURGE_INTERVAL, purge_login_attempts
     )
+    worker.register_periodic("cleanup_imports", IMPORT_CLEANUP_INTERVAL, cleanup_imports)
     return worker
 
 

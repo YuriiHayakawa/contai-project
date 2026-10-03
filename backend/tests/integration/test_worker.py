@@ -162,3 +162,58 @@ async def test_built_worker_records_heartbeat_and_recovers_stuck_jobs(
 
     assert await WorkerRepository(session).last_heartbeat() == clock.utcnow()
     assert job.status == JobStatus.QUEUED
+
+
+async def test_give_up_handler_runs_when_the_attempts_run_out(
+    session: AsyncSession, session_factory: SessionFactory, frozen_time: datetime
+) -> None:
+    given_up: list[int] = []
+
+    async def handler(handler_session: AsyncSession, job: Job) -> None:
+        raise queue.RetryableJobError("smtp_failed")
+
+    async def give_up(handler_session: AsyncSession, job: Job) -> None:
+        given_up.append(job.attempts)
+
+    worker = Worker(session_factory=session_factory)
+    worker.register_handler(JobType.SEND_EMAIL, handler)
+    worker.register_give_up_handler(JobType.SEND_EMAIL, give_up)
+    job = await queue.enqueue(session, JobType.SEND_EMAIL, {"n": 1}, max_attempts=2)
+    await session.commit()
+
+    await worker.process_next_job()
+    # Na primeira falha o job volta para a fila: ainda não é hora de desistir.
+    assert given_up == []
+
+    clock.set_fixed_time(frozen_time + timedelta(hours=2))
+    await worker.process_next_job()
+    await session.refresh(job)
+
+    assert given_up == [2]
+    assert job.status == JobStatus.FAILED
+
+
+async def test_give_up_handler_runs_at_once_on_a_permanent_error_and_may_crash(
+    session: AsyncSession, session_factory: SessionFactory, frozen_time: datetime
+) -> None:
+    calls: list[str] = []
+
+    async def handler(handler_session: AsyncSession, job: Job) -> None:
+        raise queue.PermanentJobError("invalid_payload")
+
+    async def give_up(handler_session: AsyncSession, job: Job) -> None:
+        calls.append("chamado")
+        raise RuntimeError("falhou ao avisar")
+
+    worker = Worker(session_factory=session_factory)
+    worker.register_handler(JobType.SEND_EMAIL, handler)
+    worker.register_give_up_handler(JobType.SEND_EMAIL, give_up)
+    job = await _enqueue(session)
+
+    # A falha de quem avisa não derruba o worker nem muda o destino do job.
+    assert await worker.process_next_job() is True
+    await session.refresh(job)
+
+    assert calls == ["chamado"]
+    assert job.status == JobStatus.FAILED
+    assert job.last_error_code == "invalid_payload"

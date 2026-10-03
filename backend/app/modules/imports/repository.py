@@ -1,6 +1,7 @@
 """Acesso ao banco para importações, transações propostas e modelos de colunas.
 
-Todo método exige `user_id`.
+Todo método exige `user_id`, menos os de manutenção, no fim: a limpeza periódica do worker
+percorre as importações de todos os usuários.
 """
 
 import datetime as dt
@@ -9,11 +10,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.imports.models import (
+    CategorySource,
     DuplicateStatus,
     Import,
     ImportFormat,
@@ -22,7 +24,7 @@ from app.modules.imports.models import (
     ImportStatus,
     ImportTemplate,
 )
-from app.modules.transactions.models import TransactionType
+from app.modules.transactions.models import TransactionType, TransferDirection
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,10 @@ class NewItem:
     duplicate_status: DuplicateStatus
     duplicate_of_id: uuid.UUID | None
     selected_by_default: bool
+    transfer_direction: TransferDirection | None = None
+    suggested_category_id: uuid.UUID | None = None
+    category_source: CategorySource | None = None
+    suggested_counter_account_id: uuid.UUID | None = None
 
 
 class ImportRepository:
@@ -118,6 +124,27 @@ class ImportRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_page(
+        self,
+        user_id: uuid.UUID,
+        *,
+        limit: int,
+        after: tuple[dt.datetime, uuid.UUID] | None = None,
+    ) -> list[Import]:
+        """O histórico, da importação mais nova para a mais antiga."""
+        order = (Import.created_at, Import.id)
+        statement = select(Import).where(Import.user_id == user_id)
+        if after is not None:
+            statement = statement.where(tuple_(*order) < tuple_(*after))
+        statement = statement.order_by(*(column.desc() for column in order)).limit(limit)
+        return list((await self._session.execute(statement)).scalars())
+
+    async def delete(self, user_id: uuid.UUID, import_id: uuid.UUID) -> None:
+        """Apaga a importação; as transações propostas dela vão junto."""
+        await self._session.execute(
+            delete(Import).where(Import.id == import_id, Import.user_id == user_id)
+        )
+
     # ---------- transações propostas
 
     async def add_items(
@@ -138,6 +165,10 @@ class ImportRepository:
                 duplicate_status=item.duplicate_status,
                 duplicate_of_id=item.duplicate_of_id,
                 selected_by_default=item.selected_by_default,
+                transfer_direction=item.transfer_direction,
+                suggested_category_id=item.suggested_category_id,
+                category_source=item.category_source,
+                suggested_counter_account_id=item.suggested_counter_account_id,
             )
             for item in items
         )
@@ -151,6 +182,13 @@ class ImportRepository:
             .order_by(ImportItem.row_index)
         )
         return list(result.scalars())
+
+    async def delete_items(self, user_id: uuid.UUID, import_id: uuid.UUID) -> None:
+        await self._session.execute(
+            delete(ImportItem).where(
+                ImportItem.import_id == import_id, ImportItem.user_id == user_id
+            )
+        )
 
     # ---------- modelos de colunas
 
@@ -181,3 +219,28 @@ class ImportRepository:
                 ImportTemplate.header_signature == header_signature,
             )
         )
+
+    # ---------- manutenção, para todos os usuários
+
+    async def waiting_before(self, status: ImportStatus, cutoff: dt.datetime) -> list[Import]:
+        """Importações que esperam o usuário, neste estado, desde antes de `cutoff`."""
+        result = await self._session.execute(
+            select(Import)
+            .where(Import.status == status, Import.waiting_since < cutoff)
+            .with_for_update(skip_locked=True)
+        )
+        return list(result.scalars())
+
+    async def with_file_in(self, statuses: Sequence[ImportStatus]) -> list[Import]:
+        """Importações nestes estados que ainda têm arquivo guardado."""
+        result = await self._session.execute(
+            select(Import).where(Import.status.in_(statuses), Import.stored_filename.is_not(None))
+        )
+        return list(result.scalars())
+
+    async def stored_filenames(self) -> set[str]:
+        """Os nomes de todos os arquivos que alguma importação ainda guarda."""
+        result = await self._session.execute(
+            select(Import.stored_filename).where(Import.stored_filename.is_not(None))
+        )
+        return {name for name in result.scalars() if name is not None}
