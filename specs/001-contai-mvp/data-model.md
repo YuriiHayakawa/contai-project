@@ -220,14 +220,14 @@ Arquivar uma categoria mãe arquiva as filhas.
 |-------|------|--------|
 | `id` | UUID | PK |
 | `user_id` | UUID | FK |
-| `account_id` | UUID | FK; conta de destino (FR-036) |
+| `account_id` | UUID | FK, `ON DELETE CASCADE`; conta de destino (FR-036). Só uma conta sem transações pode ser excluída, e o histórico de importações dela vai junto |
 | `kind` | enum | `statement` (extrato ou fatura), `receipt` (comprovante) |
 | `format` | enum | `ofx`, `csv`, `xlsx`, `pdf`, `image` |
 | `original_filename` | texto | só para o histórico; nunca vai para logs |
 | `file_hash` | texto | SHA-256 do arquivo; avisa reimportação |
 | `stored_filename` | texto | nome gerado no volume privado; nulo depois de apagado (FR-053) |
 | `status` | enum | `queued`, `processing`, `awaiting_mapping`, `awaiting_review`, `completed`, `undone`, `failed` |
-| `error_code` | texto | motivo da falha, em código (por exemplo, `unreadable`, `no_transactions`, `mapping_expired`) |
+| `error_code` | texto | motivo da falha, em código: `unreadable`, `no_transactions`, `multiple_accounts`, `too_many_rows`, `file_missing`, `processing_error`, `mapping_expired`, `review_expired`. Em `awaiting_mapping`, `mapping_mismatch` diz que o modelo enviado não leu o arquivo |
 | `template_id` | UUID | FK para `import_templates`; modelo aplicado |
 | `mapping_preview` | JSONB | cabeçalho e primeiras linhas para a tela de mapeamento; apagado depois |
 | `document_total_cents` | BIGINT | total impresso no documento, quando houver (FR-043) |
@@ -236,6 +236,7 @@ Arquivar uma categoria mãe arquiva as filhas.
 | `bank_balance_date` | DATE | data do saldo informado |
 | `item_count` | inteiro | linhas propostas |
 | `imported_count` | inteiro | transações criadas na confirmação |
+| `waiting_since` | timestamptz | desde quando espera o usuário (mapeamento ou revisão); base do prazo do FR-083 |
 | `completed_at`, `undone_at` | timestamptz | |
 
 **Transições**:
@@ -245,6 +246,7 @@ queued → processing → awaiting_review → completed → undone
               │              ↑
               ├→ awaiting_mapping (CSV/planilha sem modelo) → queued (após o mapeamento)
               └→ failed
+queued → awaiting_mapping (mapping_mismatch: o modelo enviado não leu o arquivo)
 awaiting_mapping → failed (mapping_expired, após 24 h)
 awaiting_review → failed (review_expired, após 7 dias sem confirmação)
 ```
@@ -270,7 +272,7 @@ Transações propostas, existentes só entre o processamento e a confirmação.
 | `description` | texto | |
 | `description_normalized` | texto | |
 | `suggested_category_id` | UUID | FK (FR-047) |
-| `category_source` | enum | `user_rule`, `ai`, `fallback` |
+| `category_source` | enum | `user_rule`, `ai`, `fallback`; nulo em transferência |
 | `suggested_counter_account_id` | UUID | cartão ou conta sugerida em pagamento de fatura (FR-081) |
 | `external_id` | texto | |
 | `fingerprint` | texto | |
@@ -285,7 +287,7 @@ Transações propostas, existentes só entre o processamento e a confirmação.
 | `id` | UUID | PK |
 | `user_id` | UUID | FK |
 | `header_signature` | texto | hash dos nomes de colunas normalizados; único por usuário |
-| `mapping` | JSONB | colunas de data, descrição e valor (ou entrada e saída), formato de data, separador decimal, convenção de sinal, linhas a pular |
+| `mapping` | JSONB | colunas de data, descrição e valor (ou entrada e saída), pela posição; formato de data (`dmy`, `mdy`, `ymd`), separador decimal e convenção de sinal. As linhas de título antes do cabeçalho são puladas sozinhas, e por isso não fazem parte do modelo |
 | `last_used_at` | timestamptz | |
 
 ### categorization_rules

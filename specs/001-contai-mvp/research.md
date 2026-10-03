@@ -190,6 +190,13 @@ no início da implementação.
 - **Decision**: `ofxtools`, com uma etapa própria de pré-processamento tolerante antes da
   leitura (detecção de codificação, correção de cabeçalho e de datas fora do padrão). O `FITID`
   vira o identificador externo; o saldo informado (`LEDGERBAL`) alimenta a comparação do FR-082.
+  Do `ofxtools` é usado só o leitor de marcação (`TreeBuilder`): a validação estrita dele
+  (`convert`) recusa arquivos sem `FITID`, sem saldo, sem cabeçalho ou com data fora do padrão,
+  comuns em bancos brasileiros. Os campos são lidos da árvore. A data vale como está escrita,
+  sem a hora e o fuso: `20260915220000[-3:BRT]` é dia 15, e convertê-la para UTC mudaria o dia.
+  Um lançamento com data ou valor ilegível falha o arquivo inteiro (`unreadable`), para o
+  extrato não entrar incompleto sem aviso. Arquivo com extrato de mais de uma conta é recusado
+  (`multiple_accounts`).
 - **Rationale**: é a biblioteca pedida e não traz dependências. Arquivos OFX de bancos
   brasileiros costumam fugir do padrão, então a tolerância fica isolada no importador e é coberta
   por fixtures de vários bancos.
@@ -204,7 +211,13 @@ no início da implementação.
   data, descrição e valor, o formato da data, o separador decimal e a convenção de sinal, e
   aceita também o caso de colunas separadas de entrada e saída. Ao pedir o mapeamento, o sistema
   sugere as colunas por heurística nos nomes e mostra a prévia das primeiras linhas. `.xls`
-  antigo não é aceito.
+  antigo não é aceito. As linhas de título antes do cabeçalho são puladas sozinhas, e as
+  colunas são indicadas pela posição. Linha sem data ou sem valor (rodapé de saldo, total) não
+  é transação. Uma célula com números que o modelo não consegue ler como data ou valor não é
+  pulada: a importação volta a `awaiting_mapping` com `mapping_mismatch` e o modelo é
+  descartado, porque ler errado em silêncio seria pior. O caso mais perigoso é o separador
+  decimal trocado (`45.90` lido como R$ 4.590,00), detectado porque um separador de milhar é
+  sempre seguido de grupos de três algarismos.
 - **Rationale**: "formato reconhecido" passa a ter definição testável: existe um modelo salvo do
   usuário com a mesma assinatura de cabeçalho (FR-039, SC-007).
 - **Alternatives considered**: catálogo embutido de modelos por banco (manutenção contínua;
@@ -230,8 +243,12 @@ no início da implementação.
   2. Impressão digital (`fingerprint` = hash de conta, data, tipo, valor e descrição
      normalizada), comparada por contagem: se o arquivo tem duas linhas idênticas e o banco já
      tem uma, só uma é marcada `exact`.
-  3. Provável: mesma conta, mesmo tipo e valor, data com até 3 dias de diferença, qualquer
-     descrição; marca `probable`. É o que pega lançamentos feitos à mão.
+  3. Provável: mesma conta, mesmo sentido do dinheiro e mesmo valor, data com até 3 dias de
+     diferença, qualquer descrição; marca `probable`. É o que pega lançamentos feitos à mão. O
+     sentido, e não o tipo, porque o extrato do banco não sabe o que é transferência: o
+     pagamento de fatura lançado à mão como transferência aparece nele como uma saída comum.
+  Cada transação existente explica no máximo uma linha do arquivo. Se o arquivo repete um
+  identificador externo, só a primeira linha fica com ele: o índice único recusaria a segunda.
   Linhas `exact` e `probable` chegam desmarcadas. O hash do arquivo é guardado para avisar que o
   mesmo arquivo já foi importado.
 - **Rationale**: reimportar o mesmo arquivo gera zero duplicatas com a seleção padrão (FR-050,
@@ -439,6 +456,7 @@ decididas aqui:
 | `python-multipart` | upload de arquivos | exigido pelo FastAPI para `multipart/form-data` |
 | `ofxtools` | leitura de OFX | formato complexo; sem dependências próprias |
 | `openpyxl` | leitura de `.xlsx` | formato binário compactado |
+| `defusedxml` | leitura segura do XML das planilhas | sem ele o `openpyxl` não se protege de XML feito para esgotar a memória; a planilha vem de upload (Princípio V). Sem dependências próprias |
 | `filetype` | tipo real do arquivo | exigido pelo Princípio V; sem dependências |
 | `google-genai` | provedor de IA | SDK oficial, isolado atrás de `LLMProvider` |
 | `tzdata` | base de fusos | a imagem enxuta não traz a base do sistema |

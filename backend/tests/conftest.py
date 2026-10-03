@@ -6,6 +6,7 @@ criado pelas migrações. Cada teste roda dentro de uma transação que é desfe
 
 import asyncio
 import os
+import tempfile
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -28,6 +29,8 @@ os.environ.setdefault("SMTP_HOST", "smtp.test")
 os.environ.setdefault("SMTP_PORT", "1025")
 os.environ.setdefault("SMTP_USE_TLS", "false")
 os.environ.setdefault("EMAIL_FROM", "Contaí <nao-responda@contai.test>")
+# Nenhum teste grava no volume de uploads de verdade.
+os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="contai-test-uploads-")
 
 import pytest  # noqa: E402 - depende das variáveis acima
 import pytest_asyncio  # noqa: E402
@@ -346,6 +349,30 @@ def without_request_id(response: Response) -> dict[str, object]:
     body: dict[str, object] = response.json()
     body.pop("request_id", None)
     return body
+
+
+@pytest.fixture
+def upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Pasta de uploads só deste teste, para conferir o que ficou guardado nela."""
+    monkeypatch.setattr(get_settings(), "upload_dir", tmp_path)
+    return tmp_path
+
+
+JobRunner = Callable[[], Awaitable[int]]
+
+
+@pytest.fixture
+def run_jobs(session_factory: SessionFactory) -> JobRunner:
+    """Executa os jobs pendentes, como o worker faria, e devolve quantos rodaram."""
+
+    async def run() -> int:
+        worker = build_worker(session_factory)
+        count = 0
+        while await worker.process_next_job():
+            count += 1
+        return count
+
+    return run
 
 
 EmailDelivery = Callable[[], Awaitable[list[EmailMessage]]]

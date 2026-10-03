@@ -129,10 +129,12 @@ def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     # Importar o módulo registra os tipos de e-mail que o job sabe enviar.
     from app.modules.auth import emails as _auth_emails  # noqa: F401
     from app.worker.jobs.login_attempts import purge_login_attempts
+    from app.worker.jobs.process_import import handle_process_import
     from app.worker.jobs.send_email import handle_send_email
 
     worker = Worker(session_factory=session_factory)
     worker.register_handler(JobType.SEND_EMAIL, handle_send_email)
+    worker.register_handler(JobType.PROCESS_IMPORT, handle_process_import)
     worker.register_periodic("heartbeat", HEARTBEAT_INTERVAL, _heartbeat_task(worker))
     worker.register_periodic("recover_stuck_jobs", STUCK_CHECK_INTERVAL, _recover_stuck)
     worker.register_periodic(
