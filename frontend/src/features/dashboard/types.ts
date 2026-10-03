@@ -5,7 +5,9 @@ import type { Transaction } from "../transactions/types";
 
 /** Entradas, saídas e saldo de um mês. Transferências não entram em nenhum dos três. */
 export interface PeriodTotals {
+  /** Receitas, sem os estornos. */
   income_cents: number;
+  /** Despesas menos os estornos, que são receitas lançadas em categoria de despesa. */
   expense_cents: number;
   /** Entradas menos saídas; negativo quando o mês fechou no vermelho. */
   net_cents: number;
@@ -29,7 +31,9 @@ export interface SubcategorySpending {
   name: string;
   icon: string;
   color: string;
+  /** Despesas menos estornos; negativo quando o estorno cai em um mês e a compra, em outro. */
   amount_cents: number;
+  /** Parte do que foi gasto no mês; zero quando o valor é negativo. */
   percent: number;
 }
 

@@ -244,6 +244,47 @@ async def test_a_corrected_category_comes_already_corrected_in_the_next_import(
     ]
 
 
+async def test_a_refund_in_the_statement_comes_in_the_category_of_the_purchase(
+    client_a: AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    card: Json,
+    categories: dict[str, str],
+    run_jobs: JobRunner,
+) -> None:
+    # O usuário já lançou uma compra nessa livraria em Educação: a regra existe.
+    await CategorizationRepository(session).save_user_rule(
+        user_a.id,
+        description_normalized="livraria letras cia",
+        category_id=uuid.UUID(categories["expense:Educação"]),
+    )
+    await session.commit()
+
+    record = await _review(client_a, run_jobs, card, "cartao_verde.ofx")
+
+    lines = _by_description(record)
+    purchase, refund = lines["Livraria Letras & Cia"], lines["Estorno Livraria Letras & Cia"]
+    education = categories["expense:Educação"]
+    assert (purchase["type"], purchase["suggested_category_id"]) == ("expense", education)
+    # O estorno é uma entrada, sugerida na categoria da compra, sem correção manual.
+    assert (refund["type"], refund["suggested_category_id"], refund["category_source"]) == (
+        "income",
+        education,
+        "user_rule",
+    )
+
+    await confirm(client_a, record)
+
+    # Comprou e devolveu: nada em Educação, e o estorno não entra nas entradas do mês.
+    by_category = (
+        await client_a.get("/api/v1/dashboard/categories", params={"month": "2026-09"})
+    ).json()
+    assert [(item["name"], item["amount_cents"]) for item in by_category["items"]] == [
+        ("Outros", 1_500)
+    ]
+    assert await _month_totals(client_a, "2026-09") == (0, 1_500)
+
+
 # ---------- pagamento de fatura
 
 

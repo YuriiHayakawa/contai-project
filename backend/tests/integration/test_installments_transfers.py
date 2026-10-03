@@ -891,7 +891,11 @@ async def test_panel_matches_the_list_after_installments_and_transfers(
     await _installments(
         client_a, card, shopping, total_cents=10_000, installments=3, date="2026-09-15"
     )
+    # Um reembolso lançado como receita comum e um estorno, lançado na categoria da compra.
     await create_transaction(client_a, card, refund, amount_cents=1_500, date="2026-10-05")
+    await create_transaction(
+        client_a, card, shopping, type="income", amount_cents=3_333, date="2026-09-20"
+    )
     await create_transaction(client_a, checking, shopping, amount_cents=4_590, date="2026-09-01")
     await _transfer(client_a, checking, savings, amount_cents=50_000, date="2026-09-15")
     await _transfer(client_a, checking, card, amount_cents=16_667, date="2026-10-10")
@@ -903,6 +907,13 @@ async def test_panel_matches_the_list_after_installments_and_transfers(
         def total(kind: str, items: list[Json] = listed) -> int:
             return sum(item["amount_cents"] for item in items if item["type"] == kind)
 
-        assert summary["income_cents"] == total("income"), month
-        assert summary["expense_cents"] == total("expense"), month
+        # O estorno é uma receita na lista; no painel ele abate as saídas e não é entrada.
+        refunds = sum(
+            item["amount_cents"]
+            for item in listed
+            if item["type"] == "income" and item["category_id"] == shopping["id"]
+        )
+        assert refunds == (3_333 if month == "2026-09" else 0), month
+        assert summary["income_cents"] == total("income") - refunds, month
+        assert summary["expense_cents"] == total("expense") - refunds, month
         assert summary["net_cents"] == total("income") - total("expense"), month

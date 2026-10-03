@@ -93,7 +93,12 @@ def _totals(income_cents: int, expense_cents: int) -> dict[str, int]:
 
 
 def _percent(amount_cents: int, total_cents: int) -> float:
-    """Parte do total, de 0 a 100, com uma casa. A conta é decimal; só o resultado vira float."""
+    """Parte do total, de 0 a 100, com uma casa. A conta é decimal; só o resultado vira float.
+
+    Uma categoria que ficou negativa por um estorno não tem parte do total: vale zero.
+    """
+    if amount_cents <= 0 or total_cents <= 0:
+        return 0.0
     share = (Decimal(amount_cents) * 100 / Decimal(total_cents)).quantize(
         _ONE_DECIMAL, rounding=ROUND_HALF_UP
     )
@@ -111,7 +116,8 @@ class ReportingService:
         self._accounts = AccountService(session)
 
     async def totals(self, user_id: uuid.UUID, period: Period) -> PeriodTotals:
-        """Entradas, saídas e saldo do período; transferências não contam (FR-033)."""
+        """Entradas, saídas e saldo do período; transferências não contam (FR-033), e um
+        estorno abate as saídas em vez de somar nas entradas."""
         by_type = await self._reports.totals_by_type(user_id, start=period.start, end=period.end)
         return PeriodTotals(
             **_totals(
@@ -132,16 +138,19 @@ class ReportingService:
         ]
 
     async def spending_by_category(self, user_id: uuid.UUID, period: Period) -> CategoryBreakdown:
-        """Despesas por categoria principal, com as das subcategorias somadas nela (FR-056).
+        """Gasto por categoria principal, com o das subcategorias somado nela (FR-056).
 
+        Um estorno abate o gasto da categoria dele. Quando ele cai em um mês diferente do da
+        compra, a categoria fica negativa naquele mês: ela aparece com o valor negativo, no fim
+        da lista e sem percentual, e a soma das categorias continua igual ao total de saídas.
         Uma categoria arquivada continua aparecendo enquanto tiver gasto no período (FR-026).
         """
         amounts = await self._reports.expenses_by_category(
             user_id, start=period.start, end=period.end
         )
-        total = sum(amounts.values())
-        if total == 0:
+        if not amounts:
             return CategoryBreakdown(total_cents=0, items=[])
+        total = sum(amounts.values())
 
         categories = {
             category.id: category
@@ -155,6 +164,9 @@ class ReportingService:
             by_parent[parent_id] = by_parent.get(parent_id, 0) + amount
             if category.parent_id is not None:
                 children.setdefault(parent_id, []).append((category, amount))
+        # O percentual é a parte de cada categoria no que foi gasto de fato: as negativas ficam
+        # de fora da base, e as outras somam 100.
+        spent = sum(amount for amount in by_parent.values() if amount > 0)
 
         items = [
             CategorySpending(
@@ -163,7 +175,7 @@ class ReportingService:
                 icon=categories[parent_id].icon,
                 color=str(categories[parent_id].color),
                 amount_cents=amount,
-                percent=_percent(amount, total),
+                percent=_percent(amount, spent),
                 subcategories=[
                     SubcategorySpending(
                         category_id=child.id,
@@ -171,7 +183,7 @@ class ReportingService:
                         icon=child.icon,
                         color=str(child.color),
                         amount_cents=child_amount,
-                        percent=_percent(child_amount, total),
+                        percent=_percent(child_amount, spent),
                     )
                     for child, child_amount in sorted(
                         children.get(parent_id, []),

@@ -27,6 +27,7 @@ from app.modules.categorization.service import (
     SuggestionSource,
     category_paths,
     system_prompt,
+    without_refund_prefix,
 )
 from app.modules.users.models import User
 
@@ -300,26 +301,138 @@ async def test_a_rule_of_an_archived_category_is_ignored(
     assert "| Lazer" not in fake_llm.calls[0].prompt
 
 
-async def test_a_rule_of_another_kind_does_not_apply_to_the_line(
+async def test_an_inflow_with_the_description_of_a_purchase_is_suggested_as_its_refund(
     session: AsyncSession, user_a: User, categories: Categories, fake_llm: FakeLLMProvider
 ) -> None:
-    # A regra é de despesa; o estorno da mesma loja é uma receita.
+    # A regra é da compra; a entrada com a mesma descrição é o estorno dela, e vem na mesma
+    # categoria, para abater o gasto.
     await CategorizationService(session).learn(
         user_a.id,
         description_normalized="livraria letras",
-        category_id=categories[EXPENSE, "Lazer"].id,
+        category_id=categories[EXPENSE, "Educação"].id,
     )
 
     suggestions = await _suggest(
         session, user_a, _line("livraria letras"), _line("livraria letras", INCOME)
     )
 
-    assert suggestions == [
-        (categories[EXPENSE, "Lazer"].id, USER_RULE),
-        (categories[INCOME, "Outros"].id, FALLBACK),
-    ]
-    # A descrição já tem regra: ela não vai à IA só por causa do estorno.
+    education = (categories[EXPENSE, "Educação"].id, USER_RULE)
+    assert suggestions == [education, education]
     assert fake_llm.calls == []
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "estorno livraria letras",
+        "est livraria letras",
+        "reembolso livraria letras",
+        "devolucao livraria letras",
+        "cancelamento livraria letras",
+        "estorno de compra livraria letras",
+        "estorno da compra livraria letras",
+        "cancelamento de compra livraria letras",
+    ],
+)
+async def test_a_refund_uses_the_rule_of_the_original_purchase(
+    session: AsyncSession,
+    user_a: User,
+    categories: Categories,
+    fake_llm: FakeLLMProvider,
+    description: str,
+) -> None:
+    await CategorizationService(session).learn(
+        user_a.id,
+        description_normalized="livraria letras",
+        category_id=categories[EXPENSE, "Educação"].id,
+    )
+
+    # Sem correção manual: o prefixo de estorno sai, e vale a regra da compra.
+    assert await _suggest(session, user_a, _line(description, INCOME)) == [
+        (categories[EXPENSE, "Educação"].id, USER_RULE)
+    ]
+    assert fake_llm.calls == []
+
+
+@pytest.mark.parametrize(
+    ("description", "purchase"),
+    [
+        ("estorno livraria letras", "livraria letras"),
+        ("estorno de compra livraria letras", "livraria letras"),
+        ("est estorno livraria", "livraria"),
+        ("livraria letras", None),
+        ("livraria estorno", None),
+        ("estorno", None),
+        ("estorno de compra", None),
+        ("estornos diversos", None),
+        ("", None),
+    ],
+)
+def test_without_refund_prefix(description: str, purchase: str | None) -> None:
+    assert without_refund_prefix(description) == purchase
+
+
+async def test_the_refund_prefix_is_only_ignored_for_inflows(
+    session: AsyncSession, user_a: User, categories: Categories, fake_llm: FakeLLMProvider
+) -> None:
+    await CategorizationService(session).learn(
+        user_a.id,
+        description_normalized="livraria letras",
+        category_id=categories[EXPENSE, "Educação"].id,
+    )
+    fake_llm.queue_structured_error(LLMUnavailable("fora do ar"))
+
+    # Uma saída que começa com "estorno" não é o estorno de uma compra.
+    assert await _suggest(session, user_a, _line("estorno livraria letras")) == [
+        (categories[EXPENSE, "Outros"].id, FALLBACK)
+    ]
+
+
+async def test_the_rule_of_the_refund_itself_wins_over_the_rule_of_the_purchase(
+    session: AsyncSession, user_a: User, categories: Categories
+) -> None:
+    service = CategorizationService(session)
+    await service.learn(
+        user_a.id,
+        description_normalized="livraria letras",
+        category_id=categories[EXPENSE, "Educação"].id,
+    )
+    await service.learn(
+        user_a.id,
+        description_normalized="reembolso livraria letras",
+        category_id=categories[INCOME, "Renda extra"].id,
+    )
+
+    assert await _suggest(session, user_a, _line("reembolso livraria letras", INCOME)) == [
+        (categories[INCOME, "Renda extra"].id, USER_RULE)
+    ]
+
+
+async def test_a_rule_of_an_income_category_never_applies_to_an_expense_or_to_a_refund_prefix(
+    session: AsyncSession, user_a: User, categories: Categories, fake_llm: FakeLLMProvider
+) -> None:
+    await CategorizationService(session).learn(
+        user_a.id,
+        description_normalized="empresa ficticia",
+        category_id=categories[INCOME, "Salário"].id,
+    )
+    fake_llm.queue_structured_error(LLMUnavailable("fora do ar"))
+
+    suggestions = await _suggest(
+        session,
+        user_a,
+        _line("empresa ficticia"),
+        _line("estorno empresa ficticia", INCOME),
+        _line("empresa ficticia", INCOME),
+    )
+
+    # A despesa não cabe em categoria de receita, e a regra da "compra" só vale para o estorno
+    # quando é de uma categoria de despesa.
+    assert suggestions == [
+        (categories[EXPENSE, "Outros"].id, FALLBACK),
+        (categories[INCOME, "Outros"].id, FALLBACK),
+        (categories[INCOME, "Salário"].id, USER_RULE),
+    ]
 
 
 async def test_equal_lines_go_to_the_ai_once_and_all_get_the_answer(
@@ -373,8 +486,9 @@ async def test_a_description_in_both_kinds_goes_once_with_the_kind_it_appears_mo
     [call] = fake_llm.calls
     assert call.prompt.count("livraria letras") == 1
     assert "0 | despesa | livraria letras" in call.prompt
+    # A resposta vale também para a entrada de mesma descrição: é o estorno da compra.
     leisure = (categories[EXPENSE, "Lazer"].id, AI)
-    assert suggestions == [(categories[INCOME, "Outros"].id, FALLBACK), leisure, leisure]
+    assert suggestions == [leisure, leisure, leisure]
     # A regra guardada é uma por descrição.
     [rule] = await CategorizationRepository(session).list_all(user_a.id)
     assert (rule.description_normalized, rule.category_id) == (

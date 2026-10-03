@@ -82,6 +82,10 @@ código, o termo é "transação" (`transaction`). Os dois nomes se referem à m
   ao usuário (definido na revisão da análise).
 - Q: O que conta como "descrição semelhante" para o aprendizado de categorias? → A: A mesma
   descrição normalizada, por correspondência exata (definido na revisão da análise).
+- Q: Como o estorno de uma compra entra nos totais? → A: É uma receita lançada na categoria de
+  despesa da compra. Ele abate as saídas e o gasto dessa categoria, e não conta como entrada:
+  comprar e devolver um livro dá R$ 0 em Educação. Se o estorno cai em um mês diferente do da
+  compra, a categoria fica negativa naquele mês (definido na implementação da importação).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -677,6 +681,15 @@ os 7 dias, não consegue mais entrar.
   o saldo de cada conta.
 - **FR-056**: O painel DEVE mostrar os gastos por categoria no mês exibido e, ao selecionar uma
   categoria, as transações que a compõem.
+- **FR-084**: O usuário DEVE poder lançar o estorno de uma compra como uma receita na categoria
+  de despesa da compra. O estorno DEVE abater as saídas do mês e o gasto dessa categoria, e NÃO
+  DEVE contar nas entradas; o saldo da conta e a fatura do cartão continuam contando o dinheiro
+  que voltou. Quando o estorno cai em um mês diferente do da compra, a categoria DEVE aparecer
+  com o valor negativo naquele mês, sem percentual, e a soma das categorias DEVE continuar igual
+  ao total de saídas. Na importação, uma entrada DEVE vir sugerida como estorno, na categoria
+  da compra, quando a descrição normalizada dela tem regra para uma categoria de despesa,
+  ignorados os prefixos comuns de estorno ("estorno", "est", "reembolso", "devolucao",
+  "cancelamento"). Uma despesa NÃO PODE ser lançada em categoria de receita.
 - **FR-057**: O painel DEVE mostrar a evolução de entradas e saídas nos últimos 6 meses e os
   maiores gastos do mês.
 - **FR-058**: Para cada cartão de crédito, o painel DEVE mostrar o valor da fatura atual e o

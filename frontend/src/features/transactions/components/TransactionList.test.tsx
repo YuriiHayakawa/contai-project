@@ -115,3 +115,45 @@ describe("TransactionList: transferência", () => {
     );
   });
 });
+
+describe("TransactionList: estorno", () => {
+  const education = {
+    category: {
+      id: "cat-educacao",
+      name: "Educação",
+      kind: "expense" as const,
+      parent_id: null,
+      icon: "graduation-cap",
+      color: "ameixa",
+      is_fallback: false,
+      archived: false,
+      children: [],
+    },
+    label: "Educação",
+  };
+  const refund: Transaction = {
+    ...out,
+    id: "tx-estorno",
+    type: "income",
+    transfer_direction: null,
+    transfer_group_id: null,
+    amount_cents: 5_000,
+    description: "Estorno livraria",
+    category_id: "cat-educacao",
+  };
+
+  it("a receita em categoria de despesa diz que é um estorno", () => {
+    renderList([refund], { categories: new Map([["cat-educacao", education]]) });
+
+    expect(rows()[0]).toHaveTextContent("Estorno · Educação · Investimento");
+    expect(rows()[0]).toHaveTextContent("+R$ 50,00");
+  });
+
+  it("a receita em categoria de receita não leva o rótulo", () => {
+    const salary = { ...education, category: { ...education.category, kind: "income" as const } };
+
+    renderList([refund], { categories: new Map([["cat-educacao", salary]]) });
+
+    expect(rows()[0]).not.toHaveTextContent("Estorno ·");
+  });
+});

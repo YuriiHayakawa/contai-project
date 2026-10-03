@@ -44,7 +44,7 @@ const percentFormat = new Intl.NumberFormat("pt-BR", {
  * No máximo seis linhas: com mais categorias do que isso, ficam as cinco maiores e uma linha
  * "Outras", na cor neutra, com a soma das demais.
  */
-function rankingRows(month: YearMonth, { items, total_cents }: DashboardCategories): RankingRow[] {
+function rankingRows(month: YearMonth, { items }: DashboardCategories): RankingRow[] {
   const list = `${paths.transactions}`;
   const shown = items.length > MAX_ROWS ? items.slice(0, MAX_ROWS - 1) : items;
   const rows: RankingRow[] = shown.map((item) => ({
@@ -65,8 +65,8 @@ function rankingRows(month: YearMonth, { items, total_cents }: DashboardCategori
       icon: "shapes",
       color: "ardosia",
       amountCents,
-      // Percentual não é dinheiro: a conta de um décimo pode ser feita em ponto flutuante.
-      percent: Math.round((amountCents * 1000) / total_cents) / 10,
+      // Percentual não é dinheiro: a soma de décimos pode ser feita em ponto flutuante.
+      percent: Math.round(rest.reduce((total, item) => total + item.percent, 0) * 10) / 10,
       // Diz que é um agrupamento: a categoria "Outros" do usuário usa a mesma cor neutra.
       grouped: rest.length,
       to: `${list}${listSearch(month, { type: "expense" })}`,
@@ -111,23 +111,34 @@ export function CategoryRanking({ month, categories, onLaunch }: CategoryRanking
                       {formatBRL(row.amountCents)}
                     </span>
                   </span>
-                  <span className="mt-1.5 mb-1 block h-2 rounded-full bg-bg-sunken">
-                    <motion.span
-                      className={cn(
-                        "block h-full origin-left rounded-full",
-                        CATEGORY_FILL_CLASS[isCategoryColor(row.color) ? row.color : "ardosia"],
-                      )}
-                      // Proporcional à maior categoria; a largura é medida, e não cor.
-                      style={{ width: `${Math.max((row.amountCents / largest) * 100, 2)}%` }}
-                      initial={{ scaleX: 0 }}
-                      animate={{ scaleX: 1 }}
-                      transition={barTransition}
-                    />
-                  </span>
-                  <span className="text-small text-ink-muted">
-                    {percentFormat.format(row.percent)}% dos gastos
-                    {row.grouped && ` · ${row.grouped} categorias`}
-                  </span>
+                  {row.amountCents > 0 ? (
+                    <>
+                      <span className="mt-1.5 mb-1 block h-2 rounded-full bg-bg-sunken">
+                        <motion.span
+                          className={cn(
+                            "block h-full origin-left rounded-full",
+                            CATEGORY_FILL_CLASS[isCategoryColor(row.color) ? row.color : "ardosia"],
+                          )}
+                          // Proporcional à maior categoria; a largura é medida, e não cor.
+                          style={{ width: `${Math.max((row.amountCents / largest) * 100, 2)}%` }}
+                          initial={{ scaleX: 0 }}
+                          animate={{ scaleX: 1 }}
+                          transition={barTransition}
+                        />
+                      </span>
+                      <span className="text-small text-ink-muted">
+                        {percentFormat.format(row.percent)}% dos gastos
+                        {row.grouped && ` · ${row.grouped} categorias`}
+                      </span>
+                    </>
+                  ) : (
+                    // O estorno de uma compra de outro mês deixa a categoria negativa: não há
+                    // barra nem percentual, só o valor que voltou.
+                    <span className="text-small text-ink-muted">
+                      Estornos maiores que os gastos do mês
+                      {row.grouped && ` · ${row.grouped} categorias`}
+                    </span>
+                  )}
                 </span>
               </Link>
             </li>

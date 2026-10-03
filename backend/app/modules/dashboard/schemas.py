@@ -15,7 +15,9 @@ from app.modules.transactions.schemas import TransactionRead
 class PeriodTotals(BaseModel):
     """Entradas, saídas e saldo de um período. Transferências não entram em nenhum dos três."""
 
+    # Receitas, sem os estornos.
     income_cents: int
+    # Despesas menos os estornos (receitas lançadas em categoria de despesa).
     expense_cents: int
     # Entradas menos saídas; negativo quando o período fechou no vermelho.
     net_cents: int
@@ -46,8 +48,10 @@ class CategorySpending(BaseModel):
     name: str
     icon: str
     color: str
+    # Despesas menos estornos; negativo quando o estorno cai em um mês e a compra, em outro.
     amount_cents: int
-    # Parte do total de despesas do período, de 0 a 100, com uma casa decimal.
+    # Parte do que foi gasto no período, de 0 a 100, com uma casa decimal; zero se o valor é
+    # negativo.
     percent: float
     # Só as subcategorias com gasto no período. O que foi lançado direto na categoria
     # principal está em `amount_cents` e não aparece aqui.
@@ -55,9 +59,11 @@ class CategorySpending(BaseModel):
 
 
 class CategoryBreakdown(BaseModel):
-    # Total de despesas do período: a soma de `amount_cents` das categorias.
+    # Total de saídas do período, igual a `expense_cents` do resumo: a soma de `amount_cents`
+    # das categorias.
     total_cents: int
-    # Da categoria com mais gasto para a com menos; categorias sem gasto não aparecem.
+    # Da categoria com mais gasto para a com menos, com as negativas no fim; categorias sem
+    # gasto, ou em que compra e estorno se anulam, não aparecem.
     items: list[CategorySpending]
 
 

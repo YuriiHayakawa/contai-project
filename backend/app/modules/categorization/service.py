@@ -37,6 +37,10 @@ BATCH_SIZE = 150
 MAX_BATCHES = 4
 
 _KIND_LABELS = {CategoryKind.EXPENSE: "despesa", CategoryKind.INCOME: "receita"}
+# Como o banco costuma começar a descrição de um estorno, já normalizada. Sem o prefixo, e sem
+# as palavras de ligação que vêm depois dele, sobra a descrição da compra original.
+REFUND_PREFIXES = frozenset({"estorno", "est", "reembolso", "devolucao", "cancelamento"})
+_REFUND_FILLERS = frozenset({"de", "da", "do", "compra"})
 
 
 class SuggestionSource(StrEnum):
@@ -68,6 +72,30 @@ class CategoryAssignment(BaseModel):
 
 class CategorizationAnswer(BaseModel):
     assignments: list[CategoryAssignment]
+
+
+def without_refund_prefix(description_normalized: str) -> str | None:
+    """A descrição da compra a que um estorno se refere, ou `None` se ela não começa como um.
+
+    "estorno de compra livraria letras" vira "livraria letras".
+    """
+    words = description_normalized.split()
+    if not words or words[0] not in REFUND_PREFIXES:
+        return None
+    rest = words[1:]
+    while rest and (rest[0] in REFUND_PREFIXES or rest[0] in _REFUND_FILLERS):
+        rest = rest[1:]
+    return " ".join(rest) or None
+
+
+def category_fits(category: Category, kind: CategoryKind) -> bool:
+    """A categoria serve para a linha: é do tipo dela ou, em uma entrada, é de despesa.
+
+    A entrada em categoria de despesa é um estorno: abate o gasto da categoria.
+    """
+    return category.kind == kind or (
+        kind == CategoryKind.INCOME and category.kind == CategoryKind.EXPENSE
+    )
 
 
 @cache
@@ -132,28 +160,57 @@ class CategorizationService:
             for category in categories
             if category.is_fallback
         }
+        # Para uma entrada, vale também a regra da compra original: a descrição sem o prefixo
+        # de estorno.
+        purchases = {
+            line: without_refund_prefix(line.description_normalized)
+            for line in lines
+            if line.kind == CategoryKind.INCOME
+        }
         rules = await self._rules.find(
-            user_id, sorted({line.description_normalized for line in lines})
+            user_id,
+            sorted(
+                {line.description_normalized for line in lines}
+                | {purchase for purchase in purchases.values() if purchase}
+            ),
         )
+
+        def from_rule(
+            line: Line, description: str | None, *, refund_only: bool
+        ) -> Suggestion | None:
+            rule = rules.get(description) if description else None
+            category = active.get(rule.category_id) if rule is not None else None
+            # Regra de categoria arquivada, ou que não serve para o tipo da linha, não vale.
+            if rule is None or category is None or not category_fits(category, line.kind):
+                return None
+            if refund_only and category.kind != CategoryKind.EXPENSE:
+                return None
+            source = (
+                SuggestionSource.USER_RULE
+                if rule.source == RuleSource.USER
+                else SuggestionSource.AI
+            )
+            return Suggestion(category_id=category.id, source=source)
 
         found: dict[Line, Suggestion] = {}
         for line in dict.fromkeys(lines):
-            rule = rules.get(line.description_normalized)
-            category = active.get(rule.category_id) if rule is not None else None
-            # Regra de categoria arquivada ou de outro tipo não vale para esta linha.
-            if rule is not None and category is not None and category.kind == line.kind:
-                source = (
-                    SuggestionSource.USER_RULE
-                    if rule.source == RuleSource.USER
-                    else SuggestionSource.AI
-                )
-                found[line] = Suggestion(category_id=category.id, source=source)
+            suggestion = from_rule(
+                line, line.description_normalized, refund_only=False
+            ) or from_rule(line, purchases.get(line), refund_only=True)
+            if suggestion is not None:
+                found[line] = suggestion
 
-        found.update(await self._ask_ai(user_id, self._to_ask(lines, found), categories))
+        answers = await self._ask_ai(user_id, self._to_ask(lines, found), categories)
+        # A resposta da IA vale para todas as linhas com a mesma descrição, inclusive a entrada
+        # que repete a descrição de uma despesa: é o estorno dela.
+        by_description = {line.description_normalized: answer for line, answer in answers.items()}
 
         def resolve(line: Line) -> Suggestion | None:
             if line in found:
                 return found[line]
+            answer = by_description.get(line.description_normalized)
+            if answer is not None and category_fits(active[answer.category_id], line.kind):
+                return answer
             category_id = fallback.get(line.kind)
             if category_id is None:
                 return None
@@ -166,9 +223,8 @@ class CategorizationService:
         """As descrições que vão à IA: cada descrição normalizada uma vez só.
 
         A resposta vale para todas as linhas iguais. A descrição que aparece nos dois tipos,
-        como uma compra e o estorno dela, vai com o tipo em que mais aparece, e a do outro tipo
-        fica em "Outros": a regra guardada é uma por descrição. Descrição que já tem regra
-        válida, ou que é só de números, não vai.
+        como uma compra e o estorno dela, vai com o tipo em que mais aparece: a regra guardada é
+        uma por descrição. Descrição que já tem regra válida, ou que é só de números, não vai.
         """
         covered = {line.description_normalized for line in found}
         kinds: dict[str, Counter[CategoryKind]] = {}

@@ -186,7 +186,7 @@ Arquivar uma categoria mãe arquiva as filhas.
 | `description` | texto | 1 a 200 caracteres |
 | `description_normalized` | texto | para regras de categoria e duplicatas |
 | `notes` | texto | opcional (FR-027) |
-| `category_id` | UUID | FK; obrigatório para despesa e receita, nulo para transferência; `kind` compatível com `type` |
+| `category_id` | UUID | FK; obrigatório para despesa e receita, nulo para transferência. A despesa usa categoria de despesa; a receita, de receita ou, quando é o estorno de uma compra, de despesa (FR-084) |
 | `transfer_group_id` | UUID | liga as duas linhas de uma transferência |
 | `installment_group_id` | UUID | liga as parcelas de uma compra |
 | `installment_number` | inteiro | de 1 a `installment_count` |

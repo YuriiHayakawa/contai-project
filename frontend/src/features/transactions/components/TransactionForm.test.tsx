@@ -349,3 +349,91 @@ describe("TransactionForm: edição", () => {
     );
   });
 });
+
+describe("TransactionForm: estorno", () => {
+  const refundBox = (): HTMLElement =>
+    screen.getByRole("checkbox", { name: /É o estorno de uma compra/ });
+  const purchaseCategoryField = (): HTMLSelectElement =>
+    screen.getByRole("combobox", { name: "Categoria da compra" });
+
+  it("só a receita pode ser o estorno de uma compra", async () => {
+    const { user } = renderForm();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+
+    await user.click(typeOption("Receita"));
+    expect(refundBox()).not.toBeChecked();
+
+    await user.click(typeOption("Transferência"));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("marcado, a receita fica na categoria da compra e é enviada como receita", async () => {
+    const { user, onSubmit } = renderForm();
+    await user.click(typeOption("Receita"));
+    await user.selectOptions(categoryField(), "cat-salario");
+
+    await user.click(refundBox());
+
+    // As categorias passam a ser as de despesa, e a que estava escolhida não vale mais.
+    expect(purchaseCategoryField()).toHaveValue("");
+    expect(optionLabels(purchaseCategoryField())).toEqual([
+      "Escolha uma categoria",
+      "Alimentação",
+      "Alimentação › Delivery",
+      "Alimentação › Mercado",
+      "Outros",
+    ]);
+    expect(screen.getByText(/abate o gasto da categoria da compra/)).toBeInTheDocument();
+
+    await user.type(amountField(), "5000");
+    await user.type(descriptionField(), "Estorno do mercado");
+    await user.selectOptions(purchaseCategoryField(), "cat-mercado");
+    await user.selectOptions(accountField(), "acc-conta");
+    await user.click(saveButton());
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        kind: "entry",
+        input: {
+          type: "income",
+          amount_cents: 5000,
+          date: today(),
+          description: "Estorno do mercado",
+          account_id: "acc-conta",
+          category_id: "cat-mercado",
+          notes: null,
+        },
+      }),
+    );
+  });
+
+  it("desmarcar volta para as categorias de receita, e trocar o tipo desmarca", async () => {
+    const { user } = renderForm();
+    await user.click(typeOption("Receita"));
+    await user.click(refundBox());
+    await user.selectOptions(purchaseCategoryField(), "cat-mercado");
+
+    await user.click(refundBox());
+    expect(optionLabels(categoryField())).toEqual(["Escolha uma categoria", "Salário"]);
+    expect(categoryField()).toHaveValue("");
+
+    await user.click(refundBox());
+    await user.click(typeOption("Despesa"));
+    await user.click(typeOption("Receita"));
+    expect(refundBox()).not.toBeChecked();
+  });
+
+  it("um estorno em edição vem marcado, com a categoria da compra", () => {
+    renderForm({ ...saved, type: "income", category_id: "cat-mercado", account_id: "acc-conta" });
+
+    expect(refundBox()).toBeChecked();
+    expect(purchaseCategoryField()).toHaveValue("cat-mercado");
+  });
+
+  it("uma receita comum em edição vem desmarcada", () => {
+    renderForm({ ...saved, type: "income", category_id: "cat-salario", account_id: "acc-conta" });
+
+    expect(refundBox()).not.toBeChecked();
+    expect(categoryField()).toHaveValue("cat-salario");
+  });
+});
