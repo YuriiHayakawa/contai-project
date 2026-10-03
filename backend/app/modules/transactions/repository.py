@@ -105,6 +105,9 @@ class TransactionRepository:
         notes: str | None = None,
         transfer_direction: TransferDirection | None = None,
         transfer_group_id: uuid.UUID | None = None,
+        installment_group_id: uuid.UUID | None = None,
+        installment_number: int | None = None,
+        installment_count: int | None = None,
         source: TransactionSource = TransactionSource.MANUAL,
     ) -> Transaction:
         transaction = Transaction(
@@ -120,6 +123,9 @@ class TransactionRepository:
             notes=notes,
             transfer_direction=transfer_direction,
             transfer_group_id=transfer_group_id,
+            installment_group_id=installment_group_id,
+            installment_number=installment_number,
+            installment_count=installment_count,
             source=source,
             # O instante vem do relógio da aplicação: é ele que ordena os lançamentos do dia.
             created_at=created_at,
@@ -152,6 +158,37 @@ class TransactionRepository:
                 Transaction.id == transaction_id, Transaction.user_id == user_id
             )
         )
+
+    async def delete_many(self, user_id: uuid.UUID, transaction_ids: list[uuid.UUID]) -> None:
+        await self._session.execute(
+            delete(Transaction).where(
+                Transaction.id.in_(transaction_ids), Transaction.user_id == user_id
+            )
+        )
+
+    async def installments_from(
+        self, user_id: uuid.UUID, group_id: uuid.UUID, first_number: int
+    ) -> list[Transaction]:
+        """Parcelas da compra a partir do número informado, em ordem."""
+        result = await self._session.execute(
+            select(Transaction)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.installment_group_id == group_id,
+                Transaction.installment_number >= first_number,
+            )
+            .order_by(Transaction.installment_number)
+        )
+        return list(result.scalars())
+
+    async def transfer_lines(self, user_id: uuid.UUID, group_id: uuid.UUID) -> list[Transaction]:
+        """As duas linhas de uma transferência: a de saída e a de entrada."""
+        result = await self._session.execute(
+            select(Transaction)
+            .where(Transaction.user_id == user_id, Transaction.transfer_group_id == group_id)
+            .order_by(Transaction.transfer_direction.desc())
+        )
+        return list(result.scalars())
 
     async def count(self, user_id: uuid.UUID, filters: TransactionFilters) -> int:
         result = await self._session.execute(

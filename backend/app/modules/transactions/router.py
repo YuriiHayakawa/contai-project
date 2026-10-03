@@ -11,10 +11,14 @@ from app.core.database import get_session
 from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.transactions.models import TransactionType
 from app.modules.transactions.schemas import (
+    EditScope,
+    InstallmentPurchaseCreate,
     TransactionCreate,
+    TransactionList,
     TransactionPage,
     TransactionRead,
     TransactionUpdate,
+    TransferCreate,
 )
 from app.modules.transactions.service import TransactionService
 
@@ -31,6 +35,14 @@ def get_transaction_service(
 
 
 TransactionServiceDep = Annotated[TransactionService, Depends(get_transaction_service)]
+ScopeParam = Annotated[
+    EditScope,
+    Query(
+        description=(
+            "Só em parcelas: `single` muda só esta; `following`, esta e as seguintes (FR-032)."
+        )
+    ),
+]
 
 
 @router.get(
@@ -86,6 +98,32 @@ async def create_transaction(
     return await service.create(current.id, body)
 
 
+@router.post(
+    "/installments",
+    status_code=status.HTTP_201_CREATED,
+    summary="Lançar uma compra parcelada no cartão",
+    description=(
+        "Gera de 2 a 48 parcelas mensais; os centavos que sobram da divisão vão para a primeira."
+    ),
+)
+async def create_installments(
+    body: InstallmentPurchaseCreate, current: CurrentUserDep, service: TransactionServiceDep
+) -> TransactionList:
+    return TransactionList(items=await service.create_installments(current.id, body))
+
+
+@router.post(
+    "/transfers",
+    status_code=status.HTTP_201_CREATED,
+    summary="Transferir entre duas contas próprias",
+    description="Cria a linha de saída e a de entrada. Não conta como receita nem como despesa.",
+)
+async def create_transfer(
+    body: TransferCreate, current: CurrentUserDep, service: TransactionServiceDep
+) -> TransactionList:
+    return TransactionList(items=await service.create_transfer(current.id, body))
+
+
 @router.get("/{transaction_id}", summary="Ver uma transação")
 async def get_transaction(
     transaction_id: uuid.UUID, current: CurrentUserDep, service: TransactionServiceDep
@@ -93,20 +131,35 @@ async def get_transaction(
     return await service.get(current.id, transaction_id)
 
 
-@router.patch("/{transaction_id}", summary="Editar uma transação")
+@router.patch(
+    "/{transaction_id}",
+    summary="Editar uma transação",
+    description=(
+        "Transferência muda nos dois lados. Com `scope=following` em uma parcela, devolve a "
+        "lista das parcelas alteradas."
+    ),
+)
 async def update_transaction(
     transaction_id: uuid.UUID,
     body: TransactionUpdate,
     current: CurrentUserDep,
     service: TransactionServiceDep,
-) -> TransactionRead:
-    return await service.update(current.id, transaction_id, body)
+    scope: ScopeParam = EditScope.SINGLE,
+) -> TransactionRead | TransactionList:
+    updated = await service.update(current.id, transaction_id, body, scope)
+    return TransactionList(items=updated) if isinstance(updated, list) else updated
 
 
 @router.delete(
-    "/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Excluir uma transação"
+    "/{transaction_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Excluir uma transação",
+    description="Transferência sai dos dois lados; parcela, sozinha ou com as seguintes.",
 )
 async def delete_transaction(
-    transaction_id: uuid.UUID, current: CurrentUserDep, service: TransactionServiceDep
+    transaction_id: uuid.UUID,
+    current: CurrentUserDep,
+    service: TransactionServiceDep,
+    scope: ScopeParam = EditScope.SINGLE,
 ) -> None:
-    await service.delete(current.id, transaction_id)
+    await service.delete(current.id, transaction_id, scope)

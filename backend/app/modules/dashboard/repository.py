@@ -98,3 +98,37 @@ class ReportRepository:
             .limit(limit)
         )
         return list(result.scalars())
+
+    async def account_totals_by_type(
+        self, user_id: uuid.UUID, account_id: uuid.UUID, *, start: dt.date, end: dt.date
+    ) -> dict[TransactionType, int]:
+        """Soma de receitas e de despesas de uma conta no período, inclusive."""
+        result = await self._session.execute(
+            select(Transaction.type, _TOTAL)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                Transaction.date >= start,
+                Transaction.date <= end,
+                Transaction.type.in_(_ENTRY_TYPES),
+            )
+            .group_by(Transaction.type)
+        )
+        return {TransactionType(kind): int(amount) for kind, amount in result.all()}
+
+    async def installments_from(
+        self, user_id: uuid.UUID, account_id: uuid.UUID, *, start: dt.date
+    ) -> list[tuple[dt.date, int]]:
+        """Data e valor das parcelas de compras parceladas do cartão a partir de `start`."""
+        result = await self._session.execute(
+            select(Transaction.date, Transaction.amount_cents)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                Transaction.date >= start,
+                Transaction.type == TransactionType.EXPENSE,
+                Transaction.installment_group_id.is_not(None),
+            )
+            .order_by(Transaction.date)
+        )
+        return [(day, int(amount)) for day, amount in result.all()]

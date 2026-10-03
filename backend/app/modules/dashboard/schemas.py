@@ -3,6 +3,7 @@
 Todo valor é um inteiro em centavos. Um mês é escrito como `AAAA-MM`.
 """
 
+import datetime as dt
 import uuid
 
 from pydantic import BaseModel
@@ -86,3 +87,41 @@ class DashboardTopExpenses(BaseModel):
     month: str
     # Da maior despesa para a menor.
     items: list[TransactionRead]
+
+
+class InvoiceSummary(BaseModel):
+    """Fatura de um cartão: as compras de `period_start` a `period_end`, inclusive."""
+
+    period_start: dt.date
+    period_end: dt.date
+    closing_date: dt.date
+    due_date: dt.date
+    # Compras menos estornos do período. O pagamento da fatura é transferência e não entra.
+    amount_cents: int
+
+
+class MonthAmount(BaseModel):
+    month: str
+    amount_cents: int
+
+
+class FutureInstallments(BaseModel):
+    """Parcelas que caem em faturas depois da atual."""
+
+    total_cents: int
+    # Por mês de vencimento da fatura em que cada parcela cai, do mais próximo ao mais distante.
+    months: list[MonthAmount]
+
+
+class CardSummary(BaseModel):
+    account_id: uuid.UUID
+    name: str
+    closing_day: int
+    due_day: int
+    current_invoice: InvoiceSummary
+    future_installments: FutureInstallments
+
+
+class DashboardCards(BaseModel):
+    # Cartões ativos, em ordem alfabética.
+    items: list[CardSummary]

@@ -2,6 +2,7 @@
 
 import datetime as dt
 import uuid
+from enum import StrEnum
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, Field, StringConstraints
@@ -29,6 +30,39 @@ class TransactionCreate(BaseModel):
     account_id: uuid.UUID
     category_id: uuid.UUID
     notes: Notes | None = None
+
+
+class InstallmentPurchaseCreate(BaseModel):
+    """Compra parcelada no cartão: o total é dividido em parcelas mensais (FR-030)."""
+
+    total_cents: AmountCents
+    installments: Annotated[int, Field(ge=2, le=48)]
+    # Data da compra, que é a da primeira parcela.
+    date: dt.date
+    description: Description
+    account_id: uuid.UUID
+    category_id: uuid.UUID
+    notes: Notes | None = None
+
+
+class TransferCreate(BaseModel):
+    """Transferência entre duas contas do usuário, inclusive o pagamento da fatura (FR-033)."""
+
+    from_account_id: uuid.UUID
+    to_account_id: uuid.UUID
+    amount_cents: AmountCents
+    date: dt.date
+    description: Description
+    notes: Notes | None = None
+
+
+class EditScope(StrEnum):
+    """Alcance de uma edição ou exclusão de parcela (FR-032)."""
+
+    # Só a parcela escolhida.
+    SINGLE = "single"
+    # A parcela escolhida e as seguintes da mesma compra; as anteriores não mudam.
+    FOLLOWING = "following"
 
 
 class TransactionUpdate(BaseModel):
@@ -88,3 +122,10 @@ class TransactionPage(BaseModel):
     next_cursor: str | None
     # Quantas transações atendem aos filtros, somando todas as páginas.
     total_count: int
+
+
+class TransactionList(BaseModel):
+    """Lançamentos criados ou alterados juntos: as parcelas de uma compra ou os dois lados de
+    uma transferência."""
+
+    items: list[TransactionRead]

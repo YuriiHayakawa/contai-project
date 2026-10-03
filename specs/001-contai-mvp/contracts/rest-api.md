@@ -108,11 +108,11 @@ redefinir a senha ou depois de 24 horas sem erros.
 |---------------|------------------|----------|-------|
 | `GET /transactions` | `from`, `to`, `account_id`, `category_id` (inclui subcategorias), `type`, `q`, `installment_group_id`, `ids` | lista paginada, mais `total_count` | filtros combináveis (FR-035); da mais nova para a mais antiga; `q` procura na descrição e na observação, sem diferenciar acentos nem maiúsculas; `ids` é repetido (`?ids=a&ids=b`) |
 | `POST /transactions` | `type` (`expense` ou `income`), `amount_cents`, `date`, `description`, `account_id`, `category_id`, `notes` | `201` com a transação | conta e categoria precisam ser do usuário e estar ativas, e a categoria precisa ser do mesmo tipo: caso contrário, `422` com a mensagem no campo; grava ou atualiza a regra de categoria |
-| `POST /transactions/installments` | `total_cents`, `installments` (2 a 48), `date`, `description`, `account_id`, `category_id`, `notes` | lista das parcelas | conta precisa ser cartão (FR-030) |
-| `POST /transactions/transfers` | `from_account_id`, `to_account_id`, `amount_cents`, `date`, `description` | as duas linhas | contas diferentes (FR-033) |
+| `POST /transactions/installments` | `total_cents`, `installments` (2 a 48), `date`, `description`, `account_id`, `category_id`, `notes` | `201` com `{ "items": [...] }`, as parcelas em ordem | conta precisa ser cartão (FR-030); a primeira parcela leva os centavos que sobram; a parcela k tem a data da compra mais k − 1 meses, no último dia do mês quando o dia não existe |
+| `POST /transactions/transfers` | `from_account_id`, `to_account_id`, `amount_cents`, `date`, `description` | `201` com `{ "items": [...] }`: a linha `out` e a `in` | contas diferentes e ativas (FR-033); o pagamento da fatura é uma transferência da conta para o cartão |
 | `GET /transactions/{id}` | — | transação | |
-| `PATCH /transactions/{id}` | campos editáveis; `?scope=single` ou `group` | transação ou lista | `scope` vale para parcelas (FR-032); transferência edita os dois lados; em despesa e receita, também grava ou atualiza a regra de categoria (FR-048) |
-| `DELETE /transactions/{id}` | `?scope=single` ou `group` | `204` | |
+| `PATCH /transactions/{id}` | campos editáveis; `?scope=single` ou `following` | transação ou lista | `scope` vale para parcelas (FR-032): `single` muda só esta, `following` muda esta e as seguintes e devolve a lista; transferência edita os dois lados; em despesa e receita, também grava ou atualiza a regra de categoria (FR-048) |
+| `DELETE /transactions/{id}` | `?scope=single` ou `following` | `204` | em parcelas, `following` exclui esta e as seguintes; transferência exclui os dois lados |
 
 ## Importações
 
@@ -141,7 +141,7 @@ intervalo de datas (FR-059); períodos personalizados são atendidos pelo assist
 | `GET /dashboard/categories` | gastos por categoria, com subcategorias, valor e percentual (FR-056) |
 | `GET /dashboard/trend?months=6&until=YYYY-MM` | entradas e saídas por mês (FR-057) |
 | `GET /dashboard/top-expenses?limit=5` | maiores despesas do período (FR-057) |
-| `GET /dashboard/cards` | por cartão: fatura atual (período, fechamento, vencimento, valor) e parcelas futuras por mês e no total (FR-058) |
+| `GET /dashboard/cards` | por cartão ativo: fatura atual (período, fechamento, vencimento, valor de compras menos estornos) e parcelas futuras por mês de vencimento da fatura e no total (FR-058); no mês atual a fatura é a que contém hoje, e em um mês passado, a que estava aberta no último dia dele |
 
 Transferências nunca entram em `income_cents` nem em `expense_cents`.
 
