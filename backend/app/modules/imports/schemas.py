@@ -6,6 +6,11 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, Field
 
+from app.modules.imports.detection import (
+    INVOICE_PAYMENT_WITHOUT_CARD,
+    INVOICE_PAYMENT_WITHOUT_CARD_MESSAGE,
+    is_invoice_payment,
+)
 from app.modules.imports.mapping import MappingSuggestion
 from app.modules.imports.models import (
     CategorySource,
@@ -36,9 +41,19 @@ class ImportItemRead(BaseModel):
     duplicate_of_id: uuid.UUID | None
     # Duplicata chega desmarcada (FR-049).
     selected_by_default: bool
+    # Aviso para o usuário conferir a linha, com o que fazer; hoje, só
+    # `invoice_payment_without_card`.
+    warning_code: str | None
+    warning_message: str | None
 
     @classmethod
     def from_item(cls, item: ImportItem) -> Self:
+        # Com um cartão cadastrado a linha teria vindo como transferência (FR-081). Como
+        # despesa, ela conta como gasto; se as compras do cartão também são lançadas, conta
+        # duas vezes.
+        payment_without_card = is_invoice_payment(
+            TransactionType(item.type), item.description_normalized
+        )
         return cls(
             id=item.id,
             row_index=item.row_index,
@@ -55,6 +70,10 @@ class ImportItemRead(BaseModel):
             duplicate_status=DuplicateStatus(item.duplicate_status),
             duplicate_of_id=item.duplicate_of_id,
             selected_by_default=item.selected_by_default,
+            warning_code=INVOICE_PAYMENT_WITHOUT_CARD if payment_without_card else None,
+            warning_message=(
+                INVOICE_PAYMENT_WITHOUT_CARD_MESSAGE if payment_without_card else None
+            ),
         )
 
 

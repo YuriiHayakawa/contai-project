@@ -274,7 +274,10 @@ no início da implementação.
   o restante vai em um único lote à IA, que recebe só as descrições distintas e a lista de
   categorias do usuário, e devolve um índice por descrição; o que a IA não resolver, ou devolver
   inválido, fica em "Outros". Uma correção do usuário grava ou substitui a regra como `user`,
-  que a IA nunca sobrescreve. O lote vai em pedidos de até 150 descrições, no máximo 4 por
+  que a IA nunca sobrescreve. Cada descrição normalizada vai à IA uma vez só, e a resposta
+  vale para todas as linhas iguais; a que aparece como despesa e como receita (a compra e o
+  estorno dela) vai com o tipo em que mais aparece, porque a regra guardada é uma por
+  descrição. O lote vai em pedidos de até 150 descrições, no máximo 4 por
   importação; o que passar disso fica em "Outros". A IA recebe descrições normalizadas e nomes
   de categorias, e nunca valores, datas ou contas. Se o provedor falhar, a importação segue com
   "Outros". Na confirmação de uma importação, só uma categoria diferente da sugerida vira

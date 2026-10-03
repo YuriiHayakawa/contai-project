@@ -132,7 +132,9 @@ foi importado na conta). `mapping_preview`: `{ "columns", "rows", "suggestion" }
 primeiras linhas como estão no arquivo e o palpite no formato do corpo do mapeamento. Cada item
 de `items` traz `id`, `row_index`, `type`, `amount_cents`, `date`, `description`,
 `suggested_category_id`, `category_source`, `suggested_counter_account_id`, `duplicate_status`,
-`duplicate_of_id` e `selected_by_default`.
+`duplicate_of_id`, `selected_by_default`, `warning_code` e `warning_message`. O aviso, com o
+que fazer, hoje é só `invoice_payment_without_card`: a linha parece o pagamento de uma fatura
+e ficou como despesa porque não há cartão cadastrado (FR-081).
 
 `total_check`: `{ "document_total_cents", "extracted_total_cents", "matches" }` ou nulo.
 `balance_check`: `{ "bank_balance_cents", "bank_balance_date", "account_balance_cents",

@@ -659,7 +659,9 @@ os 7 dias, não consegue mais entrar.
   "pag fatura", "pgto fatura", "pagto cartao", "fatura cartao"). Se o usuário tiver mais de um
   cartão, o sistema DEVE sugerir aquele cuja fatura em aberto tem o valor mais próximo do valor
   da linha. O usuário DEVE poder confirmar a sugestão, trocar o cartão ou tratá-la como despesa
-  comum.
+  comum. Sem cartão cadastrado, a linha DEVE continuar sugerida como despesa, com um aviso na
+  revisão: quem também lança as compras do cartão deve cadastrar o cartão e marcar a linha como
+  pagamento de fatura, para não contar o gasto duas vezes.
 - **FR-082**: Quando o arquivo importado informar o saldo da conta no banco (por exemplo, em um
   OFX), o sistema DEVE compará-lo com o saldo calculado da conta na mesma data e avisar o
   usuário se houver divergência, mostrando os dois valores; o aviso NÃO DEVE impedir a

@@ -8,6 +8,7 @@ normalizadas e nomes de categorias: nunca valores, datas ou contas.
 
 import logging
 import uuid
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -148,12 +149,7 @@ class CategorizationService:
                 )
                 found[line] = Suggestion(category_id=category.id, source=source)
 
-        pending = [line for line in dict.fromkeys(lines) if line not in found]
-        found.update(
-            await self._ask_ai(
-                user_id, [line for line in pending if line.description_normalized], categories
-            )
-        )
+        found.update(await self._ask_ai(user_id, self._to_ask(lines, found), categories))
 
         def resolve(line: Line) -> Suggestion | None:
             if line in found:
@@ -164,6 +160,26 @@ class CategorizationService:
             return Suggestion(category_id=category_id, source=SuggestionSource.FALLBACK)
 
         return [resolve(line) for line in lines]
+
+    @staticmethod
+    def _to_ask(lines: Sequence[Line], found: dict[Line, Suggestion]) -> list[Line]:
+        """As descrições que vão à IA: cada descrição normalizada uma vez só.
+
+        A resposta vale para todas as linhas iguais. A descrição que aparece nos dois tipos,
+        como uma compra e o estorno dela, vai com o tipo em que mais aparece, e a do outro tipo
+        fica em "Outros": a regra guardada é uma por descrição. Descrição que já tem regra
+        válida, ou que é só de números, não vai.
+        """
+        covered = {line.description_normalized for line in found}
+        kinds: dict[str, Counter[CategoryKind]] = {}
+        for line in lines:
+            description = line.description_normalized
+            if description and description not in covered:
+                kinds.setdefault(description, Counter())[line.kind] += 1
+        return [
+            Line(description_normalized=description, kind=counts.most_common(1)[0][0])
+            for description, counts in kinds.items()
+        ]
 
     async def _ask_ai(
         self, user_id: uuid.UUID, lines: Sequence[Line], categories: Sequence[Category]
