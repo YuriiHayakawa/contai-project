@@ -107,7 +107,7 @@ redefinir a senha ou depois de 24 horas sem erros.
 | Método e rota | Corpo ou filtros | Resposta | Notas |
 |---------------|------------------|----------|-------|
 | `GET /transactions` | `from`, `to`, `account_id`, `category_id` (inclui subcategorias), `type`, `q`, `installment_group_id`, `transfer_group_id`, `ids` | lista paginada, mais `total_count` | filtros combináveis (FR-035); da mais nova para a mais antiga; `q` procura na descrição e na observação, sem diferenciar acentos nem maiúsculas; `ids` é repetido (`?ids=a&ids=b`) |
-| `POST /transactions` | `type` (`expense` ou `income`), `amount_cents`, `date`, `description`, `account_id`, `category_id`, `notes` | `201` com a transação | conta e categoria precisam ser do usuário e estar ativas, e a categoria precisa ser do mesmo tipo: caso contrário, `422` com a mensagem no campo; grava ou atualiza a regra de categoria |
+| `POST /transactions` | `type` (`expense` ou `income`), `amount_cents`, `date`, `description`, `account_id`, `category_id`, `notes` | `201` com a transação | conta e categoria precisam ser do usuário e estar ativas, e a despesa precisa de uma categoria de despesa: caso contrário, `422` com a mensagem no campo. Uma receita aceita categoria de receita ou, como estorno de uma compra, de despesa (FR-084); grava ou atualiza a regra de categoria |
 | `POST /transactions/installments` | `total_cents`, `installments` (2 a 48), `date`, `description`, `account_id`, `category_id`, `notes` | `201` com `{ "items": [...] }`, as parcelas em ordem | conta precisa ser cartão (FR-030); a primeira parcela leva os centavos que sobram; a parcela k tem a data da compra mais k − 1 meses, no último dia do mês quando o dia não existe |
 | `POST /transactions/transfers` | `from_account_id`, `to_account_id`, `amount_cents`, `date`, `description` | `201` com `{ "items": [...] }`: a linha `out` e a `in` | contas diferentes e ativas (FR-033); o pagamento da fatura é uma transferência da conta para o cartão |
 | `GET /transactions/{id}` | — | transação | |
@@ -152,8 +152,8 @@ intervalo de datas (FR-059); períodos personalizados são atendidos pelo assist
 
 | Método e rota | Resposta |
 |---------------|----------|
-| `GET /dashboard/summary` | `income_cents`, `expense_cents`, `net_cents` e o saldo de cada conta ativa (FR-055) |
-| `GET /dashboard/categories` | gastos por categoria, com subcategorias, valor e percentual (FR-056) |
+| `GET /dashboard/summary` | `income_cents`, `expense_cents`, `net_cents` e o saldo de cada conta ativa (FR-055). O estorno, que é uma receita em categoria de despesa, abate `expense_cents` e não entra em `income_cents` (FR-084) |
+| `GET /dashboard/categories` | gastos por categoria, com subcategorias, valor e percentual (FR-056). O valor é o das despesas menos os estornos: a categoria em que os dois se anulam não aparece, e a que fica negativa vem no fim, com percentual zero. O percentual é a parte da categoria no que foi gasto, e `total_cents` é igual a `expense_cents` do resumo (FR-084) |
 | `GET /dashboard/trend?months=6&until=YYYY-MM` | entradas e saídas por mês (FR-057) |
 | `GET /dashboard/top-expenses?limit=5` | maiores despesas do período (FR-057) |
 | `GET /dashboard/cards` | por cartão ativo: fatura atual (período, fechamento, vencimento, valor de compras menos estornos) e parcelas futuras por mês de vencimento da fatura e no total (FR-058); no mês atual a fatura é a que contém hoje, e em um mês passado, a que estava aberta no último dia dele. `payment`, sempre visto de hoje: `closed_invoice` (fechamento, vencimento e o que falta pagar da última fatura fechada, ou `null` se as fechadas estão pagas) e `total_due_cents` (tudo o que se deve no cartão), para o "Pagar fatura" (FR-033) |

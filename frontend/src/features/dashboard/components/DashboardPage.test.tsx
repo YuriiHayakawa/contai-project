@@ -209,7 +209,11 @@ describe("DashboardPage", () => {
       Promise.resolve({
         month,
         total_cents: 280_000,
-        items: names.map((name, index) => spending(index, name, 70_000 - index * 10_000, 10)),
+        // O percentual de cada categoria vem pronto da API, com uma casa.
+        items: names.map((name, index) => {
+          const amount = 70_000 - index * 10_000;
+          return spending(index, name, amount, Math.round((amount * 1000) / 280_000) / 10);
+        }),
       }),
     );
     renderPage();
@@ -230,6 +234,32 @@ describe("DashboardPage", () => {
     expect(rows[5]).toHaveTextContent("R$ 300,00");
     expect(rows[5]).toHaveTextContent("10,7% dos gastos · 2 categorias");
     expect(rows[5]).toHaveAttribute("href", "/lancamentos?tipo=expense");
+  });
+
+  it("categoria negativa por um estorno: mostra o valor, sem barra nem percentual", async () => {
+    getCategories.mockImplementation((month) =>
+      Promise.resolve({
+        month,
+        total_cents: 35_000,
+        items: [
+          spending(0, "Alimentação", 30_000, 75),
+          spending(1, "Transporte", 10_000, 25),
+          // O livro comprado no mês passado foi devolvido neste.
+          spending(2, "Educação", -5_000, 0),
+        ],
+      }),
+    );
+    renderPage();
+    await title(CURRENT);
+
+    const ranking = screen.getByRole("heading", { name: "Para onde foi o dinheiro" });
+    const rows = within(ranking.closest("section") as HTMLElement).getAllByRole("link");
+
+    expect(rows[0]).toHaveTextContent("75,0% dos gastos");
+    expect(rows[2]).toHaveTextContent("Educação");
+    expect(rows[2]).toHaveTextContent("−R$ 50,00");
+    expect(rows[2]).toHaveTextContent("Estornos maiores que os gastos do mês");
+    expect(rows[2]).not.toHaveTextContent("% dos gastos");
   });
 
   it("mês no vermelho: o saldo leva o sinal de menos e a frase diz o que houve", async () => {

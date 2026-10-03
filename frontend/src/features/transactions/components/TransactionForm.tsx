@@ -4,6 +4,7 @@ import { useEffect, useId, useState, type RefObject } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 
 import { Button } from "../../../components/ui/Button";
+import { Checkbox } from "../../../components/ui/Checkbox";
 import { MoneyInput } from "../../../components/ui/MoneyInput";
 import { Notice } from "../../../components/ui/Notice";
 import { SegmentedControl } from "../../../components/ui/SegmentedControl";
@@ -106,6 +107,14 @@ const installmentOptions: SelectOption[] = [
 ];
 
 const isCard = (account: Account | undefined): boolean => account?.type === "credit_card";
+
+/** Um estorno é uma receita lançada em categoria de despesa: abate o gasto da categoria. */
+function isRefund(transaction: Transaction | undefined, categories: CategoryTree): boolean {
+  if (transaction?.type !== "income") return false;
+  return categoryOptions(categories, "expense", { includeArchived: true }).some(
+    ({ category }) => category.id === transaction.category_id,
+  );
+}
 
 /**
  * Valores iniciais. Um lançamento novo vem com a data de hoje e a última conta usada (FR-028);
@@ -259,6 +268,7 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const amountId = useId();
   const [formError, setFormError] = useState<string | null>(null);
+  const [refund, setRefund] = useState(() => isRefund(transaction, categories));
   const {
     register: field,
     control,
@@ -310,8 +320,9 @@ export function TransactionForm({
         value: account.id,
         label: account.archived ? `${account.name}${ARCHIVED_SUFFIX}` : account.name,
       }));
-  const entryType = type === "income" ? "income" : "expense";
-  const categorySelectOptions: SelectOption[] = categoryOptions(categories, entryType, {
+  // O estorno fica na categoria da compra: a lista passa a ser a das categorias de despesa.
+  const categoryKind = type === "income" && !refund ? "income" : "expense";
+  const categorySelectOptions: SelectOption[] = categoryOptions(categories, categoryKind, {
     includeArchived: true,
   })
     .filter(({ category }) => !category.archived || category.id === transaction?.category_id)
@@ -320,8 +331,15 @@ export function TransactionForm({
       label: category.archived ? `${label}${ARCHIVED_SUFFIX}` : label,
     }));
 
+  const changeRefund = (next: boolean): void => {
+    setRefund(next);
+    // As categorias de receita e as de despesa são listas diferentes: a escolhida não vale.
+    setValue("categoryId", "", { shouldDirty: true });
+  };
+
   const changeType = (next: TransactionType): void => {
     setValue("type", next, { shouldDirty: true });
+    setRefund(false);
     if (next === "transfer") {
       if (!getValues("description").trim()) setValue("description", TRANSFER_DESCRIPTION);
       return;
@@ -504,8 +522,16 @@ export function TransactionForm({
             error={errors.description?.message}
             {...field("description")}
           />
+          {type === "income" && (
+            <Checkbox checked={refund} onChange={(event) => changeRefund(event.target.checked)}>
+              É o estorno de uma compra
+              <span className="block text-small text-ink-muted">
+                O valor abate o gasto da categoria da compra, em vez de contar como receita.
+              </span>
+            </Checkbox>
+          )}
           <Select
-            label="Categoria"
+            label={refund ? "Categoria da compra" : "Categoria"}
             placeholder="Escolha uma categoria"
             options={categorySelectOptions}
             error={errors.categoryId?.message}

@@ -184,7 +184,10 @@ function TransferLeg({ side, account }: TransferLegProps) {
 
 function TransactionRow({ transaction, account, category, onSelect }: TransactionRowProps) {
   const isTransfer = transaction.type === "transfer";
+  // Receita em categoria de despesa: o dinheiro de uma compra que voltou.
+  const isRefund = transaction.type === "income" && category?.category.kind === "expense";
   const details = [
+    isRefund && "Estorno",
     isTransfer ? "Transferência" : category?.category.name,
     // Só um lado da transferência está na tela: diz o que aconteceu nesta conta.
     isTransfer ? transferSideLabel(transaction, account) : account?.name,

@@ -277,12 +277,18 @@ no início da implementação.
   que a IA nunca sobrescreve. Cada descrição normalizada vai à IA uma vez só, e a resposta
   vale para todas as linhas iguais; a que aparece como despesa e como receita (a compra e o
   estorno dela) vai com o tipo em que mais aparece, porque a regra guardada é uma por
-  descrição. O lote vai em pedidos de até 150 descrições, no máximo 4 por
+  descrição, e a entrada de mesma descrição recebe a categoria da compra, como estorno. O lote vai em pedidos de até 150 descrições, no máximo 4 por
   importação; o que passar disso fica em "Outros". A IA recebe descrições normalizadas e nomes
   de categorias, e nunca valores, datas ou contas. Se o provedor falhar, a importação segue com
   "Outros". Na confirmação de uma importação, só uma categoria diferente da sugerida vira
   regra do usuário, e ela vale para a descrição como veio do banco: aceitar o palpite da IA ou
   o "Outros" não ensina nada. Ao lançar à mão, a categoria escolhida sempre vira regra.
+  Para uma entrada, vale também a regra da compra original: a regra de categoria de despesa
+  da mesma descrição, ou da descrição sem o prefixo de estorno ("estorno", "est", "reembolso",
+  "devolucao", "cancelamento", seguidos ou não de "de", "da", "do" ou "compra"). A entrada vem
+  então sugerida como estorno, na categoria da compra. A regra da própria descrição do estorno,
+  quando existe, vem antes. A IA não sugere estorno: para ela, receita vai com categoria de
+  receita.
 - **Rationale**: atende FR-047, FR-048 e o Princípio VII. O cache das respostas da IA poupa a
   cota gratuita em importações repetidas do mesmo comércio.
 - **Alternatives considered**: semelhança aproximada entre descrições (resultados imprevisíveis;
@@ -316,6 +322,15 @@ no início da implementação.
     extrato do banco. A dívida inicial de um cartão conta como de faturas já fechadas.
   - Um único serviço de relatórios, no módulo `dashboard`, é usado pelo painel e pelas
     ferramentas do assistente.
+  - Estorno: uma receita lançada em categoria de despesa. Nas somas dos relatórios ele abate
+    as saídas e o gasto da categoria, e não soma nas entradas; o saldo da conta e a fatura do
+    cartão não mudam, porque já contam o dinheiro que voltou. A categoria em que compra e
+    estorno se anulam não aparece; a que fica negativa, por um estorno em mês diferente do da
+    compra, aparece no fim, sem percentual, e o percentual das outras é a parte de cada uma
+    no que foi gasto. Não há tipo de transação nem coluna nova: o tipo da categoria diz que a
+    receita é um estorno, e por isso não houve migração. Foram descartados um tipo `refund`
+    (migração, seletor de tipo e todo lugar que trata os tipos) e a ligação do estorno com a
+    compra original (mais precisa, mas pede uma tela para casar os dois).
 - **Rationale**: saldo calculado não pode divergir das transações (SC-009), e o serviço único é
   o que garante números idênticos entre painel e assistente (FR-062, SC-010).
 - **Alternatives considered**: saldo armazenado e atualizado a cada transação (risco de

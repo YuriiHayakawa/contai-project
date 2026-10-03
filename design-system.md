@@ -485,6 +485,9 @@ maior para a menor, com no máximo 6 linhas (as 5 maiores e "Outras", em `--cat-
   valor em `money-md` à direita e, embaixo, uma barra de 8px na cor da categoria sobre um trilho
   `--bg-sunken`, proporcional à maior categoria.
 - A linha inteira é um botão que abre as transações da categoria no período.
+- Categoria negativa (o estorno de uma compra de outro mês): fica no fim da lista, com o valor
+  em `money-md` com `−`, sem barra e sem percentual; no lugar deles, o texto "Estornos maiores
+  que os gastos do mês" em `small` `--ink-muted`.
 - Funciona em 320px, cada valor é lido direto, e preenchimentos de categorias diferentes nunca
   se encostam (seção 2.3).
 

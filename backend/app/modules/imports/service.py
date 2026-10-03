@@ -77,6 +77,7 @@ from app.modules.transactions.service import (
     CATEGORY_NOT_FOUND,
     INVALID_CURSOR,
     TRANSFER_SAME_ACCOUNT,
+    category_fits,
 )
 from app.worker import queue
 from app.worker.models import JobType
@@ -560,8 +561,8 @@ class ImportService:
                 errors.append(("category_id", CATEGORY_NOT_FOUND))
             elif category.archived_at is not None:
                 errors.append(("category_id", CATEGORY_ARCHIVED))
-            elif str(category.kind) != str(decision.type):
-                errors.append(("category_id", CATEGORY_KIND_MISMATCH[decision.type]))
+            elif not category_fits(str(category.kind), decision.type):
+                errors.append(("category_id", CATEGORY_KIND_MISMATCH))
         return errors
 
     async def _save_line(

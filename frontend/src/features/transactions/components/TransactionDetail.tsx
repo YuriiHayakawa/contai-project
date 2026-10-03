@@ -76,7 +76,10 @@ export function TransactionDetail({
 
   if (!transaction) return null;
 
-  const { label: typeLabel, icon: TypeIcon } = typeAppearance[transaction.type];
+  const { label, icon: TypeIcon } = typeAppearance[transaction.type];
+  // Receita em categoria de despesa: abate o gasto dela, e não conta como entrada do mês.
+  const isRefund = transaction.type === "income" && category?.category.kind === "expense";
+  const typeLabel = isRefund ? "Estorno" : label;
   const isTransfer = transaction.type === "transfer";
   const number = transaction.installment_number;
   const count = transaction.installment_count;

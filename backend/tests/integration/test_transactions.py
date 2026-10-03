@@ -465,14 +465,38 @@ async def test_edit_validates_like_create(
         "amount_cents": await client_a.patch(url, json={"amount_cents": 0}),
         "description": await client_a.patch(url, json={"description": " "}),
         "account_id": await client_a.patch(url, json={"account_id": archived["id"]}),
-        # Virar receita mantendo uma categoria de despesa não fecha.
-        "category_id": await client_a.patch(url, json={"type": "income"}),
+        # Uma despesa não cabe em categoria de receita.
+        "category_id": await client_a.patch(url, json={"category_id": salary["id"]}),
     }
 
     for field, response in responses.items():
         assert response.status_code == 422, field
         assert field in response.json()["error"]["details"]["fields"], field
     assert (await client_a.get(url)).json() == transaction
+
+
+async def test_an_income_in_an_expense_category_is_a_refund(
+    client_a: AsyncClient, account: Json, food: Json, salary: Json
+) -> None:
+    # O estorno é uma receita lançada na categoria da compra: abate o gasto dela.
+    refund = await client_a.post(
+        TRANSACTIONS, json=_payload(account, food, type="income", description="Estorno padaria")
+    )
+    purchase = await create_transaction(client_a, account, food)
+
+    assert refund.status_code == 201, refund.text
+    assert (refund.json()["type"], refund.json()["category_id"]) == ("income", food["id"])
+    # Uma despesa também pode virar o estorno, mantendo a categoria.
+    edited = await client_a.patch(f"{TRANSACTIONS}/{purchase['id']}", json={"type": "income"})
+    assert edited.status_code == 200, edited.text
+    assert (edited.json()["type"], edited.json()["category_id"]) == ("income", food["id"])
+    # O inverso não existe: despesa em categoria de receita continua recusada.
+    wrong = await client_a.patch(
+        f"{TRANSACTIONS}/{refund.json()['id']}",
+        json={"type": "expense", "category_id": salary["id"]},
+    )
+    assert wrong.status_code == 422
+    assert "category_id" in wrong.json()["error"]["details"]["fields"]
 
 
 async def test_old_transaction_can_be_edited_while_its_category_and_account_are_archived(

@@ -12,7 +12,7 @@ from app.core.errors import NotFound, ValidationFailed
 from app.core.money import split_installments
 from app.modules.accounts.models import Account, AccountType
 from app.modules.accounts.repository import AccountRepository
-from app.modules.categories.models import Category
+from app.modules.categories.models import Category, CategoryKind
 from app.modules.categories.repository import CategoryRepository
 from app.modules.categorization.service import CategorizationService
 from app.modules.transactions.models import Transaction, TransactionType, TransferDirection
@@ -36,14 +36,11 @@ ACCOUNT_NOT_FOUND = "Escolha uma das suas contas."
 ACCOUNT_ARCHIVED = "Esta conta está arquivada. Escolha outra conta ou desarquive esta."
 CATEGORY_NOT_FOUND = "Escolha uma das suas categorias."
 CATEGORY_ARCHIVED = "Esta categoria está arquivada. Escolha outra categoria ou desarquive esta."
-CATEGORY_KIND_MISMATCH = {
-    TransactionType.EXPENSE: (
-        "Esta é uma categoria de receita. Para uma despesa, escolha uma categoria de despesa."
-    ),
-    TransactionType.INCOME: (
-        "Esta é uma categoria de despesa. Para uma receita, escolha uma categoria de receita."
-    ),
-}
+# Só a despesa pode ter a categoria errada: a receita aceita as de receita e, como estorno,
+# as de despesa.
+CATEGORY_KIND_MISMATCH = (
+    "Esta é uma categoria de receita. Para uma despesa, escolha uma categoria de despesa."
+)
 INVALID_CURSOR = "Não foi possível continuar a lista deste ponto. Recarregue a página."
 INSTALLMENTS_ONLY_ON_CARDS = "Compra parcelada é só no cartão de crédito. Escolha um cartão."
 INSTALLMENTS_STAY_ON_CARDS = "As parcelas ficam sempre em um cartão de crédito. Escolha um cartão."
@@ -60,6 +57,17 @@ _CURSOR_SEPARATOR = "|"
 
 def _invalid(field: str, message: str) -> ValidationFailed:
     return ValidationFailed(details={"fields": {field: message}})
+
+
+def category_fits(category_kind: str, transaction_type: TransactionType) -> bool:
+    """Uma categoria serve para os lançamentos do tipo dela, e a de despesa também para uma
+    receita: é o estorno, que abate o gasto da categoria em vez de contar como entrada.
+
+    Os dois enums têm os mesmos valores para despesa e receita.
+    """
+    if category_kind == str(transaction_type):
+        return True
+    return transaction_type == TransactionType.INCOME and category_kind == CategoryKind.EXPENSE
 
 
 def encode_cursor(transaction: Transaction) -> str:
@@ -173,9 +181,8 @@ class TransactionService:
 
     @staticmethod
     def _check_kind(category: Category, transaction_type: TransactionType) -> None:
-        # Os dois enums têm os mesmos valores para despesa e receita.
-        if str(category.kind) != str(transaction_type):
-            raise _invalid("category_id", CATEGORY_KIND_MISMATCH[transaction_type])
+        if not category_fits(str(category.kind), transaction_type):
+            raise _invalid("category_id", CATEGORY_KIND_MISMATCH)
 
     @staticmethod
     def _refresh_fingerprint(transaction: Transaction) -> None:

@@ -114,6 +114,16 @@ def _sum(items: list[Json], kind: str) -> int:
     return sum(item["amount_cents"] for item in items if item["type"] == kind)
 
 
+def _refunds(items: list[Json], *expense_categories: Json) -> int:
+    """Os estornos da lista: as receitas lançadas em uma das categorias de despesa."""
+    expense_ids = {category["id"] for category in expense_categories}
+    return sum(
+        item["amount_cents"]
+        for item in items
+        if item["type"] == "income" and item["category_id"] in expense_ids
+    )
+
+
 # ---------- resumo do mês
 
 
@@ -193,6 +203,11 @@ async def test_panel_totals_match_the_transaction_list_of_the_same_month(
         (salary, 90_000, "2026-10-01"),  # mês seguinte
     ):
         await create_transaction(client_a, account, category, amount_cents=amount, date=day)
+    # Dois estornos em setembro: receitas lançadas na categoria da compra.
+    for category, amount, day in ((market, 1_999, "2026-09-30"), (transport, 840, "2026-09-20")):
+        await create_transaction(
+            client_a, account, category, type="income", amount_cents=amount, date=day
+        )
     await _transfer(session, user_a, account, savings, 50_000, date(2026, 9, 15))
     balance_before = await balance_of(client_a, account)
 
@@ -203,8 +218,11 @@ async def test_panel_totals_match_the_transaction_list_of_the_same_month(
 
     # A lista traz os dois lados da transferência; o painel não os conta em nenhum total.
     assert _sum(listed, "transfer") == 100_000
-    assert summary["income_cents"] == _sum(listed, "income") == 362_000
-    assert summary["expense_cents"] == _sum(listed, "expense") == 47_049
+    # Na lista o estorno é uma receita; no painel ele abate as saídas e não soma nas entradas.
+    refunds = _refunds(listed, food, market, transport)
+    assert refunds == 2_839
+    assert summary["income_cents"] == _sum(listed, "income") - refunds == 362_000
+    assert summary["expense_cents"] == _sum(listed, "expense") - refunds == 47_049 - 2_839
     assert summary["net_cents"] == _sum(listed, "income") - _sum(listed, "expense")
     assert by_category["total_cents"] == summary["expense_cents"]
     assert sum(item["amount_cents"] for item in by_category["items"]) == summary["expense_cents"]
@@ -219,7 +237,8 @@ async def test_panel_totals_match_the_transaction_list_of_the_same_month(
     # A transferência muda os saldos das duas contas, e só os saldos (FR-033).
     balances = {item["name"]: item["balance_cents"] for item in summary["accounts"]}
     assert balances == {"Conta Nubank": balance_before, "Poupança": 50_000}
-    assert balance_before == 100_000 + 362_000 + 90_000 - 47_049 - 77_700 - 50_000
+    # No saldo da conta o estorno entra como o dinheiro que voltou.
+    assert balance_before == 100_000 + 362_000 + 90_000 - 47_049 + 2_839 - 77_700 - 50_000
 
 
 # ---------- gastos por categoria
@@ -234,6 +253,11 @@ async def test_category_amount_equals_the_sum_of_its_transactions_in_the_list(
     await create_transaction(client_a, account, transport, amount_cents=50_000, date="2026-10-12")
     await create_transaction(client_a, account, market, amount_cents=9_999, date="2026-09-30")
     await create_transaction(client_a, account, salary, amount_cents=350_000, date="2026-10-05")
+    # Uma compra de mercado devolvida no mesmo mês: o estorno abate a subcategoria e a principal.
+    await create_transaction(client_a, account, market, amount_cents=2_500, date="2026-10-20")
+    await create_transaction(
+        client_a, account, market, type="income", amount_cents=2_500, date="2026-10-22"
+    )
 
     body = await _get(client_a, BY_CATEGORY, month="2026-10")
 
@@ -259,7 +283,113 @@ async def test_category_amount_equals_the_sum_of_its_transactions_in_the_list(
     month = {"from": "2026-10-01", "to": "2026-10-31"}
     for item in (food_item, transport_item, food_item["subcategories"][0]):
         listed = await _every_transaction(client_a, category_id=item["category_id"], **month)
-        assert _sum(listed, "expense") == item["amount_cents"]
+        assert _sum(listed, "expense") - _sum(listed, "income") == item["amount_cents"]
+
+
+async def test_a_purchase_refunded_in_the_same_month_leaves_the_category_at_zero(
+    client_a: AsyncClient, account: Json, food: Json, salary: Json
+) -> None:
+    # Comprei e devolvi um livro: R$ 0 em Educação, e nada a mais em entradas ou saídas.
+    education = await create_category(
+        client_a, name="Educação", color="ameixa", icon="graduation-cap"
+    )
+    await create_transaction(client_a, account, salary, amount_cents=350_000, date="2026-09-05")
+    await create_transaction(client_a, account, food, amount_cents=4_590, date="2026-09-08")
+    before = await _get(client_a, SUMMARY, month="2026-09")
+    balance_before = await balance_of(client_a, account)
+
+    await create_transaction(
+        client_a, account, education, amount_cents=5_000, date="2026-09-10", description="Livro"
+    )
+    await create_transaction(
+        client_a,
+        account,
+        education,
+        type="income",
+        amount_cents=5_000,
+        date="2026-09-17",
+        description="Estorno livro",
+    )
+
+    summary = await _get(client_a, SUMMARY, month="2026-09")
+    by_category = await _get(client_a, BY_CATEGORY, month="2026-09")
+    trend = await _get(client_a, TREND, until="2026-09", months=1)
+    totals = ("income_cents", "expense_cents", "net_cents")
+    assert {key: summary[key] for key in totals} == {key: before[key] for key in totals}
+    assert (summary["income_cents"], summary["expense_cents"]) == (350_000, 4_590)
+    # Educação não aparece: a compra e o estorno se anulam.
+    assert [
+        (item["name"], item["amount_cents"], item["percent"]) for item in by_category["items"]
+    ] == [("Alimentação", 4_590, 100.0)]
+    assert by_category["total_cents"] == summary["expense_cents"]
+    assert trend["items"][0]["expense_cents"] == 4_590
+    # A compra continua na lista das maiores despesas: ela aconteceu.
+    top = await _get(client_a, TOP_EXPENSES, month="2026-09")
+    assert top["items"][0]["description"] == "Livro"
+    assert await balance_of(client_a, account) == balance_before
+
+
+async def test_a_refund_in_another_month_makes_the_category_negative_in_that_month(
+    client_a: AsyncClient, account: Json, food: Json, transport: Json, salary: Json
+) -> None:
+    education = await create_category(
+        client_a, name="Educação", color="ameixa", icon="graduation-cap"
+    )
+    # O livro foi comprado em setembro e devolvido em outubro.
+    await create_transaction(client_a, account, education, amount_cents=5_000, date="2026-09-28")
+    await create_transaction(
+        client_a, account, education, type="income", amount_cents=5_000, date="2026-10-03"
+    )
+    await create_transaction(client_a, account, food, amount_cents=30_000, date="2026-10-01")
+    await create_transaction(client_a, account, transport, amount_cents=10_000, date="2026-10-02")
+    await create_transaction(client_a, account, salary, amount_cents=350_000, date="2026-10-05")
+
+    september = await _get(client_a, BY_CATEGORY, month="2026-09")
+    october = await _get(client_a, BY_CATEGORY, month="2026-10")
+    summary = await _get(client_a, SUMMARY, month="2026-10")
+    trend = await _get(client_a, TREND, until="2026-10", months=2)
+
+    # Setembro fica com a compra inteira.
+    assert [(item["name"], item["amount_cents"]) for item in september["items"]] == [
+        ("Educação", 5_000)
+    ]
+    # Em outubro a categoria aparece negativa, no fim e sem percentual; as outras somam 100%.
+    assert [(item["name"], item["amount_cents"], item["percent"]) for item in october["items"]] == [
+        ("Alimentação", 30_000, 75.0),
+        ("Transporte", 10_000, 25.0),
+        ("Educação", -5_000, 0.0),
+    ]
+    # A soma das categorias continua igual ao total de saídas, e o estorno não é entrada.
+    assert october["total_cents"] == summary["expense_cents"] == 35_000
+    assert summary["income_cents"] == 350_000
+    assert summary["net_cents"] == 350_000 - 35_000
+    assert [
+        (item["month"], item["income_cents"], item["expense_cents"]) for item in trend["items"]
+    ] == [
+        ("2026-09", 0, 5_000),
+        ("2026-10", 350_000, 35_000),
+    ]
+
+
+async def test_a_month_with_only_a_refund_has_negative_spending(
+    client_a: AsyncClient, account: Json, food: Json
+) -> None:
+    await create_transaction(
+        client_a, account, food, type="income", amount_cents=4_590, date="2026-10-01"
+    )
+
+    summary = await _get(client_a, SUMMARY, month="2026-10")
+    by_category = await _get(client_a, BY_CATEGORY, month="2026-10")
+
+    assert (summary["income_cents"], summary["expense_cents"], summary["net_cents"]) == (
+        0,
+        -4_590,
+        4_590,
+    )
+    assert [
+        (item["name"], item["amount_cents"], item["percent"]) for item in by_category["items"]
+    ] == [("Alimentação", -4_590, 0.0)]
+    assert by_category["total_cents"] == -4_590
 
 
 async def test_an_archived_category_still_appears_with_its_spending(
