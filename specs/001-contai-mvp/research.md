@@ -276,6 +276,10 @@ no início da implementação.
     uma compra na data d pertence à fatura que fecha na primeira data de fechamento posterior a
     d. Fatura atual é a que contém hoje. Parcelas futuras são as parcelas do cartão com data a
     partir do próximo fechamento.
+  - O que falta pagar das faturas fechadas: os pagamentos quitam primeiro as faturas mais
+    antigas, então é a dívida de hoje menos as compras (menos estornos) da fatura aberta que já
+    pesam no saldo, limitado à própria dívida. Fatura atrasada soma na última fechada, como no
+    extrato do banco. A dívida inicial de um cartão conta como de faturas já fechadas.
   - Um único serviço de relatórios, no módulo `dashboard`, é usado pelo painel e pelas
     ferramentas do assistente.
 - **Rationale**: saldo calculado não pode divergir das transações (SC-009), e o serviço único é

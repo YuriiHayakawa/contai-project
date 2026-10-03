@@ -651,8 +651,11 @@ async def test_paying_the_card_invoice_is_a_transfer_that_leaves_the_panel_total
     assert {key: summary_after[key] for key in ("income_cents", "expense_cents", "net_cents")} == {
         key: summary_before[key] for key in ("income_cents", "expense_cents", "net_cents")
     }
-    # Pagar a fatura não muda o valor gasto nela.
-    assert (await client_a.get(CARDS)).json() == cards_before
+    # Pagar a fatura não muda o valor gasto nela; só o que falta pagar.
+    cards_after = (await client_a.get(CARDS)).json()
+    for before, after in zip(cards_before["items"], cards_after["items"], strict=True):
+        assert {**after, "payment": None} == {**before, "payment": None}
+    assert cards_after["items"][0]["payment"] == {"closed_invoice": None, "total_due_cents": 0}
 
 
 async def test_cards_summary_shows_the_current_invoice_and_future_installments(
@@ -694,6 +697,12 @@ async def test_cards_summary_shows_the_current_invoice_and_future_installments(
                         {"month": "2026-12", "amount_cents": 40_000},
                     ],
                 },
+                # O pagamento de 30 de setembro quitou a fatura fechada (R$ 9,99) e parte da
+                # atual. A compra de 3 de outubro ainda não chegou e não pesa no saldo.
+                "payment": {
+                    "closed_invoice": None,
+                    "total_due_cents": 40_000 + 4_590 - 500 + 999 - 30_000,
+                },
             }
         ]
     }
@@ -731,6 +740,138 @@ async def test_cards_summary_for_a_past_month_uses_the_invoice_open_at_its_end(
     # 31 de julho está na fatura de 3 de julho a 2 de agosto.
     assert july["current_invoice"]["closing_date"] == "2026-08-03"
     assert july["current_invoice"]["amount_cents"] == 2_000
+
+
+async def _payment(client: AsyncClient, **params: str) -> Json:
+    response = await client.get(CARDS, params=params)
+    assert response.status_code == 200, response.text
+    payment: Json = response.json()["items"][0]["payment"]
+    return payment
+
+
+async def test_payment_suggests_the_last_closed_invoice_that_is_not_paid(
+    client_a: AsyncClient, card: Json, shopping: Json
+) -> None:
+    # Hoje é 1º de outubro: a última fatura fechou em 3 de setembro (compras de 3 de agosto a
+    # 2 de setembro) e venceu no dia 10; a atual ainda está aberta.
+    await create_transaction(client_a, card, shopping, amount_cents=30_000, date="2026-08-20")
+    await create_transaction(client_a, card, shopping, amount_cents=10_000, date="2026-09-20")
+
+    payment = await _payment(client_a)
+
+    assert payment == {
+        "closed_invoice": {
+            "closing_date": "2026-09-03",
+            "due_date": "2026-09-10",
+            "amount_cents": 30_000,
+        },
+        "total_due_cents": 40_000,
+    }
+
+
+async def test_payment_of_a_partly_paid_invoice_is_what_is_left_of_it(
+    client_a: AsyncClient, card: Json, checking: Json, shopping: Json
+) -> None:
+    await create_transaction(client_a, card, shopping, amount_cents=30_000, date="2026-08-20")
+    await create_transaction(client_a, card, shopping, amount_cents=10_000, date="2026-09-20")
+    await _transfer(client_a, checking, card, amount_cents=12_000, date="2026-09-10")
+
+    payment = await _payment(client_a)
+
+    assert payment["closed_invoice"]["amount_cents"] == 18_000
+    assert payment["total_due_cents"] == 28_000
+
+
+async def test_older_unpaid_invoices_add_up_in_the_last_closed_one(
+    client_a: AsyncClient, card: Json, shopping: Json
+) -> None:
+    await create_transaction(client_a, card, shopping, amount_cents=5_000, date="2026-07-15")
+    await create_transaction(client_a, card, shopping, amount_cents=30_000, date="2026-08-20")
+
+    payment = await _payment(client_a)
+
+    assert payment["closed_invoice"] == {
+        "closing_date": "2026-09-03",
+        "due_date": "2026-09-10",
+        "amount_cents": 35_000,
+    }
+
+
+async def test_with_closed_invoices_paid_only_the_total_due_is_left(
+    client_a: AsyncClient, card: Json, checking: Json, shopping: Json, refund: Json
+) -> None:
+    await create_transaction(client_a, card, shopping, amount_cents=30_000, date="2026-08-20")
+    await create_transaction(client_a, card, shopping, amount_cents=10_000, date="2026-09-20")
+    await _transfer(client_a, checking, card, amount_cents=30_000, date="2026-09-08")
+
+    assert await _payment(client_a) == {"closed_invoice": None, "total_due_cents": 10_000}
+
+    # Paga a mais, a sobra abate a fatura aberta.
+    await _transfer(client_a, checking, card, amount_cents=4_000, date="2026-09-25")
+    assert await _payment(client_a) == {"closed_invoice": None, "total_due_cents": 6_000}
+
+    # Um estorno na fatura aberta não reabre a fechada.
+    await create_transaction(client_a, card, refund, amount_cents=8_000, date="2026-09-28")
+    assert await _payment(client_a) == {"closed_invoice": None, "total_due_cents": 0}
+
+
+async def test_a_refund_in_the_open_invoice_never_suggests_more_than_is_owed(
+    client_a: AsyncClient, card: Json, shopping: Json, refund: Json
+) -> None:
+    await create_transaction(client_a, card, shopping, amount_cents=30_000, date="2026-08-20")
+    await create_transaction(client_a, card, refund, amount_cents=5_000, date="2026-09-20")
+
+    payment = await _payment(client_a)
+
+    assert payment["closed_invoice"]["amount_cents"] == 25_000
+    assert payment["total_due_cents"] == 25_000
+
+
+async def test_payment_only_counts_what_already_weighs_on_the_balance(
+    client_a: AsyncClient, card: Json, shopping: Json
+) -> None:
+    # Compra marcada para depois de hoje ainda não é dívida.
+    await create_transaction(client_a, card, shopping, amount_cents=30_000, date="2026-08-20")
+    await create_transaction(client_a, card, shopping, amount_cents=7_000, date="2026-10-02")
+
+    payment = await _payment(client_a)
+
+    assert payment["closed_invoice"]["amount_cents"] == 30_000
+    assert payment["total_due_cents"] == 30_000
+
+
+async def test_initial_debt_of_a_new_card_belongs_to_the_closed_invoices(
+    client_a: AsyncClient, frozen_time: datetime, shopping: Json
+) -> None:
+    card = await create_account(
+        client_a,
+        name="Cartão Inter",
+        type="credit_card",
+        closing_day=3,
+        due_day=10,
+        initial_balance_cents=-20_000,
+        initial_balance_date="2026-09-15",
+    )
+    # Compra do ciclo aberto antes da data do saldo inicial já está nele.
+    await create_transaction(client_a, card, shopping, amount_cents=999, date="2026-09-10")
+    await create_transaction(client_a, card, shopping, amount_cents=5_000, date="2026-09-20")
+
+    payment = await _payment(client_a)
+
+    assert payment["closed_invoice"]["amount_cents"] == 20_000
+    assert payment["total_due_cents"] == 25_000
+
+
+async def test_a_card_without_debt_has_nothing_to_pay(client_a: AsyncClient, card: Json) -> None:
+    assert await _payment(client_a) == {"closed_invoice": None, "total_due_cents": 0}
+
+
+async def test_payment_is_always_seen_from_today_whatever_the_month(
+    client_a: AsyncClient, card: Json, shopping: Json
+) -> None:
+    await create_transaction(client_a, card, shopping, amount_cents=30_000, date="2026-08-20")
+
+    assert await _payment(client_a, month="2026-07") == await _payment(client_a)
 
 
 # ---------- o painel continua batendo com a lista

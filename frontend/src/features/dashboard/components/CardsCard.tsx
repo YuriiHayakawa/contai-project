@@ -7,7 +7,7 @@ import { monthName, shortDate } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
 import type { TransactionPreset } from "../../transactions/types";
 import { invoicePaymentPreset } from "../../transactions/presets";
-import type { AccountBalance, CardSummary } from "../types";
+import type { CardSummary } from "../types";
 
 // O gráfico traz o Recharts, que fica no arquivo próprio dele.
 const InstallmentsChart = lazy(() =>
@@ -16,8 +16,6 @@ const InstallmentsChart = lazy(() =>
 
 export interface CardsCardProps {
   card: CardSummary;
-  /** Saldo de hoje do cartão: o que se deve nele, para o pagamento já vir preenchido. */
-  balance?: AccountBalance;
   /** Abre a folha de transferência para pagar a fatura. */
   onPay: (preset: TransactionPreset) => void;
 }
@@ -25,9 +23,9 @@ export interface CardsCardProps {
 /**
  * Um cartão de crédito no painel (FR-058): a fatura atual, com o fechamento e o vencimento, e
  * as parcelas futuras, por mês e no total. "Pagar fatura" abre a transferência da conta para o
- * cartão, que não conta como gasto.
+ * cartão, que não conta como gasto, com o valor da última fatura fechada que ainda não foi paga.
  */
-export function CardsCard({ card, balance, onPay }: CardsCardProps) {
+export function CardsCard({ card, onPay }: CardsCardProps) {
   const { current_invoice: invoice, future_installments: future } = card;
   const lastMonth = future.months.at(-1)?.month;
 
@@ -43,7 +41,7 @@ export function CardsCard({ card, balance, onPay }: CardsCardProps) {
               invoicePaymentPreset({
                 id: card.account_id,
                 name: card.name,
-                balance_cents: balance?.balance_cents ?? -invoice.amount_cents,
+                payment: card.payment,
               }),
             )
           }

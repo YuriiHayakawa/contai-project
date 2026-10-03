@@ -154,12 +154,7 @@ export function DashboardPage() {
             <motion.div variants={cascadeItem} className="grid gap-6">
               <AccountsCard accounts={summary.accounts} />
               {cards.items.map((card) => (
-                <CardsCard
-                  key={card.account_id}
-                  card={card}
-                  balance={summary.accounts.find((account) => account.id === card.account_id)}
-                  onPay={openNewTransaction}
-                />
+                <CardsCard key={card.account_id} card={card} onPay={openNewTransaction} />
               ))}
             </motion.div>
             <motion.div variants={cascadeItem}>

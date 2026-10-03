@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useQuery } from "@tanstack/react-query";
 
 import type { YearMonth } from "../../../lib/dates";
 import { useTransactionCount } from "../../transactions/hooks/useTransactions";
@@ -41,6 +41,14 @@ export type Dashboard =
 // aparece na hora e é trocado quando a resposta chega.
 const ALWAYS_FRESH = { staleTime: 0, placeholderData: keepPreviousData } as const;
 
+/** Cartões do mês: fatura, parcelas futuras e o que pagar hoje. Também serve ao "Pagar fatura". */
+export function cardsQuery(month: YearMonth) {
+  return queryOptions({
+    queryKey: [...dashboardQueryKey, "cards", month],
+    queryFn: ({ signal }) => getCards(month, signal),
+  });
+}
+
 /**
  * Números do painel para um mês: resumo, gastos por categoria, evolução e maiores gastos. Ao
  * trocar de mês, os números anteriores ficam na tela (`isUpdating`) até os novos chegarem.
@@ -66,11 +74,7 @@ export function useDashboard(month: YearMonth): Dashboard {
     queryFn: ({ signal }) => getTopExpenses(month, signal),
     ...ALWAYS_FRESH,
   });
-  const cards = useQuery({
-    queryKey: [...dashboardQueryKey, "cards", month],
-    queryFn: ({ signal }) => getCards(month, signal),
-    ...ALWAYS_FRESH,
-  });
+  const cards = useQuery({ ...cardsQuery(month), ...ALWAYS_FRESH });
   const transactionCount = useTransactionCount();
 
   const queries = [summary, categories, trend, topExpenses, cards, transactionCount];

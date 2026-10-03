@@ -223,6 +223,11 @@ do mês.
 7. **Given** uma compra no cartão feita em 28 de setembro, cuja fatura vence em novembro,
    **When** o usuário vê o painel de setembro, **Then** a compra conta nas saídas de setembro, e
    não nas de outubro ou novembro.
+8. **Given** um cartão com uma fatura fechada ainda não paga, **When** o usuário toca em "Pagar
+   fatura", **Then** o valor sugerido é o que falta pagar dessa fatura, com o vencimento dela, e
+   um toque troca o valor por tudo o que se deve no cartão ("Pagar tudo o que devo: R$ X"). Sem
+   fatura fechada em aberto, o valor sugerido é o total devido, com o aviso de que a fatura
+   atual ainda não fechou.
 
 ---
 
@@ -597,7 +602,10 @@ os 7 dias, não consegue mais entrar.
   nunca mudam, porque podem estar em faturas já fechadas ou pagas.
 - **FR-033**: O usuário DEVE poder registrar transferências entre suas contas, inclusive o
   pagamento da fatura do cartão; transferências DEVEM alterar os saldos das duas contas e NÃO
-  DEVEM contar como receita nem como despesa em nenhum relatório ou resposta.
+  DEVEM contar como receita nem como despesa em nenhum relatório ou resposta. O pagamento da
+  fatura DEVE vir com o valor da última fatura fechada que ainda não foi paga e o vencimento
+  dela, com o total devido no cartão como alternativa de um toque; sem fatura fechada em
+  aberto, DEVE vir com o total devido, explicando que a fatura atual ainda não fechou.
 - **FR-034**: O usuário DEVE poder editar e excluir transações; a edição ou exclusão de uma
   transferência DEVE valer para os dois lados.
 - **FR-035**: O usuário DEVE poder buscar transações combinando filtros por período, conta,
