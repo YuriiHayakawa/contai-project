@@ -29,6 +29,9 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+    # Marca que alguns fornecedores põem no pedido e exigem de volta quando a conversa continua
+    # com o resultado da ferramenta. Quem a entende é só a implementação do fornecedor.
+    signature: bytes | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -76,6 +79,9 @@ class LLMChatResult:
     text: str
     tool_calls: tuple[ToolCall, ...]
     usage: LLMUsage
+    # O modelo que respondeu: o reserva, quando o principal não respondeu. Preenchido por
+    # `app.ai.fallback`.
+    model: str = ""
 
 
 @dataclass(frozen=True)
@@ -84,6 +90,8 @@ class LLMStructuredResult[T: BaseModel]:
 
     value: T
     usage: LLMUsage
+    # O modelo que respondeu, como em `LLMChatResult`.
+    model: str = ""
 
 
 class LLMError(Exception):
@@ -96,6 +104,10 @@ class LLMRateLimited(LLMError):
     def __init__(self, retry_after: float | None = None) -> None:
         super().__init__("rate limited")
         self.retry_after = retry_after
+
+
+class LLMQuotaExhausted(LLMRateLimited):
+    """A cota do dia no fornecedor acabou: tentar de novo hoje não adianta."""
 
 
 class LLMUnavailable(LLMError):

@@ -34,8 +34,10 @@ testes de integração e o frontend assumem.
 
 `message` é sempre em português do Brasil e diz o que fazer. Códigos gerais: `validation_error`
 (422), `unauthenticated` (401), `forbidden` (403), `not_found` (404), `conflict` (409),
-`rate_limited` (429, com `Retry-After`), `payload_too_large` (413), `ai_limit_reached` (429),
-`ai_unavailable` (503), `internal_error` (500).
+`rate_limited` (429, com `Retry-After`), `payload_too_large` (413), `ai_limit_reached` (429,
+o limite diário do usuário), `ai_quota_exhausted` (429, a cota do dia do serviço de IA acabou
+para o app inteiro, no modelo principal e no reserva: volta no dia seguinte), `ai_unavailable`
+(503), `internal_error` (500).
 
 ## Auth (rotas públicas)
 
@@ -174,11 +176,11 @@ Transferências nunca entram em `income_cents` nem em `expense_cents`.
 | Método e rota | Corpo | Resposta | Notas |
 |---------------|-------|----------|-------|
 | `GET /assistant/suggestions` | — | lista de perguntas sugeridas (FR-070) | texto fixo, sem IA |
-| `GET /assistant/usage` | — | uso e limite do dia, e quando zera | |
-| `GET /assistant/conversations` | — | lista paginada | |
-| `POST /assistant/conversations` | — | conversa | |
-| `GET /assistant/conversations/{id}` | — | conversa com mensagens | |
-| `POST /assistant/conversations/{id}/messages` | `content` | mensagem do assistente | `429 ai_limit_reached` com `resets_at`; `503 ai_unavailable` |
+| `GET /assistant/usage` | — | `used`, `limit`, `remaining` e `resets_at` | perguntas de hoje; zera à meia-noite de Brasília |
+| `GET /assistant/conversations` | `?limit=` e `?cursor=` | lista paginada, da conversa com atividade mais recente para a mais antiga, sem as mensagens | `title` é o começo da primeira pergunta |
+| `POST /assistant/conversations` | — | `201` com a conversa | |
+| `GET /assistant/conversations/{id}` | — | conversa com `messages`, da mais antiga para a mais nova | |
+| `POST /assistant/conversations/{id}/messages` | `content` (1 a 1.000 caracteres) | mensagem do assistente | `429 ai_limit_reached` com `resets_at`; `429 ai_quota_exhausted`; `503 ai_unavailable`; `429 rate_limited`. Em qualquer um desses casos nada é gravado: nem a pergunta, nem o uso do dia |
 | `POST /assistant/messages/{id}/proposal/saved` | `transaction_id` | `204` | marca a proposta como salva; a transação precisa ser do próprio usuário |
 | `DELETE /assistant/conversations/{id}` | — | `204` | |
 | `DELETE /assistant/conversations` | — | `204` | apaga todo o histórico (FR-069) |
@@ -192,15 +194,17 @@ Mensagem do assistente:
   "kind": "answer",
   "content": "Você gastou R$ 842,30 com Alimentação em outubro de 2026.",
   "highlight": "R$ 842,30",
-  "transactions": [ { "id": "...", "date": "2026-10-03", "description": "...", "amount_cents": 4590 } ],
+  "transactions": [ { "id": "...", "type": "expense", "date": "2026-10-03", "description": "...", "amount_cents": 4590 } ],
   "transactions_total_count": 23,
   "proposal": null
 }
 ```
 
-`highlight` é o valor principal da resposta, já formatado, vindo dos resultados das ferramentas;
-o frontend aplica o marca-texto à primeira ocorrência dele no texto. É nulo quando a resposta
-não tem um valor principal.
+`highlight` é o valor principal da resposta, como está escrito no texto e conferido contra os
+resultados das ferramentas; o frontend aplica o marca-texto à primeira ocorrência dele no texto.
+É nulo quando a resposta não tem um valor principal. `transactions` traz até 50 das transações
+que compõem a resposta, das que ainda existem, e `transactions_total_count`, quantas são ao
+todo.
 
 Com `kind = "transaction_proposal"`, `proposal` traz `type`, `amount_cents`, `date`,
 `description`, `account_id` e `category_id` (qualquer um pode ser nulo, para o usuário

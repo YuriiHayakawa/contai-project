@@ -21,7 +21,19 @@ if not TEST_DATABASE_URL.rsplit("/", 1)[-1].endswith("_test"):
 
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["ENVIRONMENT"] = "development"
+# A IA dos testes não depende do `.env` de quem os roda: provedor simulado, sem chave, sem
+# modelo reserva e com os limites diários padrão.
 os.environ["AI_PROVIDER"] = "fake"
+for _name in (
+    "AI_API_KEY",
+    "AI_MODEL_CHAT",
+    "AI_MODEL_EXTRACTION",
+    "AI_MODEL_CHAT_FALLBACK",
+    "AI_MODEL_EXTRACTION_FALLBACK",
+):
+    os.environ[_name] = ""
+os.environ["AI_DAILY_QUESTION_LIMIT"] = "30"
+os.environ["AI_DAILY_EXTRACTION_LIMIT"] = "10"
 os.environ.setdefault("APP_ORIGIN", "http://localhost:8080")
 os.environ["JWT_SECRET"] = "segredo-apenas-para-testes-com-mais-de-32-caracteres"
 os.environ.setdefault("TOTP_ENCRYPTION_KEY", "")
