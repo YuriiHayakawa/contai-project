@@ -5,6 +5,10 @@ export const paths = {
   accounts: "/contas",
   categories: "/categorias",
   imports: "/importacoes",
+  importNew: "/importacoes/nova",
+  // Andamento, colunas e revisão de uma importação; `:importId` é o id dela.
+  importDetail: "/importacoes/:importId",
+  importReview: "/importacoes/:importId/revisao",
   assistant: "/assistente",
   settings: "/configuracoes",
   login: "/entrar",
@@ -16,6 +20,16 @@ export const paths = {
   forgotPassword: "/esqueci-a-senha",
   privacy: "/privacidade",
 } as const;
+
+/** Endereço do andamento de uma importação, que leva ao mapeamento ou à revisão. */
+export function importPath(importId: string): string {
+  return `${paths.imports}/${importId}`;
+}
+
+/** Endereço da revisão de uma importação. */
+export function importReviewPath(importId: string): string {
+  return `${importPath(importId)}/revisao`;
+}
 
 /** Estado de navegação levado à tela de entrada pelo guard de rotas. */
 export interface LoginLocationState {

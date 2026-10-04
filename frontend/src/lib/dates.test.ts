@@ -2,6 +2,7 @@ import {
   addDays,
   addMonths,
   addMonthsToDate,
+  dateTimeLabel,
   dayLabel,
   monthLabel,
   monthName,
@@ -105,5 +106,13 @@ describe("addMonthsToDate", () => {
     expect(addMonthsToDate("2028-01-31", 1)).toBe("2028-02-29");
     expect(addMonthsToDate("2026-12-15", 1)).toBe("2027-01-15");
     expect(addMonthsToDate("2026-10-20", 0)).toBe("2026-10-20");
+  });
+});
+
+describe("dateTimeLabel", () => {
+  it("mostra o dia e a hora de São Paulo, e não os do UTC", () => {
+    expect(dateTimeLabel("2026-10-10T21:30:00Z")).toBe("10 de out. às 18:30");
+    // 01:15 UTC do dia 11 ainda é 22:15 do dia 10 em São Paulo.
+    expect(dateTimeLabel(new Date("2026-10-11T01:15:00Z"))).toBe("10 de out. às 22:15");
   });
 });

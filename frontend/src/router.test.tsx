@@ -115,6 +115,8 @@ function fakeDataRoute(path: string): Response | null {
       });
     case "/transactions":
       return json(200, { items: [], next_cursor: null, total_count: 0 });
+    case "/imports":
+      return json(200, { items: [], next_cursor: null });
     case "/dashboard/summary":
       return json(200, {
         month: yearMonthOf(),
@@ -407,6 +409,25 @@ describe("navegação", () => {
     // Sem período no endereço, a busca vale para o mês atual.
     const { from, to } = monthRange(yearMonthOf());
     expect(requestsTo(`/transactions?q=padaria&from=${from}&to=${to}`)).not.toHaveLength(0);
+  });
+});
+
+describe("importações", () => {
+  it("o histórico e o envio de extrato estão nas rotas", async () => {
+    const user = userEvent.setup();
+    const router = renderApp(paths.imports);
+
+    expect(await screen.findByRole("heading", { name: "Importações", level: 1 })).toBeVisible();
+    await user.click(await screen.findByRole("button", { name: "Importar extrato" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Importar extrato", level: 1 }),
+    ).toBeVisible();
+    expect(router.state.location.pathname).toBe(paths.importNew);
+    // Sem conta cadastrada não há para onde importar: a tela leva ao cadastro.
+    expect(
+      await screen.findByRole("heading", { name: "Cadastre uma conta primeiro" }),
+    ).toBeInTheDocument();
   });
 });
 

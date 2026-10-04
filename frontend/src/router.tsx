@@ -71,6 +71,21 @@ const CategoriesPage = lazy(() =>
     default: module.CategoriesPage,
   })),
 );
+const ImportHistoryPage = lazy(() =>
+  import("./features/imports/components/ImportHistoryPage").then((module) => ({
+    default: module.ImportHistoryPage,
+  })),
+);
+const UploadPage = lazy(() =>
+  import("./features/imports/components/UploadPage").then((module) => ({
+    default: module.UploadPage,
+  })),
+);
+const ReviewPage = lazy(() =>
+  import("./features/imports/components/ReviewPage").then((module) => ({
+    default: module.ReviewPage,
+  })),
+);
 
 interface PendingPageProps {
   title: string;
@@ -249,7 +264,10 @@ export const routes: RouteObject[] = [
               { path: paths.transactions, element: <TransactionsPage /> },
               { path: paths.accounts, element: <AccountsPage /> },
               { path: paths.categories, element: <CategoriesPage /> },
-              { path: paths.imports, element: <PendingPage title="Importações" /> },
+              { path: paths.imports, element: <ImportHistoryPage /> },
+              { path: paths.importNew, element: <UploadPage /> },
+              { path: paths.importDetail, element: <UploadPage /> },
+              { path: paths.importReview, element: <ReviewPage /> },
               { path: paths.assistant, element: <PendingPage title="Assistente" /> },
               { path: paths.settings, element: <PendingPage title="Configurações" /> },
             ],

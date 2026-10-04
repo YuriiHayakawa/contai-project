@@ -125,3 +125,15 @@ const shortDayFormat = new Intl.DateTimeFormat("pt-BR", {
 export function shortDate(iso: ISODate): string {
   return shortDayFormat.format(calendarDate(iso));
 }
+
+const timeFormat = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: APP_TIME_ZONE,
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** Dia e hora de um instante, em São Paulo: "10 de out. às 18:30", para prazos. */
+export function dateTimeLabel(instant: string | Date): string {
+  const moment = typeof instant === "string" ? new Date(instant) : instant;
+  return `${shortDate(toISODate(moment))} às ${timeFormat.format(moment)}`;
+}
