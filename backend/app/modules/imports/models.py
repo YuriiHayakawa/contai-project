@@ -19,6 +19,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -172,6 +173,8 @@ class ImportItem(UUIDPrimaryKey, Base):
     date: Mapped[dt.date] = mapped_column(Date)
     description: Mapped[str] = mapped_column(String(200))
     description_normalized: Mapped[str] = mapped_column(String(200))
+    # Observação opcional escrita na revisão; vai para a transação na confirmação.
+    notes: Mapped[str | None] = mapped_column(Text)
     suggested_category_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("categories.id", ondelete="SET NULL")
     )

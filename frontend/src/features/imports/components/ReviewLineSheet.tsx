@@ -18,7 +18,7 @@ import { reviewLineSchema, type LineKind, type ReviewLineValues } from "../schem
 
 export interface ReviewLineSheetProps {
   open: boolean;
-  /** A linha em correção; fica guardada depois de fechar, para a folha não esvaziar ao sair. */
+  /** A linha em edição; fica guardada depois de fechar, para a folha não esvaziar ao sair. */
   line: ReviewLine | undefined;
   /** As outras contas ativas do usuário: a outra ponta de uma transferência. */
   counterAccounts: readonly Account[];
@@ -72,6 +72,7 @@ function LineForm({ id, line, counterAccounts, categories, onSave }: LineFormPro
       kind: line.kind,
       amountCents: line.amountCents,
       description: line.description,
+      notes: line.notes,
       date: line.date,
       categoryId: line.categoryId,
       counterAccountId: line.counterAccountId,
@@ -158,6 +159,7 @@ function LineForm({ id, line, counterAccounts, categories, onSave }: LineFormPro
       <TextField
         label="Descrição"
         autoComplete="off"
+        help="O nome que aparece nos seus lançamentos. Troque o texto do banco por um que você reconheça."
         error={errors.description?.message}
         {...field("description")}
       />
@@ -187,15 +189,25 @@ function LineForm({ id, line, counterAccounts, categories, onSave }: LineFormPro
       )}
 
       <TextField label="Data" type="date" error={errors.date?.message} {...field("date")} />
+
+      <TextField
+        label="Observação"
+        optional
+        autoComplete="off"
+        placeholder="Algo para lembrar depois"
+        error={errors.notes?.message}
+        {...field("notes")}
+      />
     </form>
   );
 }
 
 /**
- * Folha para corrigir uma linha da revisão (FR-046): tipo, valor, descrição, categoria ou a
- * outra conta, e data. Uma entrada pode ser marcada como estorno de uma compra (FR-084), e uma
- * saída, como transferência para o cartão, que é o pagamento da fatura (FR-081). Ao salvar, a
- * correção é guardada na revisão; a linha só vira lançamento na confirmação.
+ * Folha para editar uma linha da revisão (FR-046), com os mesmos campos de um lançamento feito
+ * à mão: tipo, valor, descrição, categoria ou a outra conta, data e observação. Uma entrada
+ * pode ser marcada como estorno de uma compra (FR-084), e uma saída, como transferência para o
+ * cartão, que é o pagamento da fatura (FR-081). Ao salvar, a edição é guardada na revisão; a
+ * linha só vira lançamento na confirmação.
  */
 export function ReviewLineSheet({
   open,
@@ -211,12 +223,12 @@ export function ReviewLineSheet({
     <Modal
       open={open}
       onClose={onClose}
-      title="Corrigir linha"
+      title="Editar lançamento"
       size="form"
       footer={
         <>
           <Button type="submit" form={formId}>
-            Salvar linha
+            Salvar alterações
           </Button>
           <Button variant="secondary" onClick={onClose}>
             Cancelar

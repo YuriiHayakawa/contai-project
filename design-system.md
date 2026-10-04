@@ -398,7 +398,11 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
   44px de altura e texto em `label`.
 - **Modo de revisão** (importação): caixa de seleção de 24px com alvo de 44px à esquerda; linhas
   desmarcadas usam `--ink-muted` e o texto "Não será importada"; possível duplicata leva o selo
-  "Possível duplicata" em `--warning` sobre `--warning-soft`, com ícone.
+  "Possível duplicata" em `--warning` sobre `--warning-soft`, com ícone. O resto da linha abre a
+  folha "Editar lançamento", e isso fica à vista: um lápis de 16px com "Editar" em `label`
+  `--primary`, ao lado do valor a partir de `sm` e embaixo dele no celular. A folha tem os
+  campos de um lançamento feito à mão (tipo, valor, descrição, categoria, data e observação), e
+  a observação, quando existe, aparece na linha em `small` `--ink-muted`.
 
 ### 6.7 Estado vazio
 

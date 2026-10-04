@@ -107,6 +107,7 @@ MAX_TRANSACTIONS = 5_000
 MAX_FILENAME_LENGTH = 255
 MAX_EXTERNAL_ID_LENGTH = 255
 MAX_AMOUNT_CENTS = 9_999_999_999_99
+MAX_NOTES_LENGTH = 1_000
 PROCESS_MAX_ATTEMPTS = 3
 # Quanto tempo uma importação espera o usuário antes de expirar (FR-083).
 WAIT_LIMITS = {
@@ -175,6 +176,7 @@ TYPE_AGAINST_STATEMENT = (
 AMOUNT_INVALID = "Informe um valor maior que zero."
 DATE_REQUIRED = "Informe a data."
 DESCRIPTION_INVALID = "Informe uma descrição de até 200 caracteres."
+NOTES_INVALID = "Use uma observação com até 1.000 caracteres."
 CATEGORY_REQUIRED = "Escolha uma categoria."
 COUNTER_ACCOUNT_REQUIRED = "Escolha a outra conta da transferência."
 
@@ -592,6 +594,9 @@ class ImportService:
         description = None if changes.description is None else changes.description.strip()
         if description is not None and not 1 <= len(description) <= MAX_DESCRIPTION_LENGTH:
             fields["description"] = DESCRIPTION_INVALID
+        notes = (changes.notes or "").strip()
+        if len(notes) > MAX_NOTES_LENGTH:
+            fields["notes"] = NOTES_INVALID
 
         if "category_id" in sent and changes.category_id is not None:
             category = await self._categories.get(user_id, changes.category_id)
@@ -629,6 +634,8 @@ class ImportService:
             # A descrição normalizada continua a do banco: é ela que volta no próximo extrato,
             # e é para ela que a correção de categoria vira regra (FR-048).
             item.description = description
+        if "notes" in sent:
+            item.notes = notes or None
         if "category_id" in sent:
             item.category_id = changes.category_id
         if "counter_account_id" in sent:
@@ -723,6 +730,8 @@ class ImportService:
         description = (decision.description or "").strip()
         if not 1 <= len(description) <= MAX_DESCRIPTION_LENGTH:
             errors.append(("description", DESCRIPTION_INVALID))
+        if len((decision.notes or "").strip()) > MAX_NOTES_LENGTH:
+            errors.append(("notes", NOTES_INVALID))
 
         if decision.type is None:
             errors.append(("type", TYPE_REQUIRED))
@@ -771,6 +780,7 @@ class ImportService:
         line_type, amount_cents, date = decision.type, decision.amount_cents, decision.date
         description = decision.description.strip()
         normalized = normalize_description(description)
+        notes = (decision.notes or "").strip() or None
         # O identificador do banco fica com uma transação só por conta. Uma linha que o usuário
         # quis importar mesmo com o aviso de "já importada" entra sem ele.
         external_id = item.external_id if item.external_id not in taken else None
@@ -803,6 +813,7 @@ class ImportService:
                 # As linhas do mesmo dia ficam na ordem em que vieram no arquivo.
                 created_at=now + dt.timedelta(microseconds=item.row_index),
                 category_id=category_id,
+                notes=notes,
                 transfer_direction=direction,
                 transfer_group_id=group_id,
                 source=TransactionSource.IMPORT,

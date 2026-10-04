@@ -59,6 +59,7 @@ export function toLines(items: readonly ImportItem[], categories: CategoryTree):
       amountCents: item.amount_cents,
       date: item.date,
       description: item.description,
+      notes: item.notes ?? "",
       categoryId: item.category_id ?? "",
       counterAccountId: item.counter_account_id ?? "",
     };
@@ -88,6 +89,7 @@ function toConfirmItem(line: ReviewLine): ConfirmItem {
     amount_cents: line.amountCents,
     date: line.date,
     description: line.description.trim(),
+    notes: line.notes.trim() || null,
     category_id: isTransfer ? null : line.categoryId || null,
     counter_account_id: isTransfer ? line.counterAccountId || null : null,
   };
@@ -100,6 +102,7 @@ function toPatch(item: ImportItem, changes: LineEdit): ImportItemPatch {
   if (changes.amountCents !== undefined) wanted.amount_cents = changes.amountCents;
   if (changes.date !== undefined) wanted.date = changes.date;
   if (changes.description !== undefined) wanted.description = changes.description.trim();
+  if (changes.notes !== undefined) wanted.notes = changes.notes.trim() || null;
   if (changes.categoryId !== undefined) wanted.category_id = changes.categoryId || null;
   if (changes.counterAccountId !== undefined) {
     wanted.counter_account_id = changes.counterAccountId || null;
@@ -239,7 +242,7 @@ export function useImportReview(
     },
     /** Marca ou desmarca todas de uma vez, inclusive as duplicatas. */
     toggleAll: (selected: boolean): void => saveSelection.mutate(selected),
-    /** Corrige uma linha: tipo, valor, data, descrição, categoria ou a outra conta. */
+    /** Edita uma linha: tipo, valor, data, descrição, observação, categoria ou a outra conta. */
     edit: (id: string, changes: LineEdit): void => {
       const line = lines.find((candidate) => candidate.item.id === id);
       if (!line) return;

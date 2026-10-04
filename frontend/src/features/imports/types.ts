@@ -44,6 +44,8 @@ export interface ImportItem {
   amount_cents: number;
   date: ISODate;
   description: string;
+  /** Observação opcional escrita na revisão; vai para o lançamento na confirmação. */
+  notes: string | null;
   suggested_category_id: string | null;
   category_source: CategorySource | null;
   /** A outra conta da transferência sugerida, como o cartão em um pagamento de fatura. */
@@ -64,7 +66,8 @@ export interface ImportItem {
 
 /**
  * Corpo de `PATCH /imports/{id}/items/{item_id}`: a correção de uma linha da revisão. Só os
- * campos enviados mudam; `null` em `category_id` ou `counter_account_id` desfaz a escolha.
+ * campos enviados mudam; `null` em `category_id` ou `counter_account_id` desfaz a escolha, e
+ * em `notes`, apaga a observação.
  */
 export type ImportItemPatch = Partial<
   Pick<
@@ -74,6 +77,7 @@ export type ImportItemPatch = Partial<
     | "amount_cents"
     | "date"
     | "description"
+    | "notes"
     | "category_id"
     | "counter_account_id"
   >
@@ -177,6 +181,8 @@ export interface ConfirmItem {
   amount_cents: number;
   date: ISODate;
   description: string;
+  /** Opcional, como em um lançamento feito à mão. */
+  notes: string | null;
   /** Obrigatória em despesa e receita; o estorno é uma receita em categoria de despesa. */
   category_id: string | null;
   /** Obrigatória em transferência: a outra conta, como o cartão em um pagamento de fatura. */

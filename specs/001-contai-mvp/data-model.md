@@ -274,6 +274,7 @@ outra conta escolhidas ficam em colunas próprias, ao lado da sugestão.
 | `date` | DATE | |
 | `description` | texto | |
 | `description_normalized` | texto | da descrição como veio do arquivo; não muda com a correção |
+| `notes` | texto | observação opcional escrita na revisão, de até 1.000 caracteres; vai para a transação na confirmação |
 | `suggested_category_id` | UUID | FK (FR-047) |
 | `category_source` | enum | `user_rule`, `ai`, `fallback`; nulo em transferência |
 | `suggested_counter_account_id` | UUID | cartão ou conta sugerida em pagamento de fatura (FR-081) |

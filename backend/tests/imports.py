@@ -89,6 +89,7 @@ def decisions(record: Json) -> list[Json]:
             "amount_cents": item["amount_cents"],
             "date": item["date"],
             "description": item["description"],
+            "notes": item["notes"],
             "category_id": item["suggested_category_id"],
             "counter_account_id": item["suggested_counter_account_id"],
         }
@@ -107,6 +108,7 @@ def saved_decisions(record: Json) -> list[Json]:
             "amount_cents": item["amount_cents"],
             "date": item["date"],
             "description": item["description"],
+            "notes": item["notes"],
             "category_id": item["category_id"],
             "counter_account_id": item["counter_account_id"],
         }
