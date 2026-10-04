@@ -9,6 +9,8 @@ export interface AppShellProps {
   /** Abre a folha de novo lançamento, pelo "Lançar" e pelo "Novo lançamento". */
   onNewTransaction: () => void;
   onSignOut?: () => void;
+  /** O histórico de conversas do assistente, mostrado na barra lateral. */
+  assistantHistory?: ReactNode;
   children: ReactNode;
 }
 
@@ -24,7 +26,13 @@ const MAIN_ID = "conteudo";
  * Casca do app (seção 6.9 do design-system.md): barra inferior até `lg`, barra lateral de
  * 248px a partir de `lg`, e o conteúdo com as margens da página.
  */
-export function AppShell({ userName, onNewTransaction, onSignOut, children }: AppShellProps) {
+export function AppShell({
+  userName,
+  onNewTransaction,
+  onSignOut,
+  assistantHistory,
+  children,
+}: AppShellProps) {
   return (
     <div className="min-h-dvh pb-[calc(5.75rem+env(safe-area-inset-bottom))] lg:pb-8 lg:pl-62">
       <a
@@ -37,7 +45,12 @@ export function AppShell({ userName, onNewTransaction, onSignOut, children }: Ap
       >
         Pular para o conteúdo
       </a>
-      <Sidebar userName={userName} onNewTransaction={onNewTransaction} onSignOut={onSignOut} />
+      <Sidebar
+        userName={userName}
+        onNewTransaction={onNewTransaction}
+        onSignOut={onSignOut}
+        assistantHistory={assistantHistory}
+      />
       <main id={MAIN_ID} tabIndex={-1} className="px-4 pt-5 outline-none sm:px-6 lg:px-8 lg:pt-8">
         {children}
       </main>

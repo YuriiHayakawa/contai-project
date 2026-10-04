@@ -14,6 +14,7 @@ import { RouteErrorPage } from "./components/layout/ErrorPage";
 import { PageHeader } from "./components/layout/PageHeader";
 import { PageSkeleton } from "./components/layout/PageSkeleton";
 import { EmptyState } from "./components/ui/EmptyState";
+import { SidebarHistory } from "./features/assistant/components/SidebarHistory";
 import { useAuth } from "./features/auth/hooks/useAuth";
 import { useLogout } from "./features/auth/hooks/useLogout";
 import {
@@ -166,6 +167,7 @@ function AppFrame() {
       userName={user?.name ?? ""}
       onNewTransaction={() => openNewTransaction()}
       onSignOut={() => logout.mutate()}
+      assistantHistory={<SidebarHistory />}
     >
       {/* A casca fica na tela; só o miolo espera o código da tela chegar. */}
       <Suspense fallback={<PageSkeleton />}>

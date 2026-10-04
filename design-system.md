@@ -441,7 +441,15 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Itens com 44px de altura, ícone de 20px e rótulo em `label`: Início, Lançamentos, Contas,
   Categorias, Importações, Assistente. Ativo: fundo `--primary-soft`, texto `--primary` e uma
   barra de 3px `--primary` à esquerda.
-- Na base, o nome do usuário, com acesso a Configurações e Sair.
+- O item "Assistente" tem uma seta à direita, que abre embaixo dele o histórico de conversas:
+  uma lista recuada, com uma linha de 1px `--border` à esquerda, e o título de cada conversa em
+  `small`, cortado com reticências. A conversa aberta fica em `--primary`, peso 700. Com o
+  ponteiro em cima ou com o foco, a linha mostra o botão de apagar; em tela de toque, ele fica
+  sempre à vista. Apagar todas de uma vez fica só na folha do celular. O item continua levando
+  ao assistente: só a seta abre e fecha, e a escolha fica guardada no aparelho.
+- Na base, o nome do usuário, com acesso a Configurações e Sair. A marca e o botão em cima e
+  este bloco embaixo ficam sempre à vista: quando os itens e o histórico não cabem, só o miolo
+  rola.
 
 **Cabeçalho da página**: título em `title-1` à esquerda e, no máximo, uma ação à direita. No
 celular ele rola com o conteúdo; não há barra superior fixa, exceto no chat. No painel, o título
@@ -516,8 +524,10 @@ direto só na maior barra; as demais ficam no tooltip e na tabela.
 O assistente não tem visual de "IA": nada de gradiente, brilho ou avatar de robô. A conversa
 parece anotações na caderneta.
 
-- **Estrutura**: cabeçalho fixo com o título "Assistente" e o acesso ao histórico; lista de
-  mensagens; campo de escrita fixo na base, acima da barra inferior. A largura da conversa é de
+- **Estrutura**: cabeçalho fixo com o título "Assistente", o botão de nova conversa e, até
+  `lg`, o acesso ao histórico, que abre em uma folha; a partir de `lg`, o histórico fica na
+  barra lateral, embaixo do item "Assistente" (seção 6.9). Depois, a lista de
+  mensagens e o campo de escrita fixo na base, acima da barra inferior. A largura da conversa é de
   no máximo 720px. A faixa do campo de escrita tem fundo `--bg` próprio, para as mensagens
   rolarem por baixo dela, e 20px de folga embaixo, para o botão de lançar não cobrir o campo.
 - **Mensagem do usuário**: balão à direita, fundo `--primary`, texto `--on-primary`, raio de
