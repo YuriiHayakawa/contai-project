@@ -6,16 +6,28 @@ import type {
   Import,
   ImportItem,
   ImportItemPatch,
+  ImportKind,
   ImportPage,
 } from "../types";
 
-/** Envia o arquivo de um extrato para a conta escolhida; a leitura segue em segundo plano. */
-export function uploadImport(file: File, accountId: string): Promise<Import> {
+/**
+ * Envia um arquivo para a conta escolhida; a leitura segue em segundo plano. `kind` diz o que
+ * ele é: um extrato ou uma fatura, ou um comprovante, que vira um lançamento só.
+ */
+export function uploadImport(file: File, accountId: string, kind: ImportKind): Promise<Import> {
   const body = new FormData();
   body.append("file", file);
   body.append("account_id", accountId);
-  body.append("kind", "statement");
+  body.append("kind", kind);
   return api.post<Import>("/imports", body);
+}
+
+/**
+ * Registra o aceite do aviso que antecede o primeiro envio de PDF ou imagem: o conteúdo é
+ * lido por um serviço de IA externo, que pode usar os dados para melhorar seus modelos (FR-044).
+ */
+export function acceptAiDocuments(): Promise<void> {
+  return api.post("/users/me/consents/ai-documents");
 }
 
 /** Uma página do histórico, da importação mais nova para a mais antiga. */

@@ -40,7 +40,7 @@ from app.modules.imports.mapping import (
     MappingSuggestion,
     SignConvention,
 )
-from app.modules.imports.models import ImportFormat
+from app.modules.imports.models import ImportFormat, ImportKind
 from app.modules.imports.storage import StoredFile, decode_text, looks_like_csv, looks_like_ofx
 from app.modules.transactions.models import TransactionType
 from app.modules.transactions.normalize import strip_accents
@@ -439,6 +439,7 @@ def apply_mapping(rows: Sequence[Row], mapping: ColumnMapping) -> list[ProposedT
 
 class TabularImporter:
     formats = frozenset({ImportFormat.CSV, ImportFormat.XLSX})
+    kinds = frozenset({ImportKind.STATEMENT})
 
     def detect(self, head: bytes, filename: str) -> bool:
         if head.startswith(_ZIP_MAGIC):

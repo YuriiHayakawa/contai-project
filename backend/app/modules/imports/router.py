@@ -44,9 +44,13 @@ def _upload_limit() -> str:
     status_code=status.HTTP_202_ACCEPTED,
     summary="Enviar um arquivo para importar",
     description=(
-        "Aceita OFX, CSV e planilha Excel (.xlsx) de até 10 MB. O arquivo é lido em segundo "
+        "Aceita OFX, CSV, planilha Excel (.xlsx), PDF e imagem (JPG ou PNG) de até 10 MB. "
+        "`kind` diz o que o arquivo é: `statement`, um extrato ou uma fatura, ou `receipt`, um "
+        "comprovante em foto ou PDF, que vira um lançamento só. O arquivo é lido em segundo "
         "plano: acompanhe por `GET /imports/{id}`. Arquivo grande demais responde `413`; "
-        "vazio ou de tipo não aceito, `415 unsupported_file`."
+        "vazio, de tipo não aceito ou PDF com senha, `415 unsupported_file`. PDF e imagem são "
+        "lidos por um serviço de IA externo: sem o aceite do aviso respondem "
+        "`403 ai_consent_required`, e no limite diário de extrações, `429 ai_limit_reached`."
     ),
 )
 @limiter.limit(_upload_limit, key_func=user_or_ip)

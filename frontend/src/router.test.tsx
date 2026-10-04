@@ -418,10 +418,10 @@ describe("importações", () => {
     const router = renderApp(paths.imports);
 
     expect(await screen.findByRole("heading", { name: "Importações", level: 1 })).toBeVisible();
-    await user.click(await screen.findByRole("button", { name: "Importar extrato" }));
+    await user.click(await screen.findByRole("button", { name: "Importar arquivo" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Importar extrato", level: 1 }),
+      await screen.findByRole("heading", { name: "Importar arquivo", level: 1 }),
     ).toBeVisible();
     expect(router.state.location.pathname).toBe(paths.importNew);
     // Sem conta cadastrada não há para onde importar: a tela leva ao cadastro.

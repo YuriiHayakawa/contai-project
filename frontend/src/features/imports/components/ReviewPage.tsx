@@ -386,6 +386,15 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
             . As linhas que já estão na conta vêm desmarcadas, para nada entrar duas vezes.
           </Notice>
         )}
+        {record.total_check?.matches && (
+          <Notice kind="success">
+            A soma das linhas lidas confere com o total do documento:{" "}
+            <span className="money font-bold">
+              {formatBRL(record.total_check.document_total_cents)}
+            </span>
+            .
+          </Notice>
+        )}
         {record.total_check && !record.total_check.matches && (
           <Notice kind="warning">
             A soma das linhas não bate com o total do documento. O documento informa{" "}
@@ -523,7 +532,7 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
 /**
  * Revisão de uma importação (FR-046), no modo de revisão da lista de lançamentos: marcar e
  * desmarcar linhas, corrigir valor, data, descrição e categoria, ver as duplicatas e os avisos
- * de saldo e de pagamento de fatura, e confirmar. Cada alteração é guardada no servidor, e a
+ * de total do documento, de saldo e de pagamento de fatura, e confirmar. Cada alteração é guardada no servidor, e a
  * revisão pode ser retomada depois de sair da página (FR-085); nada vira lançamento antes da
  * confirmação.
  */

@@ -176,6 +176,6 @@ describe("ImportHistoryPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Importe seu primeiro extrato" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Importar extrato" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Importar arquivo" })).toBeInTheDocument();
   });
 });

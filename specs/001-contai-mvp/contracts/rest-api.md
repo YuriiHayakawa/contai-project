@@ -120,7 +120,7 @@ redefinir a senha ou depois de 24 horas sem erros.
 
 | Método e rota | Corpo | Resposta | Notas |
 |---------------|-------|----------|-------|
-| `POST /imports` | `multipart`: `file`, `account_id`, `kind` (`statement` ou `receipt`; padrão `statement`) | `202` com a importação em `queued` | `413`; `415 unsupported_file` (vazio, tipo não aceito pelo conteúdo ou `.xls` antigo); `422` em `account_id` para conta de outro usuário, inexistente ou arquivada; `429 rate_limited` pelo limite de envios; `403 ai_consent_required` para PDF ou imagem sem aceite; `429 ai_limit_reached` |
+| `POST /imports` | `multipart`: `file`, `account_id`, `kind` (`statement` ou `receipt`; padrão `statement`) | `202` com a importação em `queued` | `statement` é um extrato ou uma fatura (OFX, CSV, planilha ou PDF); `receipt` é um comprovante, em foto (JPG ou PNG) ou PDF, que vira uma linha só. `413`; `415 unsupported_file` (vazio, tipo não aceito pelo conteúdo, `.xls` antigo ou PDF protegido por senha); `422` em `account_id` para conta de outro usuário, inexistente ou arquivada; `422` em `kind` quando o arquivo não serve para o que foi escolhido (foto como extrato, OFX como comprovante); `429 rate_limited` pelo limite de envios. PDF e imagem são lidos por um serviço de IA externo: `403 ai_consent_required` sem o aceite do aviso (FR-044) e `429 ai_limit_reached`, com `resets_at`, no limite diário de extrações, que conta os documentos já lidos hoje e os que estão na fila. Nesses dois casos nada é guardado |
 | `GET /imports` | `?limit=` e `?cursor=` | histórico paginado, da importação mais nova para a mais antiga (FR-051), sem `items` nem `mapping_preview` | uma importação expirada aparece como `failed`, com `error_code` em `mapping_expired` ou `review_expired` (FR-083) |
 | `GET /imports/{id}` | — | importação; em `awaiting_mapping`, traz `mapping_preview` e a sugestão de colunas; em `awaiting_review`, traz `items`, `total_check` e `balance_check`; nos dois estados traz `expires_at` (FR-083) | é a rota consultada periodicamente pelo frontend |
 | `POST /imports/{id}/mapping` | `date_column`, `description_column` e `amount_column` (ou `income_column` e `expense_column`), pela posição da coluna a partir de zero; `date_format` (`dmy`, `mdy`, `ymd`); `decimal_separator` (`,` ou `.`); `sign_convention` (`negative_is_expense` ou `positive_is_expense`) | `202`, volta para `queued` | salva o modelo (FR-039); `409 import_not_awaiting_mapping` fora de `awaiting_mapping`; `422` com o campo a corrigir. Se o modelo não ler o arquivo, a importação volta a `awaiting_mapping` com `error_code = mapping_mismatch`, sem novo envio |
@@ -132,7 +132,13 @@ redefinir a senha ou depois de 24 horas sem erros.
 
 A importação traz `status`, `error_code` e `error_message` (o que fazer, em português),
 `item_count`, `imported_count`, `expires_at` e `already_imported_at` (quando o mesmo arquivo já
-foi importado na conta). `mapping_preview`: `{ "columns", "rows", "suggestion" }`, com as
+foi importado na conta). Em PDF e imagem, `failed` pode vir com `document_unreadable` (o modelo
+não reconheceu lançamentos, ou a resposta dele não pôde ser usada), `ai_quota_exhausted` (a
+cota do dia do serviço de IA acabou, no modelo principal e no reserva: volta no dia seguinte, e
+não há nova tentativa) ou `ai_unavailable` (o serviço não respondeu depois das tentativas).
+Enquanto o serviço de IA está ocupado, a importação continua em `queued` ou `processing` com
+`error_code = ai_busy` e a mensagem de que a leitura será tentada de novo, sem reenvio do
+arquivo (FR-072): não é uma falha, só explica a espera. `mapping_preview`: `{ "columns", "rows", "suggestion" }`, com as
 primeiras linhas como estão no arquivo e o palpite no formato do corpo do mapeamento. Cada item
 de `items` traz `id`, `row_index`, `type`, `amount_cents`, `date`, `description`,
 `suggested_category_id`, `category_source`, `suggested_counter_account_id`, `duplicate_status`,
@@ -147,7 +153,10 @@ começam iguais à sugestão (`selected_by_default`, `suggested_category_id` e
 `amount_cents`, `date` e `description` trazem o valor corrigido, quando houve correção. O corpo
 da confirmação continua sendo a decisão final: a tela envia nele o que está guardado.
 
-`total_check`: `{ "document_total_cents", "extracted_total_cents", "matches" }` ou nulo.
+`total_check`: `{ "document_total_cents", "extracted_total_cents", "matches" }` ou nulo: só
+existe quando o documento traz um total impresso (FR-043). `extracted_total_cents` é a soma das
+linhas lidas, com as saídas somando e as entradas abatendo, como no total de uma fatura; é
+calculada na leitura e não muda com as correções da revisão.
 `balance_check`: `{ "bank_balance_cents", "bank_balance_date", "account_balance_cents",
 "counted_from", "computed_balance_cents", "matches" }` ou nulo. `account_balance_cents` é o saldo
 da conta na data do saldo do banco, sem as linhas do arquivo; `computed_balance_cents` soma a

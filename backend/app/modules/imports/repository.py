@@ -139,6 +139,19 @@ class ImportRepository:
         statement = statement.order_by(*(column.desc() for column in order)).limit(limit)
         return list((await self._session.execute(statement)).scalars())
 
+    async def count_unread(self, user_id: uuid.UUID, formats: Sequence[ImportFormat]) -> int:
+        """Quantos arquivos destes formatos o usuário tem na fila ou sendo lidos."""
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(Import)
+            .where(
+                Import.user_id == user_id,
+                Import.format.in_(formats),
+                Import.status.in_([ImportStatus.QUEUED, ImportStatus.PROCESSING]),
+            )
+        )
+        return result.scalar_one()
+
     async def delete(self, user_id: uuid.UUID, import_id: uuid.UUID) -> None:
         """Apaga a importação; as transações propostas dela vão junto."""
         await self._session.execute(

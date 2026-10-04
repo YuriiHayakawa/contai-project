@@ -8,6 +8,7 @@ import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Notice } from "../../../components/ui/Notice";
+import { SegmentedControl } from "../../../components/ui/SegmentedControl";
 import { Select } from "../../../components/ui/Select";
 import { SkeletonList } from "../../../components/ui/Skeleton";
 import { errorMessage, fieldErrors, isApiError } from "../../../lib/api-client";
@@ -16,6 +17,7 @@ import { importPath, importReviewPath, paths } from "../../../lib/paths";
 import { activeAccounts, useAccounts } from "../../accounts/hooks/useAccounts";
 import type { Account } from "../../accounts/types";
 import { getLastUsedAccountId } from "../../transactions/services/transactionsService";
+import { useAiConsent } from "../hooks/useAiConsent";
 import { useImport } from "../hooks/useImport";
 import { useUploadImport } from "../hooks/useUploadImport";
 import {
@@ -23,8 +25,21 @@ import {
   FILE_REQUIRED_MESSAGE,
   FILE_TOO_LARGE_MESSAGE,
   MAX_FILE_BYTES,
+  RECEIPT_EMPTY_MESSAGE,
+  RECEIPT_REQUIRED_MESSAGE,
+  RECEIPT_TOO_LARGE_MESSAGE,
+  needsAiReading,
 } from "../schemas";
-import { isExpired, isWorking, type Import } from "../types";
+import {
+  AI_CONSENT_REQUIRED,
+  isExpired,
+  isReadByAi,
+  isWaitingForAi,
+  isWorking,
+  type Import,
+  type ImportKind,
+} from "../types";
+import { AiConsentDialog } from "./AiConsentDialog";
 import { BackToImports } from "./BackToImports";
 import { MappingStep } from "./MappingStep";
 
@@ -42,7 +57,48 @@ interface WorkingCardProps {
   accountName: string | undefined;
 }
 
-const ACCEPTED_FILES = ".ofx,.qfx,.csv,.txt,.xlsx";
+interface KindCopy {
+  fileLabel: string;
+  /** Os tipos que o seletor de arquivos oferece; quem confere de verdade é o servidor. */
+  accept: string;
+  help: string;
+  accountHelp: string;
+  required: string;
+  tooLarge: string;
+  empty: string;
+}
+
+const KIND_OPTIONS: readonly { value: ImportKind; label: string }[] = [
+  { value: "statement", label: "Extrato ou fatura" },
+  { value: "receipt", label: "Comprovante" },
+];
+
+const KIND_COPY: Record<ImportKind, KindCopy> = {
+  statement: {
+    fileLabel: "Arquivo do extrato ou da fatura",
+    accept: ".ofx,.qfx,.csv,.txt,.xlsx,.pdf",
+    help:
+      "OFX, CSV, planilha Excel (.xlsx) ou PDF, de até 10 MB. Baixe o extrato ou a fatura no " +
+      "site ou no aplicativo do seu banco. O PDF é lido por um serviço de IA externo; os outros " +
+      "formatos, sem IA.",
+    accountHelp: "Os lançamentos do arquivo entram nesta conta, depois da sua revisão.",
+    required: FILE_REQUIRED_MESSAGE,
+    tooLarge: FILE_TOO_LARGE_MESSAGE,
+    empty: FILE_EMPTY_MESSAGE,
+  },
+  receipt: {
+    fileLabel: "Foto ou PDF do comprovante",
+    accept: ".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf",
+    help:
+      "Foto (JPG ou PNG) ou PDF de um comprovante, recibo ou nota fiscal, de até 10 MB. Vira " +
+      "um lançamento só, lido por um serviço de IA externo.",
+    accountHelp: "O lançamento do comprovante entra nesta conta, depois da sua revisão.",
+    required: RECEIPT_REQUIRED_MESSAGE,
+    tooLarge: RECEIPT_TOO_LARGE_MESSAGE,
+    empty: RECEIPT_EMPTY_MESSAGE,
+  },
+};
+
 // Erros do servidor que falam do arquivo: aparecem junto dele, e não no topo.
 const FILE_ERROR_CODES = ["payload_too_large", "unsupported_file"];
 
@@ -52,11 +108,18 @@ function fileSizeLabel(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
 }
 
-/** Escolha do arquivo e da conta de destino (FR-036). O envio leva à tela de andamento. */
+/**
+ * Escolha do que enviar, do arquivo e da conta de destino (FR-036). Antes do primeiro PDF ou
+ * imagem, o aviso sobre o serviço de IA externo pede o aceite (FR-044). O envio leva à tela de
+ * andamento.
+ */
 function UploadForm({ accounts }: UploadFormProps) {
   const fileId = useId();
   const navigate = useNavigate();
   const upload = useUploadImport();
+  const consent = useAiConsent();
+  const [kind, setKind] = useState<ImportKind>("statement");
+  const [askingConsent, setAskingConsent] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [accountId, setAccountId] = useState(() => {
     const lastUsed = getLastUsedAccountId();
@@ -66,35 +129,72 @@ function UploadForm({ accounts }: UploadFormProps) {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const copy = KIND_COPY[kind];
+
+  const chooseKind = (chosen: ImportKind): void => {
+    // O arquivo de um extrato não serve de comprovante, e vice-versa: a escolha recomeça.
+    setKind(chosen);
+    setFile(null);
+    setFileError(null);
+    setFormError(null);
+  };
+
   const chooseFile = (chosen: File | null): void => {
     setFile(chosen);
     setFormError(null);
-    if (chosen && chosen.size > MAX_FILE_BYTES) setFileError(FILE_TOO_LARGE_MESSAGE);
-    else if (chosen?.size === 0) setFileError(FILE_EMPTY_MESSAGE);
+    if (chosen && chosen.size > MAX_FILE_BYTES) setFileError(copy.tooLarge);
+    else if (chosen?.size === 0) setFileError(copy.empty);
     else setFileError(null);
   };
 
-  const submit = (event: FormEvent): void => {
-    event.preventDefault();
-    setFormError(null);
-    if (!file) {
-      setFileError(FILE_REQUIRED_MESSAGE);
-      return;
-    }
-    if (fileError) return;
+  const send = (chosen: File): void => {
     upload.mutate(
-      { file, accountId },
+      { file: chosen, accountId, kind },
       {
         onSuccess: (record) => void navigate(importPath(record.id), { replace: true }),
         onError: (error) => {
           const fields = fieldErrors(error);
           if (fields.account_id) setAccountError(fields.account_id);
+          // O arquivo não serve para o que foi escolhido, como uma foto enviada como extrato.
+          else if (fields.kind) setFileError(fields.kind);
+          // O servidor é quem sabe do aceite: se ele falta, o aviso aparece agora.
+          else if (isApiError(error) && error.code === AI_CONSENT_REQUIRED) setAskingConsent(true);
           else if (isApiError(error) && FILE_ERROR_CODES.includes(error.code)) {
             setFileError(error.message);
           } else setFormError(errorMessage(error));
         },
       },
     );
+  };
+
+  const submit = (event: FormEvent): void => {
+    event.preventDefault();
+    setFormError(null);
+    if (!file) {
+      setFileError(copy.required);
+      return;
+    }
+    if (fileError) return;
+    // PDF e imagem vão a um serviço de IA externo: nada é enviado antes do aceite.
+    if (needsAiReading(file) && !consent.accepted) {
+      setAskingConsent(true);
+      return;
+    }
+    send(file);
+  };
+
+  const acceptAndSend = (): void => {
+    consent.accept.mutate(undefined, {
+      onSuccess: () => {
+        setAskingConsent(false);
+        if (file) send(file);
+      },
+    });
+  };
+
+  const cancelConsent = (): void => {
+    consent.accept.reset();
+    setAskingConsent(false);
   };
 
   const fileErrorId = `${fileId}-error`;
@@ -105,9 +205,16 @@ function UploadForm({ accounts }: UploadFormProps) {
       <form noValidate onSubmit={submit} className="grid gap-5">
         {formError && <Notice kind="error">{formError}</Notice>}
 
+        <SegmentedControl
+          label="O que você vai enviar"
+          options={KIND_OPTIONS}
+          value={kind}
+          onChange={chooseKind}
+        />
+
         <div className="grid gap-1.5">
           <label htmlFor={fileId} className="text-label text-ink">
-            Arquivo do extrato
+            {copy.fileLabel}
           </label>
           {/* O campo de arquivo cobre a área toda: clicar, tocar ou soltar um arquivo ali
               funciona como no campo nativo, que continua sendo o que o teclado alcança. */}
@@ -121,9 +228,11 @@ function UploadForm({ accounts }: UploadFormProps) {
             )}
           >
             <input
+              // Trocar o que vai ser enviado esvazia o campo: o arquivo anterior não vale mais.
+              key={kind}
               id={fileId}
               type="file"
-              accept={ACCEPTED_FILES}
+              accept={copy.accept}
               aria-invalid={fileError ? true : undefined}
               aria-describedby={cn(fileError && fileErrorId, fileHelpId)}
               onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
@@ -145,14 +254,13 @@ function UploadForm({ accounts }: UploadFormProps) {
             </p>
           )}
           <p id={fileHelpId} className="text-small text-ink-muted">
-            OFX, CSV ou planilha Excel (.xlsx), de até 10 MB. Baixe o extrato no site ou no
-            aplicativo do seu banco.
+            {copy.help}
           </p>
         </div>
 
         <Select
           label="Conta de destino"
-          help="Os lançamentos do arquivo entram nesta conta, depois da sua revisão."
+          help={copy.accountHelp}
           options={accounts.map((account) => ({ value: account.id, label: account.name }))}
           value={accountId}
           error={accountError ?? undefined}
@@ -171,26 +279,45 @@ function UploadForm({ accounts }: UploadFormProps) {
           Enviar arquivo
         </Button>
       </form>
+
+      <AiConsentDialog
+        open={askingConsent}
+        loading={consent.accept.isPending}
+        error={consent.accept.isError ? errorMessage(consent.accept.error) : null}
+        onAccept={acceptAndSend}
+        onCancel={cancelConsent}
+      />
     </Card>
   );
 }
 
-/** O arquivo está na fila ou sendo lido: a tela consulta de novo a cada 2 segundos. */
+/**
+ * O arquivo está na fila ou sendo lido: a tela consulta de novo a cada 2 segundos. Quando o
+ * serviço de IA está ocupado, a leitura é tentada de novo sozinha, e a tela diz isso (FR-072).
+ */
 function WorkingCard({ record, accountName }: WorkingCardProps) {
+  const waitingForAi = isWaitingForAi(record);
+  let title = record.status === "queued" ? "Arquivo recebido" : "Lendo o arquivo…";
+  if (waitingForAi) title = "Aguardando o serviço de IA";
+
   return (
     <Card>
       <div role="status" className="grid justify-items-center gap-3 py-6 text-center">
         <LoaderCircle aria-hidden="true" className="size-8 animate-spin text-primary" />
-        <h2 className="font-display text-title-2 text-ink">
-          {record.status === "queued" ? "Arquivo recebido" : "Lendo o arquivo…"}
-        </h2>
+        <h2 className="font-display text-title-2 text-ink">{title}</h2>
         <p className="max-w-full text-body wrap-anywhere text-ink-muted">
           {record.original_filename}
           {accountName && ` · ${accountName}`}
         </p>
+        {waitingForAi && record.error_message && (
+          <p className="max-w-96 text-body text-ink">{record.error_message}</p>
+        )}
         <p className="max-w-96 text-small text-ink-muted">
-          Costuma levar poucos segundos. Você pode sair desta tela: a leitura continua, e a
-          importação fica esperando você em Importações.
+          {isReadByAi(record.format)
+            ? "A leitura por IA pode levar cerca de um minuto."
+            : "Costuma levar poucos segundos."}{" "}
+          Você pode sair desta tela: a leitura continua, e a importação fica esperando você em
+          Importações.
         </p>
       </div>
     </Card>
@@ -265,8 +392,9 @@ function ImportProgress({ importId }: ImportProgressProps) {
 }
 
 /**
- * Envio de um extrato (OFX, CSV ou planilha) e o andamento dele. Sem importação no endereço, é
- * o formulário de envio; com ela, a tela acompanha a leitura até a revisão.
+ * Envio de um extrato ou de uma fatura (OFX, CSV, planilha ou PDF) ou de um comprovante (foto
+ * ou PDF), e o andamento dele. Sem importação no endereço, é o formulário de envio; com ela, a
+ * tela acompanha a leitura até a revisão.
  */
 export function UploadPage() {
   const { importId } = useParams();
@@ -309,7 +437,7 @@ export function UploadPage() {
   return (
     <PageContent>
       <BackToImports />
-      <PageHeader title="Importar extrato" />
+      <PageHeader title="Importar arquivo" />
       {body}
     </PageContent>
   );

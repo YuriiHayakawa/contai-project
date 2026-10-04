@@ -145,11 +145,20 @@ Esperado: SC-014 (90% das respostas em até 10 segundos).
 
 ### 7. PDF e imagem (história 7)
 
-1. No primeiro envio, aparece o aviso sobre o serviço de IA externo; recuse e confira que nada é
-   enviado; aceite e siga.
-2. Envie uma fatura em PDF com total conhecido: a revisão mostra se a soma bate.
-3. Envie a foto de um recibo: chega uma transação preenchida.
+1. Em Importações, "Importar arquivo", escolha "Extrato ou fatura" e um PDF. No primeiro envio,
+   aparece o aviso sobre o serviço de IA externo; recuse e confira que nada é enviado; aceite e
+   siga. Nos envios seguintes o aviso não aparece.
+2. Envie uma fatura em PDF com total conhecido: a revisão mostra se a soma das linhas confere
+   com o total do documento ou, se divergir, os dois valores.
+3. Escolha "Comprovante" e envie a foto de um recibo: chega uma linha só, preenchida, na mesma
+   revisão.
 4. Saia da tela durante o processamento e volte: o resultado está lá.
+5. Um PDF protegido por senha é recusado no envio, com a orientação de salvar uma cópia sem
+   senha.
+
+Cada documento gasta uma chamada ao modelo de extração (e, quando há descrições sem regra, uma
+à sugestão de categorias). Com o serviço de IA ocupado, a tela diz que vai tentar de novo
+sozinha; com a cota do dia esgotada, diz que volta a funcionar amanhã.
 
 ### 8. Lançamento por texto (história 8)
 

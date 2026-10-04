@@ -8,6 +8,23 @@ export const FILE_TOO_LARGE_MESSAGE =
 export const FILE_EMPTY_MESSAGE =
   "Este arquivo está vazio. Exporte o extrato de novo no banco e envie outra vez.";
 export const FILE_REQUIRED_MESSAGE = "Escolha o arquivo do extrato.";
+export const RECEIPT_REQUIRED_MESSAGE = "Escolha a foto ou o PDF do comprovante.";
+export const RECEIPT_TOO_LARGE_MESSAGE =
+  "Este arquivo tem mais de 10 MB. Tire a foto de novo com resolução menor e envie outra vez.";
+export const RECEIPT_EMPTY_MESSAGE =
+  "Este arquivo está vazio. Tire a foto de novo ou baixe o comprovante outra vez.";
+
+const AI_FILE_NAME = /\.(pdf|jpe?g|png)$/i;
+const AI_FILE_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+
+/**
+ * PDF e imagem são lidos por um serviço de IA externo, e pedem o aceite do aviso antes do
+ * primeiro envio (FR-044). Quem decide de verdade é o servidor, pelo conteúdo do arquivo; aqui
+ * o nome e o tipo informado bastam para mostrar o aviso antes de enviar.
+ */
+export function needsAiReading(file: Pick<File, "name" | "type">): boolean {
+  return AI_FILE_NAME.test(file.name) || AI_FILE_TYPES.includes(file.type);
+}
 
 /**
  * O que uma linha da revisão vira: despesa, receita, estorno (uma receita na categoria de

@@ -10,9 +10,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from app.ai.models import AiTask
+from app.ai.provider import LLMUsage
 from app.modules.accounts.models import AccountType
 from app.modules.imports.mapping import ColumnMapping, MappingPreview
-from app.modules.imports.models import ImportFormat
+from app.modules.imports.models import ImportFormat, ImportKind
 from app.modules.imports.storage import StoredFile
 from app.modules.transactions.models import TransactionType
 from app.modules.transactions.normalize import strip_accents
@@ -23,6 +25,8 @@ NO_TRANSACTIONS = "no_transactions"
 MULTIPLE_ACCOUNTS = "multiple_accounts"
 TOO_MANY_ROWS = "too_many_rows"
 MAPPING_MISMATCH = "mapping_mismatch"
+# PDF ou imagem que a IA não conseguiu ler: documento ilegível ou resposta fora do esperado.
+DOCUMENT_UNREADABLE = "document_unreadable"
 
 NO_DESCRIPTION = "Lançamento sem descrição"
 MAX_DESCRIPTION_LENGTH = 200
@@ -58,6 +62,17 @@ class ImportContext:
     account_type: AccountType
     # Modelos de colunas do usuário, pela assinatura do cabeçalho.
     templates: Mapping[str, ColumnMapping] = field(default_factory=dict)
+    # O dia de hoje em Brasília: referência para o documento que traz a data sem o ano.
+    today: dt.date | None = None
+
+
+@dataclass(frozen=True)
+class AiCall:
+    """A chamada ao provedor de IA que leu o documento, para o serviço gravar em `ai_usage`."""
+
+    task: AiTask
+    model: str
+    usage: LLMUsage
 
 
 @dataclass(frozen=True)
@@ -70,6 +85,8 @@ class RawDocument[RowT]:
     balance_date: dt.date | None = None
     # Em CSV e planilha: a assinatura do cabeçalho, que identifica o modelo aplicado.
     header_signature: str | None = None
+    # Em PDF e imagem: a chamada à IA que leu o documento. O importador não acessa o banco.
+    ai_call: AiCall | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +104,8 @@ class ProposedTransaction:
 
 class Importer[RowT](Protocol):
     formats: frozenset[ImportFormat]
+    # O que o usuário disse que o arquivo é: extrato ou fatura, ou comprovante.
+    kinds: frozenset[ImportKind]
 
     def detect(self, head: bytes, filename: str) -> bool:
         """Diz se este importador reconhece o arquivo, pelos primeiros bytes."""

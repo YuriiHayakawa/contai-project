@@ -26,7 +26,7 @@ import { importPath, importReviewPath, paths } from "../../../lib/paths";
 import { useAccounts } from "../../accounts/hooks/useAccounts";
 import { useImports } from "../hooks/useImports";
 import { useUndoImport } from "../hooks/useUndoImport";
-import { isExpired, isWorking, type Import } from "../types";
+import { isExpired, isWaitingForAi, isWorking, type Import } from "../types";
 import { Seal, type SealTone } from "./Seal";
 
 interface ImportRowProps {
@@ -54,10 +54,12 @@ const entryCount = (count: number): string =>
 function situationOf(record: Import): Situation {
   const until = record.expires_at ? `até ${dateTimeLabel(record.expires_at)}` : undefined;
   if (isWorking(record.status)) {
+    const waitingForAi = isWaitingForAi(record);
     return {
-      label: "Lendo o arquivo",
+      label: waitingForAi ? "Aguardando o serviço de IA" : "Lendo o arquivo",
       tone: "info",
-      icon: LoaderCircle,
+      icon: waitingForAi ? Hourglass : LoaderCircle,
+      note: (waitingForAi && record.error_message) || undefined,
       action: { label: "Ver andamento", to: importPath(record.id) },
     };
   }
@@ -193,7 +195,7 @@ export function ImportHistoryPage() {
           records &&
           records.length > 0 && (
             <Button icon={<Upload />} onClick={upload}>
-              Importar extrato
+              Importar arquivo
             </Button>
           )
         }
@@ -220,7 +222,7 @@ export function ImportHistoryPage() {
           icon={FileUp}
           title="Importe seu primeiro extrato"
           description="Envie o arquivo OFX, CSV ou a planilha do seu banco. Você revisa tudo antes de salvar."
-          actionLabel="Importar extrato"
+          actionLabel="Importar arquivo"
           onAction={upload}
         />
       )}

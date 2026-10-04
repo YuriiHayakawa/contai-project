@@ -16,8 +16,10 @@ from pathlib import PurePath
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai import usage as ai_usage
+from app.ai.provider import LLMQuotaExhausted, LLMRateLimited, LLMUnavailable
 from app.core import clock
-from app.core.errors import Conflict, NotFound, ValidationFailed
+from app.core.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from app.modules.accounts.models import Account, AccountType
 from app.modules.accounts.repository import AccountRepository
 from app.modules.categories.models import Category, CategoryKind
@@ -32,14 +34,16 @@ from app.modules.imports.duplicates import (
     ExistingTransaction,
     classify,
 )
-from app.modules.imports.importers import find_importer, supported_formats
+from app.modules.imports.importers import AI_FORMATS, find_importer, is_supported
 from app.modules.imports.importers.base import (
+    DOCUMENT_UNREADABLE,
     MAPPING_MISMATCH,
     MAX_DESCRIPTION_LENGTH,
     MULTIPLE_ACCOUNTS,
     NO_TRANSACTIONS,
     TOO_MANY_ROWS,
     UNREADABLE,
+    AiCall,
     ImportContext,
     ImportFailed,
     MappingMismatch,
@@ -80,6 +84,7 @@ from app.modules.transactions.service import (
     TRANSFER_SAME_ACCOUNT,
     category_fits,
 )
+from app.modules.users.repository import UserRepository
 from app.worker import queue
 from app.worker.models import JobType
 
@@ -89,6 +94,14 @@ FILE_MISSING = "file_missing"
 PROCESSING_ERROR = "processing_error"
 MAPPING_EXPIRED = "mapping_expired"
 REVIEW_EXPIRED = "review_expired"
+# O serviço de IA não respondeu agora: a importação volta para a fila e é tentada de novo, sem
+# reenvio do arquivo (FR-072). Não é uma falha: o código só explica a espera a quem acompanha.
+AI_BUSY = "ai_busy"
+# As tentativas acabaram sem resposta do serviço de IA.
+AI_UNAVAILABLE = "ai_unavailable"
+# A cota do dia do serviço de IA acabou, no modelo principal e no reserva: só volta amanhã.
+AI_QUOTA_EXHAUSTED = "ai_quota_exhausted"
+AI_CONSENT_REQUIRED = "ai_consent_required"
 
 MAX_TRANSACTIONS = 5_000
 MAX_FILENAME_LENGTH = 255
@@ -117,7 +130,16 @@ _CURSOR_SEPARATOR = "|"
 
 RECEIPT_NEEDS_PICTURE = (
     "Comprovante é uma foto ou um PDF. Para enviar um extrato em OFX, CSV ou planilha, "
-    'escolha "Extrato".'
+    'escolha "Extrato ou fatura".'
+)
+STATEMENT_NEEDS_DOCUMENT = (
+    "Uma foto é lida como comprovante, com um lançamento só. Para enviar um extrato ou uma "
+    'fatura, use o PDF, o OFX, o CSV ou a planilha do banco; para um recibo, escolha "Comprovante".'
+)
+AI_CONSENT_MESSAGE = (
+    "PDFs e imagens são lidos por um serviço de IA externo, que pode usar os dados para "
+    "melhorar seus modelos. Aceite o aviso para enviar este arquivo; OFX, CSV e planilhas são "
+    "lidos sem IA."
 )
 NOT_AWAITING_MAPPING = (
     "Esta importação não está esperando o mapeamento de colunas. Atualize a página para ver "
@@ -189,6 +211,23 @@ ERROR_MESSAGES = {
         "O prazo de 7 dias para revisar esta importação terminou. Nada foi salvo. Envie o "
         "arquivo de novo."
     ),
+    DOCUMENT_UNREADABLE: (
+        "Não conseguimos reconhecer lançamentos neste documento. Nada foi salvo. Confira se é "
+        "o extrato, a fatura ou o comprovante certo; em uma foto, o documento precisa aparecer "
+        "inteiro e nítido. Se o banco oferecer, o extrato em OFX ou CSV é lido sem IA."
+    ),
+    AI_BUSY: (
+        "O serviço de IA está ocupado agora. Vamos tentar de novo em instantes, sem você "
+        "precisar reenviar o arquivo."
+    ),
+    AI_UNAVAILABLE: (
+        "O serviço de IA não respondeu depois de algumas tentativas. Nada foi salvo. Envie o "
+        "arquivo de novo daqui a alguns minutos."
+    ),
+    AI_QUOTA_EXHAUSTED: (
+        "O limite de hoje do serviço de IA foi atingido, e ele volta a funcionar amanhã. Nada "
+        "foi salvo. Envie o arquivo de novo amanhã; OFX, CSV e planilhas continuam funcionando."
+    ),
 }
 
 
@@ -219,6 +258,20 @@ def _keeps_direction(item: ImportItem, line_type: TransactionType) -> bool:
     leaves = _leaves_account(item.type, item.transfer_direction)
     plain = TransactionType.EXPENSE if leaves else TransactionType.INCOME
     return line_type in (plain, TransactionType.TRANSFER)
+
+
+def extracted_total_cents(proposed: list[ProposedTransaction]) -> int:
+    """A soma das linhas lidas, para comparar com o total impresso no documento (FR-043).
+
+    As saídas somam e as entradas abatem, como no total de uma fatura, em que o estorno
+    diminui o que se deve. O total impresso vem sem sinal, e a soma também.
+    """
+    return abs(
+        sum(
+            line.amount_cents if line.type == TransactionType.EXPENSE else -line.amount_cents
+            for line in proposed
+        )
+    )
 
 
 def encode_cursor(record: Import) -> str:
@@ -273,6 +326,7 @@ class ImportService:
         self._transactions = TransactionRepository(session)
         self._categorization = CategorizationService(session)
         self._reports = ReportingService(session)
+        self._users = UserRepository(session)
 
     # ---------- consulta
 
@@ -426,10 +480,16 @@ class ImportService:
         """Confere e guarda o arquivo, e põe o processamento na fila (FR-045)."""
         account = await self._usable_account(user_id, account_id)
         received = await storage.receive(file)
-        if received.format not in supported_formats():
-            raise storage.UnsupportedFile()
-        if kind == ImportKind.RECEIPT:
-            raise _invalid({"kind": RECEIPT_NEEDS_PICTURE})
+        if not is_supported(received.format, kind):
+            raise _invalid(
+                {
+                    "kind": RECEIPT_NEEDS_PICTURE
+                    if kind == ImportKind.RECEIPT
+                    else STATEMENT_NEEDS_DOCUMENT
+                }
+            )
+        if received.format in AI_FORMATS:
+            await self._check_ai_allowed(user_id)
 
         stored_filename = await storage.store(received.content)
         record = await self._imports.create(
@@ -444,6 +504,20 @@ class ImportService:
         )
         await self._enqueue(record)
         return await self._read(record)
+
+    async def _check_ai_allowed(self, user_id: uuid.UUID) -> None:
+        """PDF e imagem vão a um serviço de IA externo: só com o aceite do aviso (FR-044) e
+        dentro do limite diário de extrações (FR-071). Nada é guardado antes disso."""
+        user = await self._users.get_by_id(user_id)
+        if user is None or user.ai_documents_consent_at is None:
+            raise Forbidden(AI_CONSENT_MESSAGE, code=AI_CONSENT_REQUIRED)
+        # O uso só é gravado quando o documento é lido: os que estão na fila já contam aqui.
+        await ai_usage.check_limit(
+            self._session,
+            user_id,
+            ai_usage.LimitKind.EXTRACTION,
+            pending=await self._imports.count_unread(user_id, sorted(AI_FORMATS)),
+        )
 
     async def _enqueue(self, record: Import) -> None:
         # O payload leva só o identificador: nada do arquivo vai para a fila.
@@ -796,18 +870,37 @@ class ImportService:
         # Grava já, para o andamento aparecer a quem está esperando (FR-045).
         await self._session.commit()
 
+        # As chamadas à IA que leram o documento: ficam gravadas mesmo se a importação falhar
+        # depois, porque a extração foi feita e conta no limite do dia.
+        ai_calls: list[AiCall] = []
         try:
             # O ponto de retorno desfaz as linhas propostas se algo falhar depois de gravá-las.
             async with self._session.begin_nested():
-                await self._prepare_review(record)
+                await self._prepare_review(record, ai_calls)
         except ImportFailed as failure:
             await self._fail(record, failure.code)
+        except LLMQuotaExhausted:
+            # A cota do dia acabou em todos os modelos: repetir hoje não adianta (FR-072).
+            await self._fail(record, AI_QUOTA_EXHAUSTED)
+        except (LLMRateLimited, LLMUnavailable):
+            # Passageiro: o arquivo fica guardado e o job tenta de novo, com espera.
+            await self._wait_for_ai(record)
+            raise
         except SQLAlchemyError:
             # Falha do banco é passageira: o job volta para a fila.
             raise
         except Exception:
             logger.exception("import processing crashed", extra={"import_id": str(import_id)})
             await self._fail(record, PROCESSING_ERROR)
+        for call in ai_calls:
+            await ai_usage.record_usage(
+                self._session,
+                user_id,
+                task=call.task,
+                model=call.model,
+                usage=call.usage,
+                counts_toward_limit=True,
+            )
 
     async def fail_abandoned(self, user_id: uuid.UUID, import_id: uuid.UUID) -> None:
         """A fila desistiu do processamento: a importação não fica presa "na fila" para sempre.
@@ -818,7 +911,18 @@ class ImportService:
         if record is None or record.status not in (ImportStatus.QUEUED, ImportStatus.PROCESSING):
             return
         await self._imports.delete_items(user_id, record.id)
-        await self._fail(record, PROCESSING_ERROR)
+        waited_for_ai = record.error_code == AI_BUSY
+        await self._fail(record, AI_UNAVAILABLE if waited_for_ai else PROCESSING_ERROR)
+
+    async def _wait_for_ai(self, record: Import) -> None:
+        """Devolve a importação à fila, dizendo a quem acompanha que a IA está ocupada."""
+        # O ponto de retorno desfeito deixa o registro desatualizado na memória.
+        await self._session.refresh(record)
+        record.status = ImportStatus.QUEUED
+        record.error_code = AI_BUSY
+        await self._imports.save(record.user_id, record)
+        # Grava já: o erro que sobe daqui desfaz o que ainda não foi gravado.
+        await self._session.commit()
 
     async def _fail(self, record: Import, code: str) -> None:
         # O ponto de retorno desfeito deixa o registro desatualizado na memória.
@@ -841,7 +945,7 @@ class ImportService:
             await storage.delete(record.stored_filename)
             record.stored_filename = None
 
-    async def _prepare_review(self, record: Import) -> None:
+    async def _prepare_review(self, record: Import, ai_calls: list[AiCall]) -> None:
         if record.stored_filename is None:
             raise ImportFailed(FILE_MISSING)
         file = storage.StoredFile(
@@ -853,7 +957,7 @@ class ImportService:
             head = (await file.read())[: storage.SNIFF_BYTES]
         except FileNotFoundError as error:
             raise ImportFailed(FILE_MISSING) from error
-        importer = find_importer(head, file.original_filename, file.format)
+        importer = find_importer(head, file.original_filename, file.format, ImportKind(record.kind))
         if importer is None:
             raise ImportFailed(UNREADABLE)
 
@@ -871,6 +975,7 @@ class ImportService:
                 signature: ColumnMapping.model_validate(template.mapping)
                 for signature, template in templates.items()
             },
+            today=clock.today(),
         )
 
         try:
@@ -878,6 +983,8 @@ class ImportService:
         except MappingRequired as required:
             self._await_mapping(record, required.preview)
             return
+        if raw.ai_call is not None:
+            ai_calls.append(raw.ai_call)
         try:
             proposed = importer.normalize(raw, context)
         except MappingMismatch:
@@ -907,6 +1014,10 @@ class ImportService:
         record.waiting_since = now
         record.item_count = len(items)
         record.document_total_cents = raw.document_total_cents
+        # Só há o que comparar quando o documento traz um total (FR-043).
+        record.extracted_total_cents = (
+            extracted_total_cents(proposed) if raw.document_total_cents is not None else None
+        )
         record.bank_balance_cents = raw.balance_cents
         record.bank_balance_date = raw.balance_date
         await self._discard_file(record)

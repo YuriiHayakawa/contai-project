@@ -28,20 +28,31 @@ CHUNK_SIZE = 64 * 1024
 SNIFF_BYTES = 8192
 
 UNSUPPORTED_FILE = (
-    "Esse tipo de arquivo não é aceito. Envie o extrato em OFX, CSV ou planilha Excel (.xlsx)."
+    "Esse tipo de arquivo não é aceito. Envie o extrato em OFX, CSV, planilha Excel (.xlsx) ou "
+    "PDF, ou a foto de um comprovante em JPG ou PNG."
 )
 EMPTY_FILE = "O arquivo está vazio. Exporte o extrato de novo no site do banco e envie."
 OLD_EXCEL = (
     "Planilhas no formato antigo (.xls) não são aceitas. Abra a planilha, salve como .xlsx e "
     "envie de novo."
 )
+ENCRYPTED_PDF = (
+    "Este PDF está protegido por senha. Abra o arquivo, salve uma cópia sem senha (por "
+    'exemplo, em "Imprimir" e "Salvar como PDF") e envie a cópia.'
+)
+
+PDF_MEDIA_TYPE = "application/pdf"
+# O que vai ao serviço de IA: o PDF e as imagens aceitas.
+AI_MEDIA_TYPES = frozenset({PDF_MEDIA_TYPE, "image/jpeg", "image/png"})
+# Um PDF cifrado traz esta entrada no dicionário final; o modelo não conseguiria abri-lo.
+_PDF_ENCRYPTION_MARKER = b"/Encrypt"
 
 _STORED_NAME = re.compile(r"[0-9a-f]{32}")
 _ZIP_MAGIC = b"PK\x03\x04"
 # Formato dos arquivos antigos do Office, como o .xls.
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _XLSX_WORKBOOK = "xl/workbook.xml"
-_IMAGE_TYPES = frozenset({"image/jpeg", "image/png"})
+_IMAGE_TYPES = AI_MEDIA_TYPES - {PDF_MEDIA_TYPE}
 _CSV_DELIMITERS = (";", ",", "\t", "|")
 # Em texto só aparecem estes caracteres de controle: tabulação, quebras de linha e fim de arquivo.
 _TEXT_CONTROLS = frozenset("\t\n\r\f\x1a")
@@ -124,12 +135,19 @@ def is_xlsx(content: bytes) -> bool:
         return False
 
 
+def media_type(content: bytes) -> str | None:
+    """O tipo de um PDF ou de uma imagem aceita, pelos primeiros bytes; `None` para o resto."""
+    kind = filetype.guess(content[:SNIFF_BYTES])
+    mime = kind.mime if kind is not None else None
+    return mime if mime in AI_MEDIA_TYPES else None
+
+
 def sniff_format(content: bytes) -> ImportFormat | None:
     """O formato de verdade do arquivo, pelo conteúdo; `None` quando não é um tipo aceito."""
     head = content[:SNIFF_BYTES]
     kind = filetype.guess(head)
     mime = kind.mime if kind is not None else None
-    if mime == "application/pdf":
+    if mime == PDF_MEDIA_TYPE:
         return ImportFormat.PDF
     if mime in _IMAGE_TYPES:
         return ImportFormat.IMAGE
@@ -165,6 +183,8 @@ async def receive(upload: Readable, *, max_bytes: int | None = None) -> Received
     file_format = sniff_format(content)
     if file_format is None:
         raise UnsupportedFile()
+    if file_format == ImportFormat.PDF and _PDF_ENCRYPTION_MARKER in content:
+        raise UnsupportedFile(ENCRYPTED_PDF)
     return ReceivedFile(
         content=content, format=file_format, file_hash=hashlib.sha256(content).hexdigest()
     )
