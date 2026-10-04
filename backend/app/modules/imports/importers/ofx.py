@@ -28,7 +28,7 @@ from app.modules.imports.importers.base import (
     RawDocument,
     clean_description,
 )
-from app.modules.imports.models import ImportFormat
+from app.modules.imports.models import ImportFormat, ImportKind
 from app.modules.imports.storage import StoredFile, decode_text, looks_like_ofx
 from app.modules.transactions.models import TransactionType
 
@@ -160,6 +160,7 @@ def parse_ofx(content: bytes) -> RawDocument[OfxRow]:
 
 class OfxImporter:
     formats = frozenset({ImportFormat.OFX})
+    kinds = frozenset({ImportKind.STATEMENT})
 
     def detect(self, head: bytes, filename: str) -> bool:
         text = decode_text(head)

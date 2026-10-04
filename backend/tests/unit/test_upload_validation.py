@@ -130,7 +130,8 @@ async def test_a_type_that_is_not_accepted_is_refused(content: bytes) -> None:
 
     assert refused.value.status_code == 415
     assert refused.value.code == "unsupported_file"
-    assert "OFX, CSV ou planilha" in refused.value.message
+    assert "OFX, CSV, planilha Excel (.xlsx) ou PDF" in refused.value.message
+    assert "JPG ou PNG" in refused.value.message
 
 
 @pytest.mark.parametrize("content", [b"", b"   \n\r\n\t  "], ids=["vazio", "só espaços"])
@@ -146,6 +147,38 @@ async def test_an_old_excel_file_says_how_to_convert_it() -> None:
         await storage.receive(FakeUpload(OLD_XLS))
 
     assert ".xlsx" in refused.value.message
+
+
+@pytest.mark.parametrize(
+    "trailer",
+    [b"trailer\n<< /Root 1 0 R /Encrypt 5 0 R >>\n", b"<</Encrypt<</Filter/Standard>>>>\n"],
+    ids=["referência", "dicionário"],
+)
+async def test_a_pdf_with_a_password_is_refused_by_the_encryption_marker(trailer: bytes) -> None:
+    with pytest.raises(UnsupportedFile) as refused:
+        await storage.receive(FakeUpload(PDF + trailer + b"%%EOF\n"))
+
+    assert refused.value.status_code == 415
+    assert refused.value.message == storage.ENCRYPTED_PDF
+    # Um PDF sem senha passa.
+    assert (await storage.receive(FakeUpload(PDF))).format == ImportFormat.PDF
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (PDF, "application/pdf"),
+        (PNG, "image/png"),
+        (JPEG, "image/jpeg"),
+        (b"GIF89a" + b"\x00" * 32, None),
+        (b"Data;Valor\n01/09/2026;1,00", None),
+    ],
+    ids=["pdf", "png", "jpeg", "gif", "csv"],
+)
+def test_the_media_type_sent_to_the_ai_comes_from_the_content(
+    content: bytes, expected: str | None
+) -> None:
+    assert storage.media_type(content) == expected
 
 
 async def test_the_hash_is_the_sha256_of_the_content() -> None:

@@ -17,6 +17,16 @@ async def profile_is_always_the_callers_own(context: IsolationContext) -> None:
     assert context.user_a.name not in seen_by_b.text
 
 
+@isolation_case("POST", "/api/v1/users/me/consents/ai-documents")
+async def consent_is_recorded_only_for_the_caller(context: IsolationContext) -> None:
+    accepted_by_b = await context.client_b.post("/api/v1/users/me/consents/ai-documents")
+
+    assert accepted_by_b.status_code == 204
+    assert (await context.client_b.get("/api/v1/users/me")).json()["ai_documents_consent"] is True
+    # O aceite de B não vale para A.
+    assert (await context.client_a.get("/api/v1/users/me")).json()["ai_documents_consent"] is False
+
+
 @isolation_case("POST", "/api/v1/auth/logout")
 async def logout_ends_only_the_callers_session(context: IsolationContext) -> None:
     logout_of_b = await context.client_b.post("/api/v1/auth/logout")

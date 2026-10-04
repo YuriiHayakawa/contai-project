@@ -134,12 +134,12 @@ async def test_the_type_comes_from_the_content_and_not_from_the_name(
 @pytest.mark.parametrize(
     ("content", "message"),
     [
-        (b"\x89PNG\r\n\x1a\n" + b"\x00" * 64, "OFX, CSV ou planilha"),
-        (b"MZ\x90\x00" + b"\x00" * 64, "OFX, CSV ou planilha"),
+        (b"GIF89a" + b"\x00" * 64, "OFX, CSV, planilha Excel (.xlsx) ou PDF"),
+        (b"MZ\x90\x00" + b"\x00" * 64, "OFX, CSV, planilha Excel (.xlsx) ou PDF"),
         (b"", "está vazio"),
         (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 64, "salve como .xlsx"),
     ],
-    ids=["imagem", "executável", "vazio", "xls antigo"],
+    ids=["imagem que não é jpg nem png", "executável", "vazio", "xls antigo"],
 )
 async def test_a_file_that_is_not_accepted_is_refused_with_what_to_do(
     client_a: AsyncClient, checking: Json, upload_dir: Path, content: bytes, message: str

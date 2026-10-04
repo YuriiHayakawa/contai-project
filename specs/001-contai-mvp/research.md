@@ -239,7 +239,20 @@ no início da implementação.
   para o projeto inteiro), com saída estruturada (JSON Schema) validada por Pydantic. O esquema do extrato traz as linhas e, quando houver, o total do
   documento; o do comprovante traz uma única transação. O backend soma as linhas, compara com o
   total e registra a divergência. Valores monetários chegam como texto e são convertidos para
-  centavos com `Decimal`, nunca com `float`.
+  centavos com `Decimal`, nunca com `float`. Cada linha traz o sentido do dinheiro em um campo
+  próprio (`out` ou `in`), e não no sinal do valor. Na soma, as saídas somam e as entradas
+  abatem, como no total de uma fatura. Todo campo do schema é obrigatório, e o que pode faltar
+  aceita `null`: o schema vai ao provedor sem valores padrão. O usuário diz no envio se o
+  arquivo é um extrato ou fatura, ou um comprovante: uma foto só é lida como comprovante. Data
+  ou valor ilegível em uma linha recusa o documento inteiro (`document_unreadable`), como no
+  OFX; um comprovante sem data fica com a data do envio, para o usuário conferir. O conteúdo do
+  documento é tratado como dado: vai só no anexo, e o prompt de sistema manda não seguir o que
+  estiver escrito nele (FR-068). A leitura feita conta no limite diário mesmo quando o
+  documento não rende lançamentos; o limite é conferido no envio, contando também os
+  documentos que ainda estão na fila. Serviço ocupado ou indisponível: o job tenta de novo
+  (três tentativas, com a espera que o provedor pedir ou com backoff), o arquivo fica guardado
+  e a importação mostra `ai_busy`; cota do dia esgotada em todos os modelos: falha na hora,
+  com `ai_quota_exhausted`, sem nova tentativa (FR-072).
 - **Rationale**: atende FR-041 a FR-043 e o Princípio VI: a conferência é feita por código, e o
   usuário revisa tudo antes de salvar.
 - **Alternatives considered**: extrair o texto do PDF localmente e mandar só o texto (PDFs

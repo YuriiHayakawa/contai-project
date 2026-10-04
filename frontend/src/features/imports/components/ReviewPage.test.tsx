@@ -250,6 +250,46 @@ describe("ReviewPage", () => {
     expect(updateImportItem).not.toHaveBeenCalled();
   });
 
+  it("fatura em PDF cuja soma confere com o total do documento mostra a conferência", async () => {
+    const pdf = {
+      format: "pdf" as const,
+      original_filename: "fatura.pdf",
+      balance_check: null,
+      total_check: { document_total_cents: 125_046, extracted_total_cents: 125_046, matches: true },
+    };
+    getImport.mockImplementation(() => Promise.resolve(importOf(pdf)));
+    renderReview();
+
+    expect(await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ })).toBeVisible();
+    expect(
+      screen.getByText(/A soma das linhas lidas confere com o total do documento/),
+    ).toHaveTextContent("confere com o total do documento: R$ 1.250,46.");
+    expect(screen.queryByText(/não bate com o total do documento/)).toBeNull();
+  });
+
+  it("soma diferente do total do documento avisa com os dois valores e deixa importar", async () => {
+    const pdf = {
+      format: "pdf" as const,
+      original_filename: "fatura.pdf",
+      balance_check: null,
+      total_check: {
+        document_total_cents: 125_046,
+        extracted_total_cents: 128_046,
+        matches: false,
+      },
+    };
+    getImport.mockImplementation(() => Promise.resolve(importOf(pdf)));
+    renderReview();
+
+    expect(await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ })).toBeVisible();
+    expect(screen.getByText(/não bate com o total do documento/)).toHaveTextContent(
+      "O documento informa R$ 1.250,46; as linhas lidas somam R$ 1.280,46. Confira se falta ou sobra alguma linha.",
+    );
+    expect(screen.queryByText(/confere com o total do documento/)).toBeNull();
+    // A divergência avisa, e não impede a importação.
+    expect(await importButton("Importar 3 lançamentos")).not.toHaveAttribute("aria-disabled");
+  });
+
   it("marcar todas e desmarcar uma linha atualizam a contagem e o saldo, e são salvas", async () => {
     const user = userEvent.setup();
     renderReview();

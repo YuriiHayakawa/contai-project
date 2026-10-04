@@ -12,8 +12,18 @@ export type ImportStatus =
   | "failed";
 
 export type ImportFormat = "ofx" | "csv" | "xlsx" | "pdf" | "image";
+/** O que o arquivo é: um extrato ou uma fatura, com várias linhas, ou um comprovante. */
+export type ImportKind = "statement" | "receipt";
 export type DuplicateStatus = "none" | "exact" | "probable";
 export type CategorySource = "user_rule" | "ai" | "fallback";
+
+/** O envio de PDF ou imagem foi recusado porque falta o aceite do aviso (FR-044). */
+export const AI_CONSENT_REQUIRED = "ai_consent_required";
+/**
+ * O serviço de IA está ocupado: a importação voltou para a fila e é tentada de novo sozinha,
+ * sem reenvio do arquivo (FR-072). Não é uma falha: só explica a espera.
+ */
+export const AI_BUSY = "ai_busy";
 
 /** A linha parece o pagamento de uma fatura e ficou como despesa: não há cartão cadastrado. */
 export const INVOICE_PAYMENT_WITHOUT_CARD = "invoice_payment_without_card";
@@ -127,7 +137,7 @@ export interface BalanceCheck {
 export interface Import {
   id: string;
   account_id: string;
-  kind: "statement" | "receipt";
+  kind: ImportKind;
   format: ImportFormat;
   original_filename: string;
   status: ImportStatus;
@@ -176,6 +186,16 @@ export interface ConfirmItem {
 /** A importação ainda está na fila ou sendo lida: a tela consulta de novo em instantes. */
 export function isWorking(status: ImportStatus): boolean {
   return status === "queued" || status === "processing";
+}
+
+/** PDF e imagem são lidos por um serviço de IA externo; os outros formatos, sem IA. */
+export function isReadByAi(format: ImportFormat): boolean {
+  return format === "pdf" || format === "image";
+}
+
+/** Na fila à espera do serviço de IA, que não respondeu na última tentativa. */
+export function isWaitingForAi(record: Pick<Import, "status" | "error_code">): boolean {
+  return isWorking(record.status) && record.error_code === AI_BUSY;
 }
 
 /** Códigos de erro de uma importação que esperou demais pelo usuário (FR-083). */

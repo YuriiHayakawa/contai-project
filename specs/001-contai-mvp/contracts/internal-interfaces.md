@@ -13,6 +13,7 @@ Cada importador vive em `backend/app/modules/imports/importers/` e implementa tr
 ```python
 class Importer(Protocol):
     formats: frozenset[ImportFormat]
+    kinds: frozenset[ImportKind]
 
     def detect(self, head: bytes, filename: str) -> bool:
         """Diz se este importador reconhece o arquivo, pelos primeiros bytes."""
@@ -26,9 +27,21 @@ class Importer(Protocol):
 
 Regras:
 
+- `formats` e `kinds` dizem o que o importador lê: o formato do arquivo, pelo conteúdo, e o
+  que o usuário disse que ele é (`statement` ou `receipt`). Um PDF vai ao importador de extrato
+  ou ao de comprovante conforme o `kind` do envio.
 - `ImportContext` traz o tipo da conta de destino, os modelos de colunas do usuário (pela
-  assinatura do cabeçalho) e, nos importadores que usam IA, o provedor; nunca traz uma sessão
-  de banco. Importadores não acessam o banco.
+  assinatura do cabeçalho) e o dia de hoje em Brasília; nunca traz uma sessão de banco.
+  Importadores não acessam o banco.
+- Os importadores que usam IA chamam o provedor por `app/ai/fallback.py`, com o modelo de
+  extração, e devolvem em `RawDocument.ai_call` a chamada feita (tarefa, modelo que respondeu e
+  tokens): quem grava em `ai_usage` é o serviço de importação. Modelo ocupado, indisponível ou
+  sem cota sobe como exceção do provedor, e quem decide a nova tentativa é o job; uma resposta
+  que não respeita o schema, ou que não traz lançamentos, vira `ImportFailed` com
+  `document_unreadable`.
+- O documento vai ao modelo só como anexo, e o prompt de sistema diz que o conteúdo dele é dado,
+  e não instrução (FR-068). O schema de saída só tem data, descrição, valor e sentido de cada
+  linha, e o total impresso: é tudo o que um documento consegue produzir.
 - `extract` levanta `MappingRequired` (com a prévia do cabeçalho e das primeiras linhas) quando
   um CSV ou planilha não tem modelo conhecido, e `ImportFailed` com um código quando o arquivo
   é ilegível ou não tem transações. `normalize` levanta `MappingMismatch` quando o modelo de

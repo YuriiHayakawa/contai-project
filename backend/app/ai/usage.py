@@ -71,10 +71,15 @@ async def get_status(session: AsyncSession, user_id: uuid.UUID, kind: LimitKind)
     return UsageStatus(used=used, limit=_daily_limit(kind), resets_at=_resets_at())
 
 
-async def check_limit(session: AsyncSession, user_id: uuid.UUID, kind: LimitKind) -> None:
-    """Levanta `AiLimitReached`, com o horário em que o limite zera, se o dia já esgotou."""
+async def check_limit(
+    session: AsyncSession, user_id: uuid.UUID, kind: LimitKind, *, pending: int = 0
+) -> None:
+    """Levanta `AiLimitReached`, com o horário em que o limite zera, se o dia já esgotou.
+
+    `pending` é o que já foi pedido e ainda não virou uso gravado: os documentos na fila.
+    """
     status = await get_status(session, user_id, kind)
-    if status.remaining == 0:
+    if status.remaining <= pending:
         raise AiLimitReached(_MESSAGES[kind], details={"resets_at": status.resets_at.isoformat()})
 
 

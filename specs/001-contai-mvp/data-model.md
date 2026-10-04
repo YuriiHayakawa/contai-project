@@ -227,11 +227,11 @@ Arquivar uma categoria mãe arquiva as filhas.
 | `file_hash` | texto | SHA-256 do arquivo; avisa reimportação |
 | `stored_filename` | texto | nome gerado no volume privado; nulo depois de apagado (FR-053) |
 | `status` | enum | `queued`, `processing`, `awaiting_mapping`, `awaiting_review`, `completed`, `undone`, `failed` |
-| `error_code` | texto | motivo da falha, em código: `unreadable`, `no_transactions`, `multiple_accounts`, `too_many_rows`, `file_missing`, `processing_error`, `mapping_expired`, `review_expired`. Em `awaiting_mapping`, `mapping_mismatch` diz que o modelo enviado não leu o arquivo |
+| `error_code` | texto | motivo da falha, em código: `unreadable`, `no_transactions`, `multiple_accounts`, `too_many_rows`, `file_missing`, `processing_error`, `mapping_expired`, `review_expired` e, em PDF e imagem, `document_unreadable`, `ai_unavailable`, `ai_quota_exhausted`. Em `awaiting_mapping`, `mapping_mismatch` diz que o modelo enviado não leu o arquivo. Em `queued` e `processing`, `ai_busy` diz que o serviço de IA está ocupado e que a leitura será tentada de novo |
 | `template_id` | UUID | FK para `import_templates`; modelo aplicado |
 | `mapping_preview` | JSONB | cabeçalho e primeiras linhas para a tela de mapeamento; apagado depois |
 | `document_total_cents` | BIGINT | total impresso no documento, quando houver (FR-043) |
-| `extracted_total_cents` | BIGINT | soma das linhas extraídas |
+| `extracted_total_cents` | BIGINT | soma das linhas extraídas (saídas menos entradas, sem sinal), gravada só quando o documento traz um total |
 | `bank_balance_cents` | BIGINT | saldo informado pelo arquivo, quando houver (FR-082) |
 | `bank_balance_date` | DATE | data do saldo informado |
 | `item_count` | inteiro | linhas propostas |
