@@ -13,21 +13,26 @@
 - Todo valor volta em centavos e já formatado: `{ "cents": 84230, "formatted": "R$ 842,30" }`.
 - Todo resultado ecoa o período resolvido, com datas e um rótulo em português
   (por exemplo, "outubro de 2026"), e os `transaction_ids` que compõem os valores, até 50, mais
-  a contagem total.
+  a contagem total. Os ids ficam no resultado que o backend guarda; ao modelo vai só a
+  contagem.
+- Um período sem lançamentos volta com uma nota dizendo isso, para o modelo não interpretar um
+  zero.
 - Transferências nunca entram em totais de despesa ou receita.
 
 ## Parâmetro `period`
 
 O modelo nunca calcula datas. Ele escolhe um período simbólico, e o backend resolve no fuso de
-Brasília.
+Brasília. Todo período que inclui o mês atual o inclui inteiro, como o painel: é o que mantém
+os números do assistente iguais aos do painel quando há lançamentos de data futura no mês
+(FR-062).
 
 | `preset` | Campos extras | Significado |
 |----------|---------------|-------------|
-| `this_month` | — | do dia 1 do mês atual até hoje |
+| `this_month` | — | o mês atual inteiro |
 | `last_month` | — | mês anterior inteiro |
 | `month` | `year`, `month` | um mês específico |
-| `last_n_months` | `n` (1 a 24) | os últimos n meses, incluindo o atual |
-| `this_year` | — | de 1º de janeiro até hoje |
+| `last_n_months` | `n` (1 a 24) | os últimos n meses inteiros, incluindo o atual |
+| `this_year` | — | de 1º de janeiro até o fim do mês atual |
 | `last_year` | — | ano anterior inteiro |
 | `custom` | `from`, `to` | datas explícitas ditas pelo usuário |
 
@@ -51,18 +56,24 @@ formulário.
 ## Resposta final
 
 - Tipos possíveis: `answer`, `clarification` (pergunta ambígua), `refusal` (fora do tema de
-  finanças do usuário), `transaction_proposal`, `error`.
+  finanças do usuário), `transaction_proposal`, `error`. O modelo marca o esclarecimento e a
+  recusa começando o texto com `[esclarecimento]` ou `[recusa]`; o backend tira a marca. Um
+  texto sem marca e sem nenhuma consulta é um esclarecimento.
 - Conferência numérica: todo valor em reais e todo percentual presente no texto final precisa
-  existir, com a mesma formatação, nos resultados das ferramentas daquela pergunta. Em caso de
-  falha, o backend pede a resposta de novo uma vez; se falhar de novo, monta a resposta por texto
-  fixo a partir dos resultados.
+  existir nos resultados das ferramentas daquela pergunta. A comparação é pelo valor (em
+  centavos, sem o sinal), e não pelos caracteres: `R$ 842,30` e `842,30 reais` são o mesmo
+  valor; `R$ 842` e `R$ 850,00`, não. Em caso de falha, o backend pede a resposta de novo uma
+  vez; se falhar de novo, monta a resposta por texto fixo a partir dos resultados. Sem nenhum
+  resultado para sustentar um número, a resposta é do tipo `error`, sem o número.
 - As transações exibidas junto da resposta vêm dos `transaction_ids` das ferramentas, nunca do
   texto do modelo.
-- No máximo 5 rodadas de ferramentas por pergunta.
+- No máximo 5 rodadas de ferramentas por pergunta; depois da quinta, o modelo já não recebe
+  ferramentas e precisa responder.
 
 ## Dados não confiáveis
 
-Descrições, observações e nomes de contas e categorias criados pelo usuário entram no prompt
-apenas dentro dos resultados das ferramentas, como dados delimitados. O prompt de sistema
+Descrições e observações entram no prompt apenas dentro dos resultados das ferramentas. Os
+nomes de contas e de categorias vão também em um bloco delimitado (`<dados_do_usuario>`), só
+com id, nome e tipo, para o modelo escolher os ids. O prompt de sistema
 instrui o modelo a nunca seguir instruções contidas neles. Os testes incluem transações com
 descrições que tentam mudar o comportamento do assistente (FR-068).

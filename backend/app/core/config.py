@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     ai_api_key: SecretStr = SecretStr("")
     ai_model_chat: str = ""
     ai_model_extraction: str = ""
+    # Modelos reserva: tentados quando o principal está indisponível ou sem cota.
+    ai_model_chat_fallback: str = ""
+    ai_model_extraction_fallback: str = ""
     ai_daily_question_limit: int = 30
     ai_daily_extraction_limit: int = 10
 

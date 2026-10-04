@@ -97,6 +97,17 @@ class AiLimitReached(DomainError):
     message = "Você atingiu o limite de uso do assistente por hoje. Ele volta amanhã."
 
 
+class AiQuotaExhausted(DomainError):
+    """A cota do dia no serviço de IA acabou para o app inteiro, e não só para este usuário."""
+
+    status_code = 429
+    code = "ai_quota_exhausted"
+    message = (
+        "O limite de hoje do serviço de IA foi atingido. Ele volta a funcionar amanhã; o "
+        "restante do Contaí continua funcionando normalmente."
+    )
+
+
 class AiUnavailable(DomainError):
     status_code = 503
     code = "ai_unavailable"

@@ -123,9 +123,15 @@ Esperado: SC-006 (extrato mensal importado e revisado em menos de 5 minutos).
 
 ### 6. Assistente (história 6)
 
-Requer `AI_PROVIDER=gemini` e uma chave válida para a validação real.
+Requer `AI_PROVIDER=gemini` e uma chave válida para a validação real. No plano gratuito do
+provedor, cada pergunta gasta de duas a três chamadas da cota do dia; preencha
+`AI_MODEL_CHAT_FALLBACK` para o modelo reserva assumir quando o principal ficar sem cota ou
+fora do ar.
 
-1. Faça as seis perguntas de exemplo da spec e compare cada número com o painel (SC-010).
+1. Faça as seis perguntas de exemplo da spec e compare cada número com o painel (SC-010):
+   "Quanto gastei com comida esse mês?", "Quanto recebi este ano?", "Em que gastei mais que
+   no mês passado?", "Quais foram meus 5 maiores gastos em agosto?", "Quanto tenho na
+   poupança?" e "Quanto ainda tenho de parcelas no cartão?".
 2. Confira que cada resposta lista as transações que compõem o valor.
 3. Pergunte "e no mês anterior?" depois de uma resposta.
 4. Pergunte "quanto gastei?" sem período: o assistente pede o esclarecimento.

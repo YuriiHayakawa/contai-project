@@ -18,11 +18,10 @@ from pathlib import Path
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai import factory as ai_factory
+from app.ai import fallback as ai_calls
 from app.ai import usage as ai_usage
 from app.ai.models import AiTask
 from app.ai.provider import LLMError
-from app.core.config import get_settings
 from app.modules.categories.models import Category, CategoryKind
 from app.modules.categories.repository import CategoryRepository
 from app.modules.categorization.models import RuleSource
@@ -247,14 +246,13 @@ class CategorizationService:
             return answered
         named = category_paths(categories)
         listed = [(CategoryKind(category.kind), name) for category, name in named]
-        model = get_settings().ai_model_chat
-        provider = ai_factory.get_provider()
+        models = ai_calls.chat_models()
 
         batches = [lines[start : start + BATCH_SIZE] for start in range(0, len(lines), BATCH_SIZE)]
         for batch in batches[:MAX_BATCHES]:
             try:
-                result = await provider.generate_structured(
-                    model=model,
+                result = await ai_calls.generate_structured(
+                    models,
                     system=system_prompt(),
                     prompt=build_prompt(listed, batch),
                     schema=CategorizationAnswer,
@@ -267,7 +265,7 @@ class CategorizationService:
                 self._session,
                 user_id,
                 task=AiTask.CATEGORIZATION,
-                model=model,
+                model=result.model,
                 usage=result.usage,
                 counts_toward_limit=False,
             )

@@ -9,7 +9,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Self
+from typing import Literal, Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,9 +18,9 @@ from app.core.errors import ValidationFailed
 from app.modules.accounts.models import AccountType
 from app.modules.accounts.schemas import AccountRead
 from app.modules.accounts.service import AccountService
-from app.modules.categories.models import Category
+from app.modules.categories.models import Category, CategoryKind
 from app.modules.categories.repository import CategoryRepository
-from app.modules.dashboard.repository import ReportRepository
+from app.modules.dashboard.repository import NO_FILTERS, ReportFilters, ReportRepository
 from app.modules.dashboard.schemas import (
     AccountBalance,
     CardSummary,
@@ -58,6 +58,26 @@ class Period:
     def of_month(cls, day: dt.date) -> Self:
         """O mês inteiro de `day`, inclusive os dias que ainda não chegaram."""
         return cls(*clock.month_bounds(day))
+
+
+GroupBy = Literal["none", "category", "subcategory", "account", "month"]
+
+
+@dataclass(frozen=True)
+class AmountGroup:
+    """Uma fatia de um total: uma categoria, uma conta ou um mês."""
+
+    name: str
+    amount_cents: int
+    # Parte do total, de 0 a 100, com uma casa; `None` quando a fatia não é parte de um todo
+    # (os meses de um período).
+    percent: float | None
+
+
+@dataclass(frozen=True)
+class AmountBreakdown:
+    total_cents: int
+    groups: list[AmountGroup]
 
 
 def resolve_month(value: str | None, *, field: str = "month") -> dt.date:
@@ -107,6 +127,19 @@ def _percent(amount_cents: int, total_cents: int) -> float:
 
 def _largest_first(amount_cents: int, name: str) -> tuple[int, str]:
     return -amount_cents, name.casefold()
+
+
+def _groups(amounts: dict[str, int]) -> list[AmountGroup]:
+    """As fatias de um total, da maior para a menor, com a parte de cada uma. Como no painel,
+    a base do percentual é a soma das fatias positivas."""
+    base = sum(amount for amount in amounts.values() if amount > 0)
+    return [
+        AmountGroup(name=name, amount_cents=amount, percent=_percent(amount, base))
+        for name, amount in sorted(
+            amounts.items(), key=lambda pair: _largest_first(pair[1], pair[0])
+        )
+        if amount != 0
+    ]
 
 
 class ReportingService:
@@ -223,13 +256,128 @@ class ReportingService:
         ]
 
     async def top_expenses(
-        self, user_id: uuid.UUID, period: Period, *, limit: int
+        self,
+        user_id: uuid.UUID,
+        period: Period,
+        *,
+        limit: int,
+        filters: ReportFilters = NO_FILTERS,
     ) -> list[TransactionRead]:
         """As maiores despesas do período, da maior para a menor (FR-057)."""
         transactions = await self._reports.top_expenses(
-            user_id, start=period.start, end=period.end, limit=limit
+            user_id, start=period.start, end=period.end, limit=limit, filters=filters
         )
         return [TransactionRead.from_transaction(transaction) for transaction in transactions]
+
+    async def amounts(
+        self,
+        user_id: uuid.UUID,
+        period: Period,
+        *,
+        kind: CategoryKind,
+        filters: ReportFilters = NO_FILTERS,
+        group_by: GroupBy = "none",
+    ) -> AmountBreakdown:
+        """Saídas (`expense`) ou entradas (`income`) de um período, com um recorte e uma
+        quebra à escolha. É o relatório das perguntas do assistente.
+
+        Sem recorte, o total é o do resumo do painel, e a quebra por categoria é a do gráfico
+        de categorias: as somas saem das mesmas regras (FR-062).
+        """
+        total = (
+            await self._reports.amounts(
+                user_id, kind=kind, filters=filters, start=period.start, end=period.end
+            )
+        )[None]
+        if group_by == "none":
+            return AmountBreakdown(total_cents=total, groups=[])
+        if group_by == "month":
+            by_month = await self._reports.amounts(
+                user_id,
+                kind=kind,
+                filters=filters,
+                group="month",
+                start=period.start,
+                end=period.end,
+            )
+            months: list[dt.date] = []
+            day = period.start.replace(day=1)
+            while day <= period.end:
+                months.append(day)
+                day = clock.add_months(day, 1)
+            # Do mês mais antigo para o mais novo; mês sem lançamentos vem com zero.
+            return AmountBreakdown(
+                total_cents=total,
+                groups=[
+                    AmountGroup(
+                        name=clock.month_name(month),
+                        amount_cents=by_month.get(month_label(month), 0),
+                        percent=None,
+                    )
+                    for month in months
+                ],
+            )
+        if group_by == "account":
+            by_account = await self._reports.amounts(
+                user_id,
+                kind=kind,
+                filters=filters,
+                group="account",
+                start=period.start,
+                end=period.end,
+            )
+            names = {
+                account.id: account.name
+                for account in await self._accounts.list(user_id, include_archived=True)
+            }
+            named = {names[account_id]: amount for account_id, amount in by_account.items()}
+            return AmountBreakdown(total_cents=total, groups=_groups(named))
+
+        by_category = await self._reports.amounts(
+            user_id,
+            kind=kind,
+            filters=filters,
+            group="category",
+            start=period.start,
+            end=period.end,
+        )
+        categories = {
+            category.id: category
+            for category in await self._categories.list_all(user_id, include_archived=True)
+        }
+        named = {}
+        for category_id, amount in by_category.items():
+            category = categories[category_id]
+            parent = categories[category.parent_id] if category.parent_id else None
+            if group_by == "category":
+                # Como no painel: o gasto da subcategoria soma na categoria principal.
+                name = (parent or category).name
+            else:
+                name = f"{parent.name} > {category.name}" if parent else category.name
+            named[name] = named.get(name, 0) + amount
+        return AmountBreakdown(total_cents=total, groups=_groups(named))
+
+    async def entry_ids(
+        self,
+        user_id: uuid.UUID,
+        period: Period,
+        *,
+        kind: CategoryKind,
+        filters: ReportFilters = NO_FILTERS,
+        limit: int,
+    ) -> tuple[list[uuid.UUID], int]:
+        """Os ids das transações que compõem `amounts`, até `limit`, e quantas são (FR-063)."""
+        return await self._reports.entry_ids(
+            user_id, start=period.start, end=period.end, kind=kind, filters=filters, limit=limit
+        )
+
+    async def card_entry_ids(
+        self, user_id: uuid.UUID, card: CardSummary, *, limit: int
+    ) -> tuple[list[uuid.UUID], int]:
+        """As compras da fatura aberta de um cartão e as parcelas que ainda vêm."""
+        return await self._reports.card_entry_ids(
+            user_id, card.account_id, start=card.current_invoice.period_start, limit=limit
+        )
 
     async def invoice_payment(self, user_id: uuid.UUID, card: AccountRead) -> InvoicePayment:
         """O que pagar no cartão hoje (FR-033): a última fatura fechada, se ainda falta pagar

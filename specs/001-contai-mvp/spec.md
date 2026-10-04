@@ -291,7 +291,10 @@ encontrar sugestões de perguntas quando o chat está vazio.
 tradicionais não respondem. Depende de haver transações registradas.
 
 **Independent Test**: com dados conhecidos, o usuário faz as seis perguntas de exemplo e compara
-cada número com o painel e com a lista de transações.
+cada número com o painel e com a lista de transações. As seis perguntas são: "Quanto gastei com
+comida esse mês?", "Quanto recebi este ano?", "Em que gastei mais que no mês passado?",
+"Quais foram meus 5 maiores gastos em agosto?", "Quanto tenho na poupança?" e "Quanto ainda
+tenho de parcelas no cartão?".
 
 **Acceptance Scenarios**:
 
@@ -634,7 +637,8 @@ os 7 dias, não consegue mais entrar.
 - **FR-040**: OFX, CSV e planilhas DEVEM ser lidos sem IA; apenas as descrições das transações
   PODEM ser usadas para sugerir categorias.
 - **FR-041**: O sistema DEVE extrair, com IA, as transações de PDFs de extrato bancário e de
-  fatura de cartão.
+  fatura de cartão. Cada documento DEVE ser processado em uma única chamada ao serviço de IA,
+  com o arquivo inteiro, e NÃO em uma chamada por página.
 - **FR-042**: O sistema DEVE gerar uma transação proposta a partir da foto ou do PDF de um
   comprovante, recibo ou nota fiscal.
 - **FR-043**: Quando o documento tiver um total, o sistema DEVE compará-lo com a soma das
@@ -736,6 +740,10 @@ os 7 dias, não consegue mais entrar.
   restante do app DEVE continuar funcionando.
 - **FR-072**: Se o serviço de IA estiver sobrecarregado ou indisponível, o usuário DEVE receber
   uma mensagem amigável, e o processamento DEVE ser tentado novamente de forma automática.
+  Quando houver um modelo reserva configurado, a nova tentativa DEVE ser feita nele, tanto por
+  indisponibilidade quanto por cota esgotada. Quando a cota diária do serviço de IA acabar,
+  inclusive a do modelo reserva, a mensagem DEVE dizer que o limite do dia foi atingido e que
+  o recurso volta a funcionar no dia seguinte.
 - **FR-073**: O sistema DEVE enviar ao serviço de IA apenas o necessário para cada tarefa, e
   nunca senhas, dados de acesso ou o histórico completo do usuário.
 

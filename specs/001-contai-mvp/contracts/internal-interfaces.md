@@ -85,10 +85,20 @@ Regras:
 - O provedor nunca executa ferramentas: ele só devolve os pedidos. Quem executa é o serviço do
   assistente, que injeta o `user_id`.
 - Erros do fornecedor viram exceções próprias: `LLMRateLimited` (com o tempo de espera, quando
-  informado), `LLMUnavailable` e `LLMInvalidResponse`.
+  informado), `LLMQuotaExhausted` (um `LLMRateLimited` em que a cota do dia acabou: repetir
+  hoje não adianta), `LLMUnavailable` e `LLMInvalidResponse`.
+- As regras de negócio chamam o provedor por `app/ai/fallback.py` (`chat` e
+  `generate_structured`, com um `ModelChoice`): quando o modelo principal responde
+  indisponível ou sem cota, a chamada tenta o modelo reserva; sem reserva configurado, um erro
+  passageiro é repetido uma vez no mesmo modelo. O resultado diz qual modelo respondeu, e é ele
+  que vai para `ai_usage`. O erro que sobe só é `LLMQuotaExhausted` quando a cota do dia acabou
+  em todos os modelos tentados.
+- Um documento anexo vai inteiro em cada chamada de `generate_structured`: uma chamada por
+  documento, nunca uma por página.
 - Implementações: `gemini.py` (produção) e `fake.py` (testes, com respostas roteirizadas e
   registro das chamadas recebidas). A escolha vem de `AI_PROVIDER`; os modelos, de
-  `AI_MODEL_CHAT` e `AI_MODEL_EXTRACTION`.
+  `AI_MODEL_CHAT` e `AI_MODEL_EXTRACTION`, e os reservas, opcionais, de `AI_MODEL_CHAT_FALLBACK` e
+  `AI_MODEL_EXTRACTION_FALLBACK`.
 - Trocar de fornecedor é criar outra implementação e mudar a variável de ambiente; nenhuma regra
   de negócio muda.
 

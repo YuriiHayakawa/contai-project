@@ -234,8 +234,9 @@ no início da implementação.
 
 ## 13. PDF e imagem com IA
 
-- **Decision**: o arquivo vai inteiro para o modelo de extração, com saída estruturada (JSON
-  Schema) validada por Pydantic. O esquema do extrato traz as linhas e, quando houver, o total do
+- **Decision**: o arquivo vai inteiro para o modelo de extração, em uma única chamada por
+  documento (nunca uma por página: o plano gratuito do provedor permite poucas chamadas por dia
+  para o projeto inteiro), com saída estruturada (JSON Schema) validada por Pydantic. O esquema do extrato traz as linhas e, quando houver, o total do
   documento; o do comprovante traz uma única transação. O backend soma as linhas, compara com o
   total e registra a divergência. Valores monetários chegam como texto e são convertidos para
   centavos com `Decimal`, nunca com `float`.
@@ -347,6 +348,13 @@ no início da implementação.
   grava `AiUsage`. Limites diários por usuário (30 perguntas, 10 extrações) contados no fuso de
   Brasília. Erros de limite do provedor viram uma exceção própria: no worker, nova tentativa com
   backoff; no chat, uma nova tentativa curta e, se persistir, mensagem amigável.
+  A nova tentativa é feita no modelo reserva (`AI_MODEL_CHAT_FALLBACK` e
+  `AI_MODEL_EXTRACTION_FALLBACK`), quando ele está configurado, por indisponibilidade ou por
+  cota; sem reserva, é repetida uma vez no mesmo modelo. A cota do dia do provedor é um erro à
+  parte (`LLMQuotaExhausted`), reconhecido pelo limite estourado que o provedor informa (um
+  `quotaId` por dia) ou por uma espera de horas: ele não é repetido no mesmo modelo e, quando
+  acaba também no reserva, o usuário lê que o limite do dia foi atingido e que volta no dia
+  seguinte (`429 ai_quota_exhausted`).
 - **Rationale**: Princípio VI. Desligar a execução automática mantém o backend no controle de
   cada chamada de ferramenta, que é onde o `user_id` é injetado.
 - **Alternatives considered**: bibliotecas de orquestração de LLM (abstração de terceiros no
@@ -357,9 +365,15 @@ no início da implementação.
 - **Decision**:
   - Laço de ferramentas com no máximo 5 rodadas. O modelo recebe a data de hoje em Brasília, as
     contas e as categorias do usuário (só nomes e ids) e as últimas 20 mensagens da conversa.
+    As respostas anteriores vão com as consultas que foram feitas (ferramenta e parâmetros,
+    sem os resultados): é o que dá assunto a "e no mês anterior?", e obriga a consultar de
+    novo para ter o número.
+  - Uma pergunta conta uma vez no limite diário do usuário, quantas chamadas ao modelo ela
+    precisar. Se o serviço de IA falhar no meio, nada é gravado: nem a pergunta, nem o uso.
   - Períodos são parâmetros simbólicos (`this_month`, `last_month`, `last_n_months`,
     `this_year`, `last_year`, `month`, `custom`), resolvidos em datas pelo backend. O modelo não
-    faz conta de datas.
+    faz conta de datas. O mês atual entra sempre inteiro, como no painel, para os números serem
+    os mesmos quando há lançamentos de data futura.
   - As ferramentas devolvem cada valor em centavos e também já formatado em reais, além das
     diferenças e percentuais já calculados.
   - Conferência da resposta: todo valor monetário e percentual presente no texto do modelo

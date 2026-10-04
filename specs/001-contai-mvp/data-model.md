@@ -317,7 +317,8 @@ arquivada são ignoradas.
 |-------|------|--------|
 | `id` | UUID | PK |
 | `user_id` | UUID | FK |
-| `title` | texto | começo da primeira pergunta, truncado |
+| `title` | texto | começo da primeira pergunta, truncado em 80 caracteres; vazio enquanto não há pergunta |
+| `created_at`, `updated_at` | instante | `updated_at` é o da última pergunta: ordena o histórico |
 
 ### chat_messages
 
@@ -326,10 +327,13 @@ arquivada são ignoradas.
 | `id` | UUID | PK |
 | `conversation_id` | UUID | FK, `ON DELETE CASCADE` |
 | `user_id` | UUID | FK |
+| `position` | inteiro | ordem na conversa, a partir de zero; única por conversa. A pergunta e a resposta nascem na mesma transação de banco, com o mesmo instante |
 | `role` | enum | `user`, `assistant` |
 | `kind` | enum | `text`, `answer`, `clarification`, `refusal`, `transaction_proposal`, `error` |
 | `content` | texto | texto exibido |
-| `transaction_ids` | JSONB | ids das transações que compõem a resposta, vindos das ferramentas (FR-063) |
+| `highlight` | texto | valor principal da resposta, como está escrito nela; nulo quando não há |
+| `transaction_ids` | JSONB | ids das transações que compõem a resposta, até 50, vindos das ferramentas (FR-063) |
+| `transactions_total_count` | inteiro | quantas transações compõem a resposta ao todo |
 | `tool_calls` | JSONB | nome e parâmetros das ferramentas chamadas, para dar contexto às continuações (FR-064); sem resultados |
 | `proposal` | JSONB | transação proposta no lançamento por texto (FR-066) |
 

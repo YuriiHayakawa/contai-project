@@ -29,6 +29,8 @@ class TransactionFilters:
     date_from: dt.date | None = None
     date_to: dt.date | None = None
     account_id: uuid.UUID | None = None
+    # Várias contas de uma vez, como o assistente pede.
+    account_ids: list[uuid.UUID] | None = None
     # Já resolvido pelo serviço: a categoria pedida e as subcategorias dela.
     category_ids: list[uuid.UUID] | None = None
     transaction_type: TransactionType | None = None
@@ -57,6 +59,17 @@ def _like_pattern(text: str) -> str:
     return f"%{escaped}%"
 
 
+def matches_text(text: str) -> ColumnElement[bool]:
+    """A descrição ou a observação contém o texto, sem diferenciar acentos nem maiúsculas."""
+    pattern = _like_pattern(text)
+    description = func.translate(Transaction.description, _ACCENTED, _PLAIN)
+    notes = func.translate(func.coalesce(Transaction.notes, ""), _ACCENTED, _PLAIN)
+    return or_(
+        description.ilike(pattern, escape=_LIKE_ESCAPE),
+        notes.ilike(pattern, escape=_LIKE_ESCAPE),
+    )
+
+
 def _conditions(user_id: uuid.UUID, filters: TransactionFilters) -> list[ColumnElement[bool]]:
     conditions: list[ColumnElement[bool]] = [Transaction.user_id == user_id]
     if filters.date_from is not None:
@@ -65,6 +78,8 @@ def _conditions(user_id: uuid.UUID, filters: TransactionFilters) -> list[ColumnE
         conditions.append(Transaction.date <= filters.date_to)
     if filters.account_id is not None:
         conditions.append(Transaction.account_id == filters.account_id)
+    if filters.account_ids is not None:
+        conditions.append(Transaction.account_id.in_(filters.account_ids))
     if filters.category_ids is not None:
         conditions.append(Transaction.category_id.in_(filters.category_ids))
     if filters.transaction_type is not None:
@@ -76,15 +91,7 @@ def _conditions(user_id: uuid.UUID, filters: TransactionFilters) -> list[ColumnE
     if filters.ids is not None:
         conditions.append(Transaction.id.in_(filters.ids))
     if filters.text:
-        pattern = _like_pattern(filters.text)
-        description = func.translate(Transaction.description, _ACCENTED, _PLAIN)
-        notes = func.translate(func.coalesce(Transaction.notes, ""), _ACCENTED, _PLAIN)
-        conditions.append(
-            or_(
-                description.ilike(pattern, escape=_LIKE_ESCAPE),
-                notes.ilike(pattern, escape=_LIKE_ESCAPE),
-            )
-        )
+        conditions.append(matches_text(filters.text))
     return conditions
 
 
@@ -254,6 +261,17 @@ class TransactionRepository:
             select(func.count()).select_from(Transaction).where(*_conditions(user_id, filters))
         )
         return result.scalar_one()
+
+    async def totals_by_type(
+        self, user_id: uuid.UUID, filters: TransactionFilters
+    ) -> dict[TransactionType, int]:
+        """A soma dos valores de cada tipo entre as transações que atendem aos filtros."""
+        result = await self._session.execute(
+            select(Transaction.type, func.coalesce(func.sum(Transaction.amount_cents), 0))
+            .where(*_conditions(user_id, filters))
+            .group_by(Transaction.type)
+        )
+        return {TransactionType(kind): int(amount) for kind, amount in result.all()}
 
     async def search(
         self,
