@@ -51,6 +51,11 @@ class SourceTransaction(BaseModel):
     date: dt.date
     description: str
     amount_cents: int
+    # A conta do lançamento; em uma transferência, a conta de onde o dinheiro saiu.
+    account_id: uuid.UUID
+    # Só em transferência: a conta em que o dinheiro entrou.
+    to_account_id: uuid.UUID | None
+    category_id: uuid.UUID | None
 
 
 class ProposalRead(BaseModel):

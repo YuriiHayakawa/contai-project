@@ -6,11 +6,16 @@ import { RouterProvider, createMemoryRouter } from "react-router";
 import { ToastProvider } from "../../../components/ui/Toast";
 import { ApiError } from "../../../lib/api-client";
 import { conversationPath, paths } from "../../../lib/paths";
+import * as accountsService from "../../accounts/services/accountsService";
+import * as categoriesService from "../../categories/services/categoriesService";
 import * as assistantService from "../services/assistantService";
 import type { AssistantUsage, ChatMessage } from "../types";
 import { ChatPage } from "./ChatPage";
 
 vi.mock("../services/assistantService");
+// As contas e as categorias dão nome às transações que acompanham a resposta.
+vi.mock("../../accounts/services/accountsService");
+vi.mock("../../categories/services/categoriesService");
 
 const listSuggestions = vi.mocked(assistantService.listSuggestions);
 const getUsage = vi.mocked(assistantService.getUsage);
@@ -35,6 +40,9 @@ const reply: ChatMessage = {
       date: "2026-10-03",
       description: "Mercado",
       amount_cents: 4_590,
+      account_id: "acc-1",
+      to_account_id: null,
+      category_id: null,
     },
   ],
   transactions_total_count: 1,
@@ -82,6 +90,8 @@ beforeEach(() => {
   // O jsdom não rola a página.
   Element.prototype.scrollIntoView = vi.fn();
   listSuggestions.mockResolvedValue([QUESTION, "Quanto recebi este ano?"]);
+  vi.mocked(accountsService.listAccounts).mockResolvedValue([]);
+  vi.mocked(categoriesService.listCategories).mockResolvedValue({ expense: [], income: [] });
   getUsage.mockResolvedValue(usage(30));
   createConversation.mockResolvedValue({
     id: "conv-1",

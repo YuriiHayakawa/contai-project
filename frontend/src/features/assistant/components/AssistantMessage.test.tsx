@@ -1,8 +1,67 @@
-import { render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as renderBare, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement, ReactNode } from "react";
 
+import * as accountsService from "../../accounts/services/accountsService";
+import type { Account } from "../../accounts/types";
+import * as categoriesService from "../../categories/services/categoriesService";
+import type { Category } from "../../categories/types";
 import type { ChatMessage, SourceTransaction } from "../types";
 import { AssistantMessage } from "./AssistantMessage";
+
+vi.mock("../../accounts/services/accountsService");
+vi.mock("../../categories/services/categoriesService");
+
+function account(id: string, name: string, type: Account["type"]): Account {
+  return {
+    id,
+    type,
+    name,
+    institution: null,
+    initial_balance_cents: 0,
+    initial_balance_date: "2026-01-01",
+    closing_day: null,
+    due_day: null,
+    archived: false,
+    balance_cents: 0,
+  };
+}
+
+function category(id: string, name: string, children: Category[] = []): Category {
+  return {
+    id,
+    name,
+    kind: "expense",
+    parent_id: null,
+    icon: "utensils",
+    color: "caqui",
+    is_fallback: false,
+    archived: false,
+    children,
+  };
+}
+
+/** O bloco das transações lê as contas e as categorias do usuário, para dar nome a elas. */
+function render(ui: ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return renderBare(ui, { wrapper });
+}
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(accountsService.listAccounts).mockResolvedValue([
+    account("acc-checking", "Conta corrente", "checking"),
+    account("acc-savings", "Poupança", "savings"),
+  ]);
+  vi.mocked(categoriesService.listCategories).mockResolvedValue({
+    expense: [category("cat-food", "Alimentação", [category("cat-market", "Mercado")])],
+    income: [],
+  });
+});
 
 function expense(index: number, overrides: Partial<SourceTransaction> = {}): SourceTransaction {
   return {
@@ -11,6 +70,9 @@ function expense(index: number, overrides: Partial<SourceTransaction> = {}): Sou
     date: "2026-10-03",
     description: `Mercado ${index}`,
     amount_cents: 4_590,
+    account_id: "acc-checking",
+    to_account_id: null,
+    category_id: "cat-market",
     ...overrides,
   };
 }
@@ -152,5 +214,55 @@ describe("AssistantMessage", () => {
     expect(first).toHaveTextContent("−R$ 45,90");
     expect(second).toHaveTextContent("+R$ 12,00");
     expect(within(block).queryByRole("button")).toBeNull();
+  });
+
+  it("cada linha diz o que foi e onde: a categoria e a conta do lançamento", async () => {
+    render(
+      <AssistantMessage
+        message={answer({
+          transactions: [
+            expense(1),
+            expense(2, { type: "income", description: "Estorno Mercado", amount_cents: 1_000 }),
+          ],
+          transactions_total_count: 2,
+        })}
+      />,
+    );
+
+    const block = screen.getByRole("region", { name: "De onde veio esse número" });
+    expect(await within(block).findByText("Alimentação › Mercado · Conta corrente")).toBeVisible();
+    const [, refund] = within(block).getAllByRole("listitem");
+    // Receita em categoria de despesa é o estorno da compra.
+    expect(refund).toHaveTextContent("Estorno · Alimentação › Mercado · Conta corrente");
+  });
+
+  it("uma transferência mostra de qual conta o dinheiro saiu e em qual entrou", async () => {
+    render(
+      <AssistantMessage
+        message={answer({
+          content: "Você fez 1 transferência de R$ 500,00 em outubro de 2026.",
+          highlight: "R$ 500,00",
+          transactions: [
+            expense(1, {
+              type: "transfer",
+              description: "Transferência",
+              amount_cents: 50_000,
+              account_id: "acc-checking",
+              to_account_id: "acc-savings",
+              category_id: null,
+            }),
+          ],
+          transactions_total_count: 1,
+        })}
+      />,
+    );
+
+    const block = screen.getByRole("region", { name: "De onde veio esse número" });
+    const [row] = within(block).getAllByRole("listitem");
+    await within(block).findByText("Poupança");
+    expect(row).toHaveTextContent("Transferência de Conta corrente para Poupança");
+    // Sem sinal: a transferência não é gasto nem receita.
+    expect(within(block).getByText("R$ 500,00")).toHaveClass("text-ink-muted");
+    expect(row).not.toHaveTextContent("−R$");
   });
 });

@@ -14,7 +14,17 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from sqlalchemy import BigInteger, ColumnElement, and_, case, cast, func, literal_column, select
+from sqlalchemy import (
+    BigInteger,
+    ColumnElement,
+    and_,
+    case,
+    cast,
+    func,
+    literal_column,
+    not_,
+    select,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.categories.models import Category, CategoryKind
@@ -62,9 +72,16 @@ class ReportFilters:
     category_ids: Sequence[uuid.UUID] | None = None
     # Trecho da descrição ou da observação, como na busca da lista.
     text: str | None = None
+    # O que fica de fora: "quanto gastei sem contar o aluguel?". Com as subcategorias também.
+    exclude_category_ids: Sequence[uuid.UUID] | None = None
+    exclude_text: str | None = None
 
     def conditions(self) -> list[ColumnElement[bool]]:
         conditions: list[ColumnElement[bool]] = []
+        if self.exclude_category_ids is not None:
+            conditions.append(Transaction.category_id.not_in(self.exclude_category_ids))
+        if self.exclude_text:
+            conditions.append(not_(matches_text(self.exclude_text)))
         if self.account_ids is not None:
             conditions.append(Transaction.account_id.in_(self.account_ids))
         if self.category_ids is not None:

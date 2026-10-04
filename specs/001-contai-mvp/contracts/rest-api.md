@@ -195,7 +195,7 @@ Mensagem do assistente:
   "kind": "answer",
   "content": "Você gastou R$ 842,30 com Alimentação em outubro de 2026.",
   "highlight": "R$ 842,30",
-  "transactions": [ { "id": "...", "type": "expense", "date": "2026-10-03", "description": "...", "amount_cents": 4590 } ],
+  "transactions": [ { "id": "...", "type": "expense", "date": "2026-10-03", "description": "...", "amount_cents": 4590, "account_id": "...", "to_account_id": null, "category_id": "..." } ],
   "transactions_total_count": 23,
   "proposal": null
 }
@@ -205,7 +205,9 @@ Mensagem do assistente:
 resultados das ferramentas; o frontend aplica o marca-texto à primeira ocorrência dele no texto.
 É nulo quando a resposta não tem um valor principal. `transactions` traz até 50 das transações
 que compõem a resposta, das que ainda existem, e `transactions_total_count`, quantas são ao
-todo.
+todo. Cada uma traz `account_id` e `category_id`. Uma transferência aparece uma vez: `account_id`
+é a conta de onde o dinheiro saiu, `to_account_id`, a conta em que entrou, e `category_id` é
+nulo.
 
 Com `kind = "transaction_proposal"`, `proposal` traz `type`, `amount_cents`, `date`,
 `description`, `account_id` e `category_id` (a conta e a categoria podem ser nulas, para o

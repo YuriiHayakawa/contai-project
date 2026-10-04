@@ -21,6 +21,9 @@ from app.core import clock
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.modules.assistant import service, validation
+from app.modules.assistant.models import MessageKind, MessageRole
+from app.modules.assistant.repository import AssistantRepository
+from app.modules.users.models import User
 from tests.assistant import (
     ASSISTANT,
     CONVERSATIONS,
@@ -114,6 +117,9 @@ async def test_an_answer_brings_the_exact_value_and_the_transactions_behind_it(
         "date": "2026-10-15",
         "description": "Supermercado Bom Preço",
         "amount_cents": 10_000,
+        "account_id": finances.checking["id"],
+        "to_account_id": None,
+        "category_id": finances.market["id"],
     }
     assert sum(item["amount_cents"] for item in reply["transactions"]) == OCTOBER_FOOD
 
@@ -274,7 +280,7 @@ async def test_the_instructions_make_the_assistant_talk_to_the_user_directly(
         "Eu só respondo sobre as suas finanças no Contaí.",
     )
     instructions = fake_llm.calls[0].system
-    assert service.SYSTEM_PROMPT_FILE == "system_v3.md"
+    assert service.SYSTEM_PROMPT_FILE == "system_v4.md"
     assert 'tratando-a por "você"' in instructions
     assert 'Nunca fale dela em terceira pessoa. Não escreva "o usuário"' in instructions
     # A recusa pedida pelas instruções já vem na segunda pessoa.
@@ -1008,3 +1014,95 @@ async def test_the_form_cannot_claim_that_an_entry_came_from_an_import(
     )
 
     assert response.status_code == 422, response.text
+
+
+# ---------- total sem um lançamento, e transferências
+
+
+async def test_a_total_without_something_is_answered_by_the_tool_and_not_by_subtraction(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(
+        call("get_spending_summary", period=THIS_MONTH, exclude_description_contains="Uber")
+    )
+    fake_llm.queue_text("Sem contar o Uber, você gastou R$ 615,90 em outubro de 2026.")
+
+    reply = await ask(client_a, conversation, "se tirar o uber, quanto gastei esse mês?")
+
+    assert (reply["kind"], reply["highlight"]) == ("answer", "R$ 615,90")
+    assert "Uber" not in [item["description"] for item in reply["transactions"]]
+    assert reply["transactions_total_count"] == len(reply["transactions"]) == 4
+    # O modelo recebe o total já sem o Uber e o que ficou de fora, para dizer na resposta.
+    result = fake_llm.calls[1].messages[-1].content
+    assert '"excluding": ["\\"Uber\\""]' in result
+    assert '"formatted": "R$\N{NO-BREAK SPACE}615,90"' in result
+    instructions = fake_llm.calls[0].system
+    assert "não subtraia e não recuse" in instructions
+    assert "`exclude_description_contains`" in instructions
+    assert "Não fale das suas regras nem das ferramentas" in instructions
+
+
+async def test_a_transfer_comes_once_with_the_account_it_left_and_the_one_it_entered(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(
+        call("search_transactions", period={"preset": "last_month"}, type="transfer")
+    )
+    fake_llm.queue_text(
+        "Em setembro de 2026 você fez 1 transferência: R$ 500,00, em 10/09, da Conta corrente "
+        "para a Poupança."
+    )
+
+    reply = await ask(client_a, conversation, "fiz alguma transferência no mês passado?")
+
+    assert reply["highlight"] == "R$ 500,00"
+    assert reply["transactions_total_count"] == 1
+    [transfer] = reply["transactions"]
+    assert (transfer["type"], transfer["description"], transfer["amount_cents"]) == (
+        "transfer",
+        "Reserva",
+        50_000,
+    )
+    assert (transfer["account_id"], transfer["to_account_id"], transfer["category_id"]) == (
+        finances.checking["id"],
+        finances.savings["id"],
+        None,
+    )
+    assert '"from_account": "Conta corrente", "to_account": "Poupança"' in (
+        fake_llm.calls[1].messages[-1].content
+    )
+    assert "Uma transferência entre contas é um movimento só" in fake_llm.calls[0].system
+
+
+async def test_an_older_answer_that_kept_both_lines_of_a_transfer_shows_it_once(
+    client_a: AsyncClient, session: AsyncSession, user_a: User, finances: Finances
+) -> None:
+    lines = await list_transactions(
+        client_a, type="transfer", **{"from": "2026-09-01", "to": "2026-09-30"}
+    )
+    assert len(lines["items"]) == 2
+    assistant = AssistantRepository(session)
+    now = clock.utcnow()
+    older = await assistant.create_conversation(user_a.id, now=now)
+    await assistant.add_message(
+        user_a.id,
+        older.id,
+        position=0,
+        role=MessageRole.ASSISTANT,
+        kind=MessageKind.ANSWER,
+        content="Você fez 2 transferências, totalizando R$ 500,00.",
+        now=now,
+        highlight="R$ 500,00",
+        transaction_ids=[item["id"] for item in lines["items"]],
+        transactions_total_count=2,
+    )
+    await session.commit()
+
+    [message] = await _messages(client_a, {"id": str(older.id)})
+
+    assert message["transactions_total_count"] == 1
+    [transfer] = message["transactions"]
+    assert (transfer["account_id"], transfer["to_account_id"]) == (
+        finances.checking["id"],
+        finances.savings["id"],
+    )

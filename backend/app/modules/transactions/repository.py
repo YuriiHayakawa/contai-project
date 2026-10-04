@@ -2,6 +2,7 @@
 
 import datetime as dt
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from sqlalchemy import ColumnElement, delete, func, or_, select, tuple_
@@ -39,6 +40,17 @@ class TransactionFilters:
     installment_group_id: uuid.UUID | None = None
     transfer_group_id: uuid.UUID | None = None
     ids: list[uuid.UUID] | None = field(default=None)
+
+
+@dataclass(frozen=True)
+class TransferTotals:
+    """As transferências de uma busca, cada uma contada uma vez."""
+
+    # Quantas transferências; as duas linhas de uma (saída e entrada) são um movimento só.
+    count: int
+    # Quantas linhas elas ocupam entre as encontradas.
+    lines: int
+    amount_cents: int
 
 
 @dataclass(frozen=True)
@@ -228,6 +240,51 @@ class TransactionRepository:
             .order_by(Transaction.transfer_direction.desc())
         )
         return list(result.scalars())
+
+    async def transfer_accounts(
+        self, user_id: uuid.UUID, group_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, tuple[uuid.UUID | None, uuid.UUID | None]]:
+        """De cada transferência, a conta de onde o dinheiro saiu e a conta em que entrou."""
+        if not group_ids:
+            return {}
+        result = await self._session.execute(
+            select(
+                Transaction.transfer_group_id,
+                Transaction.transfer_direction,
+                Transaction.account_id,
+            ).where(Transaction.user_id == user_id, Transaction.transfer_group_id.in_(group_ids))
+        )
+        sides: dict[uuid.UUID, dict[str, uuid.UUID]] = {}
+        for group_id, direction, account_id in result.all():
+            if group_id is not None:
+                sides.setdefault(group_id, {})[str(direction)] = account_id
+        return {
+            group_id: (found.get(TransferDirection.OUT), found.get(TransferDirection.IN))
+            for group_id, found in sides.items()
+        }
+
+    async def transfer_totals(
+        self, user_id: uuid.UUID, filters: TransactionFilters
+    ) -> TransferTotals:
+        """Quantas transferências atendem aos filtros e quanto somam, cada uma uma vez."""
+        one_per_transfer = (
+            select(
+                func.max(Transaction.amount_cents).label("amount_cents"),
+                func.count().label("lines"),
+            )
+            .where(*_conditions(user_id, filters), Transaction.type == TransactionType.TRANSFER)
+            .group_by(Transaction.transfer_group_id)
+            .subquery()
+        )
+        result = await self._session.execute(
+            select(
+                func.count(),
+                func.coalesce(func.sum(one_per_transfer.c.lines), 0),
+                func.coalesce(func.sum(one_per_transfer.c.amount_cents), 0),
+            ).select_from(one_per_transfer)
+        )
+        count, lines, amount = result.one()
+        return TransferTotals(count=int(count), lines=int(lines), amount_cents=int(amount))
 
     async def delete_by_import(self, user_id: uuid.UUID, import_id: uuid.UUID) -> int:
         """Apaga, de uma vez, todas as transações criadas por uma importação (FR-052)."""

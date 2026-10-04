@@ -19,10 +19,19 @@ from app.modules.assistant.tools.base import (
     tool,
 )
 from app.modules.categories.models import CategoryKind
+from app.modules.categories.repository import CategoryRepository
 from app.modules.dashboard.service import GroupBy, ReportingService
 
 _CATEGORY_IDS = "Ids de categorias do usuário; a categoria principal inclui as subcategorias."
 _ACCOUNT_IDS = "Ids de contas do usuário."
+_EXCLUDE_CATEGORY_IDS = (
+    "Ids de categorias que ficam de fora do total, com as subcategorias. Use quando a pessoa "
+    "pedir o total sem uma categoria, em vez de subtrair."
+)
+_EXCLUDE_DESCRIPTION = (
+    "Trecho da descrição dos lançamentos que ficam de fora do total. Use quando a pessoa pedir "
+    "o total sem um lançamento ou sem uma loja, em vez de subtrair."
+)
 _GROUP_BY = (
     "Como quebrar o total: none (só o total), category (categoria principal), subcategory, "
     "account (conta) ou month (mês a mês)."
@@ -40,6 +49,12 @@ class SpendingParams(BaseModel):
         max_length=100,
         description="Trecho da descrição do lançamento, como o nome de uma loja.",
     )
+    exclude_category_ids: list[uuid.UUID] = Field(
+        default_factory=list, description=_EXCLUDE_CATEGORY_IDS
+    )
+    exclude_description_contains: str | None = Field(
+        default=None, max_length=100, description=_EXCLUDE_DESCRIPTION
+    )
     group_by: GroupBy = Field(default="none", description=_GROUP_BY)
 
 
@@ -49,7 +64,26 @@ class IncomeParams(BaseModel):
     period: PeriodParam
     category_ids: list[uuid.UUID] = Field(default_factory=list, description=_CATEGORY_IDS)
     account_ids: list[uuid.UUID] = Field(default_factory=list, description=_ACCOUNT_IDS)
+    exclude_category_ids: list[uuid.UUID] = Field(
+        default_factory=list, description=_EXCLUDE_CATEGORY_IDS
+    )
+    exclude_description_contains: str | None = Field(
+        default=None, max_length=100, description=_EXCLUDE_DESCRIPTION
+    )
     group_by: GroupBy = Field(default="none", description=_GROUP_BY)
+
+
+async def _left_out(
+    context: ToolContext, category_ids: list[uuid.UUID], text: str | None
+) -> list[str]:
+    """O que ficou de fora do total, com os nomes das categorias, para a resposta dizer."""
+    categories = CategoryRepository(context.session)
+    names = [
+        category.name
+        for category in [await categories.get(context.user_id, item) for item in category_ids]
+        if category is not None
+    ]
+    return [*names, *([f'"{text}"'] if text else [])]
 
 
 async def _summary(
@@ -61,12 +95,20 @@ async def _summary(
     category_ids: list[uuid.UUID],
     account_ids: list[uuid.UUID],
     text: str | None,
+    exclude_category_ids: list[uuid.UUID],
+    exclude_text: str | None,
     group_by: GroupBy,
 ) -> ToolResult:
     resolved = resolve(period, context.today)
     filters = await report_filters(
-        context, category_ids=category_ids, account_ids=account_ids, text=text
+        context,
+        category_ids=category_ids,
+        account_ids=account_ids,
+        text=text,
+        exclude_category_ids=exclude_category_ids,
+        exclude_text=exclude_text,
     )
+    left_out = await _left_out(context, exclude_category_ids, filters.exclude_text)
     reports = ReportingService(context.session)
     breakdown = await reports.amounts(
         context.user_id, resolved.period, kind=kind, filters=filters, group_by=group_by
@@ -91,10 +133,14 @@ async def _summary(
             }
             for group in breakdown.groups
         ]
+    if left_out:
+        # O modelo diz o que ficou de fora: o total já veio calculado sem isso.
+        data["excluding"] = left_out
     if count == 0:
         data["note"] = NO_ENTRIES
 
-    summary = f"{noun} em {resolved.label}: {total['formatted']}"
+    without = f", sem contar {' e '.join(left_out)}" if left_out else ""
+    summary = f"{noun} em {resolved.label}{without}: {total['formatted']}"
     if count == 0:
         summary = f"Não há lançamentos de {noun.lower()} em {resolved.label} com esses filtros"
     else:
@@ -126,6 +172,8 @@ async def get_spending_summary(context: ToolContext, params: SpendingParams) -> 
         category_ids=params.category_ids,
         account_ids=params.account_ids,
         text=params.description_contains,
+        exclude_category_ids=params.exclude_category_ids,
+        exclude_text=params.exclude_description_contains,
         group_by=params.group_by,
     )
 
@@ -148,5 +196,7 @@ async def get_income_summary(context: ToolContext, params: IncomeParams) -> Tool
         category_ids=params.category_ids,
         account_ids=params.account_ids,
         text=None,
+        exclude_category_ids=params.exclude_category_ids,
+        exclude_text=params.exclude_description_contains,
         group_by=params.group_by,
     )
