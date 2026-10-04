@@ -526,7 +526,10 @@ parece anotações na caderneta.
   mensagem. Os demais valores usam a classe `money`, sem destaque.
 - **De onde veio o número**: logo abaixo da resposta, um bloco com o título "De onde veio esse
   número" e até 5 transações em linhas compactas, com pauta e margem, seguido de "Ver todas as
-  23", que abre a lista filtrada. Vem aberto.
+  23", que abre a lista filtrada. Vem aberto. Cada linha tem a descrição e o valor e, embaixo,
+  em `micro` `--ink-muted`, o que identifica o lançamento: a categoria e a conta ou, em uma
+  transferência, a conta de origem, uma seta e a conta de destino. A transferência ocupa uma
+  linha só e vai sem sinal.
 - **Pedido de esclarecimento**: o texto da pergunta e, abaixo, opções de resposta rápida.
 - **Recusa**: uma frase educada e sugestões do que perguntar.
 - **Lançamento sugerido**: cartão com valor em `money-lg`, data, conta e categoria, e os botões

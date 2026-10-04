@@ -41,14 +41,24 @@ os números do assistente iguais aos do painel quando há lançamentos de data f
 
 | Ferramenta | Parâmetros | Resultado | Pergunta de exemplo |
 |------------|------------|-----------|---------------------|
-| `get_spending_summary` | `period`, `category_ids`, `account_ids`, `description_contains`, `group_by` (`none`, `category`, `subcategory`, `account`, `month`) | total de despesas e a quebra pedida | "Quanto gastei com comida esse mês?", "Quanto gastei com Uber nos últimos 3 meses?" |
-| `get_income_summary` | `period`, `category_ids`, `account_ids`, `group_by` | total de receitas e a quebra | "Quanto recebi este ano?" |
+| `get_spending_summary` | `period`, `category_ids`, `account_ids`, `description_contains`, `exclude_category_ids`, `exclude_description_contains`, `group_by` (`none`, `category`, `subcategory`, `account`, `month`) | total de despesas e a quebra pedida; com exclusões, o total já sem elas e `excluding` com o que ficou de fora | "Quanto gastei com comida esse mês?", "Quanto gastei com Uber nos últimos 3 meses?" |
+| `get_income_summary` | `period`, `category_ids`, `account_ids`, `exclude_category_ids`, `exclude_description_contains`, `group_by` | total de receitas e a quebra | "Quanto recebi este ano?" |
 | `compare_periods` | `period_a`, `period_b`, `group_by` (`category` ou `none`) | por grupo: valor em cada período, diferença e variação percentual, já calculadas | "Em que gastei mais que no mês passado?" |
 | `get_top_expenses` | `period`, `limit` (1 a 20), `category_ids`, `account_ids` | maiores despesas, em ordem | "Quais foram meus 5 maiores gastos em agosto?" |
-| `search_transactions` | `period`, `text`, `type`, `category_ids`, `account_ids`, `limit` (1 a 50) | transações e a soma do conjunto | "Mostre minhas compras na farmácia em setembro" |
+| `search_transactions` | `period`, `text`, `type`, `category_ids`, `account_ids`, `limit` (1 a 50) | transações e a soma do conjunto; cada transferência uma vez, com `from_account` e `to_account`, e `transfers` com a quantidade e o total | "Mostre minhas compras na farmácia em setembro" |
 | `get_account_balances` | `account_ids` | saldo de cada conta ativa | "Quanto tenho na poupança?" |
 | `get_card_invoices` | `account_ids` | por cartão: fatura atual e parcelas futuras por mês e no total | "Quanto ainda tenho de parcelas no cartão?" |
 | `propose_transaction` | `type`, `amount` (texto, por exemplo `"45"` ou `"45,90"`), `date_reference` (`today`, `yesterday` ou data explícita), `description`, `account_hint`, `category_hint` | proposta com conta e categoria resolvidas pelo backend, ou a lista do que falta | "gastei 45 no ifood ontem no cartão" |
+
+**Total sem alguma coisa**: o modelo não subtrai. Para "se tirar esse saque, quanto gastei?"
+ou "quanto gastei sem contar o aluguel?", ele chama o resumo de novo com
+`exclude_description_contains` (trecho da descrição) ou `exclude_category_ids` (a categoria,
+com as subcategorias), e o backend devolve o total já calculado sem isso.
+
+**Transferências**: as duas linhas de uma transferência, a de saída e a de entrada, são um
+movimento só. `search_transactions` a devolve e a conta uma vez, com a conta de onde o dinheiro
+saiu e a conta em que entrou, mesmo quando o recorte só alcança uma das linhas; ela nunca entra
+nas somas de despesas e de receitas.
 
 `propose_transaction` não grava nada: nem lançamento, nem regra de categoria. O backend monta
 a proposta, que o usuário confirma no formulário:

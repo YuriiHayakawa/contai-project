@@ -1,6 +1,7 @@
 """`get_top_expenses`: as maiores despesas de um período, em ordem, como no painel."""
 
 import uuid
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,9 +37,15 @@ class TopExpensesParams(BaseModel):
 
 
 async def describe_transactions(
-    context: ToolContext, transactions: list[TransactionRead]
+    context: ToolContext,
+    transactions: list[TransactionRead],
+    transfers: Mapping[uuid.UUID, tuple[uuid.UUID | None, uuid.UUID | None]] | None = None,
 ) -> list[dict[str, Any]]:
-    """As transações como o modelo as recebe: data, descrição, valor, categoria e conta."""
+    """As transações como o modelo as recebe: data, descrição, valor, categoria e conta.
+
+    Uma transferência vai com a conta de onde o dinheiro saiu e a conta em que entrou, em
+    `transfers` pelo grupo dela: é um movimento só, e não um gasto nem uma receita.
+    """
     categories = {
         category.id: name
         for category, name in category_paths(
@@ -53,19 +60,30 @@ async def describe_transactions(
             context.user_id, include_archived=True
         )
     }
-    return [
-        {
+
+    def described(transaction: TransactionRead) -> dict[str, Any]:
+        item: dict[str, Any] = {
             "date": transaction.date.isoformat(),
             "description": transaction.description,
             "type": str(transaction.type),
             "amount": money(transaction.amount_cents),
+        }
+        group = transaction.transfer_group_id
+        sides = transfers.get(group) if transfers and group else None
+        if sides is not None:
+            origin, destination = sides
+            return item | {
+                "from_account": accounts.get(origin) if origin else None,
+                "to_account": accounts.get(destination) if destination else None,
+            }
+        return item | {
             "category": categories.get(transaction.category_id)
             if transaction.category_id
             else None,
             "account": accounts.get(transaction.account_id),
         }
-        for transaction in transactions
-    ]
+
+    return [described(transaction) for transaction in transactions]
 
 
 @tool(

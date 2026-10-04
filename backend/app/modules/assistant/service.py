@@ -78,7 +78,7 @@ TRANSACTION_NOT_FOUND = "Esse lançamento não existe. Salve o lançamento de no
 _CURSOR_SEPARATOR = "|"
 _PROMPTS = Path(__file__).parent / "prompts"
 # A versão em uso do prompt de sistema; as anteriores ficam na pasta, como registro.
-SYSTEM_PROMPT_FILE = "system_v3.md"
+SYSTEM_PROMPT_FILE = "system_v4.md"
 _WEEKDAYS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira")
 _WEEKEND = ("sábado", "domingo")
 _MARKER = re.compile(r"^\s*\[(esclarecimento|recusa)\]\s*", re.IGNORECASE)
@@ -238,6 +238,46 @@ class AssistantService:
                 user_id, TransactionFilters(ids=list(wanted)), limit=len(wanted)
             )
             found = {str(row.id): row for row in rows}
+        sides = await self._transactions.transfer_accounts(
+            user_id, [row.transfer_group_id for row in found.values() if row.transfer_group_id]
+        )
+
+        def sources(message: ChatMessage) -> list[SourceTransaction]:
+            """As transações da resposta que ainda existem. Uma transferência aparece uma vez,
+            com as duas contas, mesmo que a resposta tenha guardado as duas linhas dela."""
+            listed: list[SourceTransaction] = []
+            shown: set[uuid.UUID] = set()
+            for row in (found.get(item) for item in message.transaction_ids):
+                if row is None or row.transfer_group_id in shown:
+                    continue
+                origin, destination = row.account_id, None
+                if row.transfer_group_id is not None:
+                    shown.add(row.transfer_group_id)
+                    out, received = sides.get(row.transfer_group_id, (None, None))
+                    origin, destination = out or row.account_id, received
+                listed.append(
+                    SourceTransaction(
+                        id=row.id,
+                        type=TransactionType(row.type),
+                        date=row.date,
+                        description=row.description,
+                        amount_cents=row.amount_cents,
+                        account_id=origin,
+                        to_account_id=destination,
+                        category_id=row.category_id,
+                    )
+                )
+            return listed
+
+        def total_count(message: ChatMessage) -> int:
+            # Uma resposta antiga pode ter contado as duas linhas de uma transferência.
+            groups = [
+                row.transfer_group_id
+                for row in (found.get(item) for item in message.transaction_ids)
+                if row is not None and row.transfer_group_id is not None
+            ]
+            return message.transactions_total_count - (len(groups) - len(set(groups)))
+
         return [
             MessageRead(
                 id=message.id,
@@ -245,18 +285,8 @@ class AssistantService:
                 kind=MessageKind(message.kind),
                 content=message.content,
                 highlight=message.highlight,
-                transactions=[
-                    SourceTransaction(
-                        id=row.id,
-                        type=TransactionType(row.type),
-                        date=row.date,
-                        description=row.description,
-                        amount_cents=row.amount_cents,
-                    )
-                    for row in (found.get(item) for item in message.transaction_ids)
-                    if row is not None
-                ],
-                transactions_total_count=message.transactions_total_count,
+                transactions=sources(message),
+                transactions_total_count=total_count(message),
                 proposal=(
                     ProposalRead.model_validate(message.proposal) if message.proposal else None
                 ),

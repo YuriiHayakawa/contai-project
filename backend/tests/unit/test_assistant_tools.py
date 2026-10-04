@@ -179,6 +179,59 @@ async def test_spending_by_description_and_month(context: ToolContext, finances:
     )
 
 
+async def test_spending_without_something_is_computed_by_the_tool(
+    context: ToolContext, finances: Finances, client_a: AsyncClient
+) -> None:
+    whole = await _run(context, "get_spending_summary", period=THIS_MONTH)
+    without_uber = await _run(
+        context, "get_spending_summary", period=THIS_MONTH, exclude_description_contains=" uber "
+    )
+    without_food = await _run(
+        context,
+        "get_spending_summary",
+        period=THIS_MONTH,
+        exclude_category_ids=[finances.food["id"]],
+    )
+
+    # "Se tirar o Uber, quanto gastei?": a conta é do backend, e não do modelo.
+    assert whole.data["total"] == money(OCTOBER_EXPENSES)
+    assert "excluding" not in whole.data
+    assert without_uber.data["total"] == money(OCTOBER_EXPENSES - 5_500)
+    assert without_uber.data["excluding"] == ['"uber"']
+    assert without_uber.highlight == "R$\N{NO-BREAK SPACE}615,90"
+    assert without_uber.summary == (
+        'Despesas em outubro de 2026, sem contar "uber": R$\N{NO-BREAK SPACE}615,90, em 4 '
+        "lançamentos."
+    )
+    uber = await _ids(client_a, q="uber", **{"from": "2026-10-01", "to": "2026-10-31"})
+    assert len(uber) == 1 and not uber & {str(item) for item in without_uber.transaction_ids}
+    assert len(without_uber.transaction_ids) == len(whole.transaction_ids) - 1
+    # A categoria principal leva as subcategorias dela para fora do total.
+    assert without_food.data["total"] == money(OCTOBER_EXPENSES - OCTOBER_FOOD)
+    assert without_food.data["excluding"] == ["Alimentação"]
+    assert without_food.summary.startswith("Despesas em outubro de 2026, sem contar Alimentação: ")
+
+
+async def test_income_without_a_category_and_an_unknown_one_to_leave_out(
+    context: ToolContext, finances: Finances
+) -> None:
+    without_salary = await _run(
+        context,
+        "get_income_summary",
+        period={"preset": "this_year"},
+        exclude_category_ids=[finances.salary["id"]],
+    )
+    unknown = await tools.execute(
+        context,
+        "get_spending_summary",
+        {"period": THIS_MONTH, "exclude_category_ids": [str(uuid.uuid4())]},
+    )
+
+    assert without_salary.data["total"] == money(0)
+    assert without_salary.data["excluding"] == ["Salário"]
+    assert unknown.is_error and "não existe" in unknown.data["error"]
+
+
 async def test_spending_by_subcategory_and_account(
     context: ToolContext, finances: Finances
 ) -> None:
@@ -348,16 +401,51 @@ async def test_search_brings_the_transactions_and_the_sum_of_the_set(
     assert only_expenses.highlight == "R$\N{NO-BREAK SPACE}80,00"
 
 
-async def test_search_lists_transfers_but_never_sums_them(
+async def test_search_shows_a_transfer_once_with_both_accounts_and_never_sums_it(
     context: ToolContext, finances: Finances
 ) -> None:
     result = await _run(context, "search_transactions", period=LAST_MONTH, type="transfer")
 
-    assert result.transaction_count == 2
+    # As duas linhas da transferência, a de saída e a de entrada, são um movimento só.
+    assert result.transaction_count == 1
+    assert len(result.transaction_ids) == 1
+    assert result.data["items"] == [
+        {
+            "date": "2026-09-10",
+            "description": "Reserva",
+            "type": "transfer",
+            "amount": money(50_000),
+            "from_account": "Conta corrente",
+            "to_account": "Poupança",
+        }
+    ]
+    assert result.data["transfers"] == {"count": 1, "total": money(50_000)}
     assert result.data["totals"] == {"expenses": money(0), "incomes": money(0)}
+    assert result.highlight == "R$\N{NO-BREAK SPACE}500,00"
+    assert result.summary.endswith(
+        "e 1 transferência entre contas, no total de R$\N{NO-BREAK SPACE}500,00."
+    )
+    # Vista só pela conta em que o dinheiro entrou, continua com as duas contas.
+    received = await _run(
+        context,
+        "search_transactions",
+        period=LAST_MONTH,
+        type="transfer",
+        account_ids=[finances.savings["id"]],
+    )
+    assert received.transaction_count == 1
+    assert received.data["items"] == result.data["items"]
+    # Entre os outros lançamentos, a transferência também conta uma vez: 9 lançamentos e ela.
+    everything = await _run(context, "search_transactions", period=LAST_MONTH, limit=50)
+    assert everything.transaction_count == len(everything.data["items"]) == 10
+    assert [item["type"] for item in everything.data["items"]].count("transfer") == 1
+    assert (
+        "transfers"
+        not in (await _run(context, "search_transactions", period=LAST_MONTH, type="expense")).data
+    )
     limited = await _run(context, "search_transactions", period=LAST_MONTH, limit=2)
     assert len(limited.data["items"]) == 2
-    assert limited.data["note"] == "A lista traz os 2 mais recentes de 11."
+    assert limited.data["note"] == "A lista traz os 2 mais recentes de 10."
     # O que o usuário escreveu chega como dado, dentro do resultado.
     injected = await _run(context, "search_transactions", period=LAST_MONTH, text="ignore")
     assert [item["description"] for item in injected.data["items"]] == [INJECTION]

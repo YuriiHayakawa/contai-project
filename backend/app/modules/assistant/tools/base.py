@@ -215,11 +215,18 @@ async def report_filters(
     category_ids: Sequence[uuid.UUID] = (),
     account_ids: Sequence[uuid.UUID] = (),
     text: str | None = None,
+    exclude_category_ids: Sequence[uuid.UUID] = (),
+    exclude_text: str | None = None,
 ) -> ReportFilters:
     """O recorte pedido pelo modelo, só com contas e categorias do próprio usuário."""
     cleaned = text.strip() if text else ""
+    excluded = exclude_text.strip() if exclude_text else ""
     return ReportFilters(
         account_ids=await _known_accounts(context, account_ids) if account_ids else None,
         category_ids=await _known_categories(context, category_ids) if category_ids else None,
         text=cleaned or None,
+        exclude_category_ids=(
+            await _known_categories(context, exclude_category_ids) if exclude_category_ids else None
+        ),
+        exclude_text=excluded or None,
     )

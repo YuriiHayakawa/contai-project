@@ -1,8 +1,15 @@
-import { useId, useState } from "react";
+import { ArrowRight } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
 
 import { cn } from "../../../lib/cn";
 import { monthName, shortDate, today, yearMonthOf } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
+import { useAccounts } from "../../accounts/hooks/useAccounts";
+import {
+  categoriesById,
+  useCategories,
+  type CategoryOption,
+} from "../../categories/hooks/useCategories";
 import type { SourceTransaction } from "../types";
 
 export interface SourceTransactionsProps {
@@ -15,10 +22,15 @@ export interface SourceTransactionsProps {
 interface SourceRowProps {
   transaction: SourceTransaction;
   currentYear: string;
+  /** Nomes das contas por id; vazio enquanto elas carregam. */
+  accounts: ReadonlyMap<string, string>;
+  categories: ReadonlyMap<string, CategoryOption>;
 }
 
 /** Quantas linhas aparecem antes de "Ver todas". */
 export const COLLAPSED_ROWS = 5;
+
+const OTHER_ACCOUNT = "outra conta";
 
 /** Despesa com `−`, receita com `+` e transferência sem sinal: a cor nunca é o único sinal. */
 function signedAmount({ type, amount_cents }: SourceTransaction): string {
@@ -27,20 +39,52 @@ function signedAmount({ type, amount_cents }: SourceTransaction): string {
   return formatBRL(amount_cents, { sign: "never" });
 }
 
-function SourceRow({ transaction, currentYear }: SourceRowProps) {
+/**
+ * O que identifica o lançamento, abaixo da descrição: em despesa e receita, a categoria e a
+ * conta; em transferência, de qual conta o dinheiro saiu e em qual entrou.
+ */
+function details(
+  transaction: SourceTransaction,
+  accounts: ReadonlyMap<string, string>,
+  categories: ReadonlyMap<string, CategoryOption>,
+): ReactNode {
+  const account = accounts.get(transaction.account_id);
+  if (transaction.type === "transfer") {
+    const destination = transaction.to_account_id
+      ? (accounts.get(transaction.to_account_id) ?? OTHER_ACCOUNT)
+      : OTHER_ACCOUNT;
+    return (
+      <>
+        <span className="sr-only">Transferência de </span>
+        <span className="truncate">{account ?? OTHER_ACCOUNT}</span>
+        <ArrowRight aria-hidden="true" className="size-3.5 shrink-0" />
+        <span className="sr-only"> para </span>
+        <span className="truncate">{destination}</span>
+      </>
+    );
+  }
+  const category = transaction.category_id ? categories.get(transaction.category_id) : undefined;
+  // Receita em categoria de despesa: o dinheiro de uma compra que voltou.
+  const refund = transaction.type === "income" && category?.category.kind === "expense";
+  const parts = [refund && "Estorno", category?.label, account].filter(Boolean);
+  return parts.length > 0 ? <span className="truncate">{parts.join(" · ")}</span> : null;
+}
+
+function SourceRow({ transaction, currentYear, accounts, categories }: SourceRowProps) {
   const year = transaction.date.slice(0, 4);
   const otherYear = year !== currentYear;
   const month = monthName(yearMonthOf(transaction.date), "short");
+  const identified = details(transaction, accounts, categories);
 
   return (
     <li
       className={cn(
-        "grid min-h-11 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-x-3",
+        "grid min-h-12 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-x-3",
         "border-b border-border px-3 py-1.5 last:border-b-0",
       )}
     >
       {/* O dia fica na margem, como em uma folha de caderno: o número em cima e o mês embaixo. */}
-      <time dateTime={transaction.date} className="grid justify-items-center">
+      <time dateTime={transaction.date} className="row-span-2 grid justify-items-center">
         <span className="sr-only">
           {shortDate(transaction.date)}
           {otherYear && ` de ${year}`}
@@ -55,7 +99,9 @@ function SourceRow({ transaction, currentYear }: SourceRowProps) {
       <span className="truncate pl-2 text-small text-ink">{transaction.description}</span>
       <span
         className={cn(
-          "money text-money-sm",
+          // A partir de `sm`, o valor fica no meio da linha inteira, ao lado das duas linhas de
+          // texto.
+          "money text-money-sm sm:row-span-2",
           transaction.type === "income" && "text-income",
           transaction.type === "expense" && "text-ink",
           transaction.type === "transfer" && "text-ink-muted",
@@ -63,19 +109,34 @@ function SourceRow({ transaction, currentYear }: SourceRowProps) {
       >
         {signedAmount(transaction)}
       </span>
+      {/* No celular o detalhe passa por baixo do valor e usa a largura toda: ao lado dele, os
+          nomes das contas ficariam cortados em 320px. */}
+      {identified && (
+        <span className="col-span-2 col-start-2 flex min-w-0 items-center gap-1 pl-2 text-micro text-ink-muted sm:col-span-1">
+          {identified}
+        </span>
+      )}
     </li>
   );
 }
 
 /**
  * "De onde veio esse número" (seção 8 do design-system.md): as transações que compõem o valor
- * da resposta (FR-063), em linhas compactas com pauta e margem. Vem aberto, com até 5 linhas;
- * "Ver todas" mostra as demais no próprio bloco.
+ * da resposta (FR-063), em linhas compactas com pauta e margem. Cada linha diz o que foi e
+ * onde: a categoria e a conta ou, em uma transferência, as duas contas. Vem aberto, com até 5
+ * linhas; "Ver todas" mostra as demais no próprio bloco.
  */
 export function SourceTransactions({ transactions, totalCount }: SourceTransactionsProps) {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
+  const accounts = useAccounts();
+  const categories = useCategories();
   const currentYear = today().slice(0, 4);
+
+  const accountNames = new Map((accounts.data ?? []).map((account) => [account.id, account.name]));
+  const categoryOptions = categories.data
+    ? categoriesById(categories.data)
+    : new Map<string, CategoryOption>();
 
   const total = Math.max(totalCount, transactions.length);
   const expandable = transactions.length > COLLAPSED_ROWS;
@@ -100,7 +161,13 @@ export function SourceTransactions({ transactions, totalCount }: SourceTransacti
         )}
       >
         {shown.map((transaction) => (
-          <SourceRow key={transaction.id} transaction={transaction} currentYear={currentYear} />
+          <SourceRow
+            key={transaction.id}
+            transaction={transaction}
+            currentYear={currentYear}
+            accounts={accountNames}
+            categories={categoryOptions}
+          />
         ))}
       </ul>
       {(expandable || missing) && (

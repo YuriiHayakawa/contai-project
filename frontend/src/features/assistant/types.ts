@@ -23,6 +23,12 @@ export interface SourceTransaction {
   description: string;
   /** Sempre positivo, em centavos; o sinal vem do tipo. */
   amount_cents: number;
+  /** A conta do lançamento; em uma transferência, a conta de onde o dinheiro saiu. */
+  account_id: string;
+  /** Só em transferência: a conta em que o dinheiro entrou. */
+  to_account_id: string | null;
+  /** Nula em transferência. */
+  category_id: string | null;
 }
 
 /**
