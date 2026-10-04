@@ -86,6 +86,11 @@ const ReviewPage = lazy(() =>
     default: module.ReviewPage,
   })),
 );
+const ChatPage = lazy(() =>
+  import("./features/assistant/components/ChatPage").then((module) => ({
+    default: module.ChatPage,
+  })),
+);
 
 interface PendingPageProps {
   title: string;
@@ -268,7 +273,7 @@ export const routes: RouteObject[] = [
               { path: paths.importNew, element: <UploadPage /> },
               { path: paths.importDetail, element: <UploadPage /> },
               { path: paths.importReview, element: <ReviewPage /> },
-              { path: paths.assistant, element: <PendingPage title="Assistente" /> },
+              { path: paths.assistantChat, element: <ChatPage /> },
               { path: paths.settings, element: <PendingPage title="Configurações" /> },
             ],
           },

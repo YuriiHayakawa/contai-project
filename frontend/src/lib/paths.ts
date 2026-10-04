@@ -10,6 +10,8 @@ export const paths = {
   importDetail: "/importacoes/:importId",
   importReview: "/importacoes/:importId/revisao",
   assistant: "/assistente",
+  // O chat: sem `:conversationId`, uma conversa nova; com ele, uma conversa do histórico.
+  assistantChat: "/assistente/:conversationId?",
   settings: "/configuracoes",
   login: "/entrar",
   register: "/criar-conta",
@@ -29,6 +31,11 @@ export function importPath(importId: string): string {
 /** Endereço da revisão de uma importação. */
 export function importReviewPath(importId: string): string {
   return `${importPath(importId)}/revisao`;
+}
+
+/** Endereço de uma conversa com o assistente. */
+export function conversationPath(conversationId: string): string {
+  return `${paths.assistant}/${conversationId}`;
 }
 
 /** Estado de navegação levado à tela de entrada pelo guard de rotas. */
