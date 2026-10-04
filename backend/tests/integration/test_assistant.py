@@ -20,7 +20,7 @@ from app.ai.provider import LLMQuotaExhausted, LLMRateLimited, LLMRole, LLMUnava
 from app.core import clock
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
-from app.modules.assistant import validation
+from app.modules.assistant import service, validation
 from tests.assistant import (
     ASSISTANT,
     CONVERSATIONS,
@@ -186,7 +186,7 @@ async def test_the_context_keeps_only_the_last_twenty_messages(
     for number in range(12):
         # Doze perguntas seguidas passariam do limite de dez por minuto.
         limiter.reset()
-        fake_llm.queue_text(f"[esclarecimento] Pergunta {number}: de qual mês?")
+        fake_llm.queue_text(f"[esclarecimento] Pergunta {number}: qual categoria?")
         await ask(client_a, conversation, f"pergunta {number}")
 
     sent = fake_llm.calls[-1].messages
@@ -203,9 +203,9 @@ async def test_the_context_keeps_only_the_last_twenty_messages(
     ("text", "kind", "content"),
     [
         (
-            "[esclarecimento] De qual período você quer saber? Por exemplo, este mês.",
+            "[esclarecimento] Não encontrei a categoria Viagens. Você quis dizer Transporte?",
             "clarification",
-            "De qual período você quer saber? Por exemplo, este mês.",
+            "Não encontrei a categoria Viagens. Você quis dizer Transporte?",
         ),
         (
             "[recusa] Eu só respondo sobre as suas finanças no Contaí.",
@@ -213,9 +213,9 @@ async def test_the_context_keeps_only_the_last_twenty_messages(
             "Eu só respondo sobre as suas finanças no Contaí.",
         ),
         # Sem consultar nada não há resposta com número: é um pedido de mais informação.
-        ("De qual mês você quer saber?", "clarification", "De qual mês você quer saber?"),
+        ("Qual categoria você quer ver?", "clarification", "Qual categoria você quer ver?"),
     ],
-    ids=["pergunta ambígua", "fora do tema", "sem a marca do tipo"],
+    ids=["categoria que não existe", "fora do tema", "sem a marca do tipo"],
 )
 async def test_an_ambiguous_question_gets_a_clarification_and_an_off_topic_one_a_refusal(
     client_a: AsyncClient,
@@ -227,7 +227,7 @@ async def test_an_ambiguous_question_gets_a_clarification_and_an_off_topic_one_a
 ) -> None:
     fake_llm.queue_text(text)
 
-    reply = await ask(client_a, conversation, "quanto gastei?")
+    reply = await ask(client_a, conversation, "quanto gastei com viagens?")
 
     assert (reply["kind"], reply["content"]) == (kind, content)
     assert (reply["highlight"], reply["transactions"], reply["transactions_total_count"]) == (
@@ -235,6 +235,44 @@ async def test_an_ambiguous_question_gets_a_clarification_and_an_off_topic_one_a
         [],
         0,
     )
+
+
+async def test_a_question_without_a_period_is_answered_for_the_current_month(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(call("get_spending_summary", period=THIS_MONTH))
+    fake_llm.queue_text("Em outubro de 2026, o mês atual, você gastou R$ 670,90.")
+
+    reply = await ask(client_a, conversation, "quanto gastei?")
+
+    # A resposta diz de que mês é o valor, e o valor é o das saídas do mês no painel.
+    assert (reply["kind"], reply["highlight"]) == ("answer", "R$ 670,90")
+    assert "outubro de 2026, o mês atual" in reply["content"]
+    summary = await client_a.get("/api/v1/dashboard/summary", params={"month": "2026-10"})
+    assert summary.json()["expense_cents"] == 67_090
+    # As instruções em uso mandam assumir o mês atual, e não perguntar o período.
+    instructions = fake_llm.calls[0].system
+    assert "Se a pergunta não disser o período, use o mês atual (`this_month`)" in instructions
+    assert "A falta de período nunca é motivo para pedir esclarecimento" in instructions
+
+
+async def test_the_instructions_make_the_assistant_talk_to_the_user_directly(
+    client_a: AsyncClient, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_text("[recusa] Eu só respondo sobre as suas finanças no Contaí.")
+
+    reply = await ask(client_a, conversation, "qual a capital da França?")
+
+    assert (reply["kind"], reply["content"]) == (
+        "refusal",
+        "Eu só respondo sobre as suas finanças no Contaí.",
+    )
+    instructions = fake_llm.calls[0].system
+    assert service.SYSTEM_PROMPT_FILE == "system_v2.md"
+    assert 'tratando-a por "você"' in instructions
+    assert 'Nunca fale dela em terceira pessoa. Não escreva "o usuário"' in instructions
+    # A recusa pedida pelas instruções já vem na segunda pessoa.
+    assert 'diga "Eu só respondo sobre as suas finanças no Contaí"' in instructions
 
 
 async def test_a_period_without_data_is_answered_without_inventing_values(
@@ -424,7 +462,7 @@ async def test_the_daily_limit_tells_when_the_assistant_comes_back(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(get_settings(), "ai_daily_question_limit", 1)
-    fake_llm.queue_text("[esclarecimento] De qual mês?")
+    fake_llm.queue_text("[esclarecimento] Qual categoria você quer ver?")
     await ask(client_a, conversation, "quanto gastei?")
 
     response = await send_question(client_a, conversation, "em setembro")
@@ -547,7 +585,7 @@ async def test_questions_are_rate_limited_per_minute(
     client_a: AsyncClient, conversation: Json, fake_llm: FakeLLMProvider
 ) -> None:
     for _ in range(10):
-        fake_llm.queue_text("[esclarecimento] De qual mês?")
+        fake_llm.queue_text("[esclarecimento] Qual categoria você quer ver?")
         await ask(client_a, conversation, "quanto gastei?")
 
     response = await send_question(client_a, conversation, "quanto gastei?")
@@ -569,7 +607,7 @@ async def test_conversations_are_listed_by_latest_activity_with_the_first_questi
     assert (first["title"], second["title"]) == ("", "")
     clock.set_fixed_time(frozen_time + timedelta(minutes=2))
     long_question = "quanto gastei com alimentação, transporte e saúde " + "neste mês " * 10
-    fake_llm.queue_text("[esclarecimento] De qual mês?")
+    fake_llm.queue_text("[esclarecimento] Qual categoria você quer ver?")
     await ask(client_a, first, long_question)
 
     listed = (await client_a.get(CONVERSATIONS)).json()
@@ -631,7 +669,7 @@ async def test_the_user_can_delete_one_conversation_or_the_whole_history(
     client_a: AsyncClient, fake_llm: FakeLLMProvider
 ) -> None:
     kept, removed, other = [await new_conversation(client_a) for _ in range(3)]
-    fake_llm.queue_text("[esclarecimento] De qual mês?")
+    fake_llm.queue_text("[esclarecimento] Qual categoria você quer ver?")
     await ask(client_a, removed, "quanto gastei?")
 
     deleted = await client_a.delete(f"{CONVERSATIONS}/{removed['id']}")

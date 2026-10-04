@@ -90,6 +90,10 @@ código, o termo é "transação" (`transaction`). Os dois nomes se referem à m
   guardadas. Cada alteração (marcar, desmarcar, categoria, tipo, valor, descrição e data) é
   salva na hora, e a revisão pode ser retomada até expirar. Nenhuma transação é criada antes
   da confirmação (definido na revisão da tela de importação).
+- Q: O que o assistente faz quando a pergunta não diz o período? → A: Assume o mês atual e diz
+  isso na resposta, sem pedir esclarecimento. O esclarecimento fica para categoria ou conta
+  que não existe e para pedidos realmente ambíguos (definido na conferência do assistente com
+  o provedor real).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -305,8 +309,11 @@ tenho de parcelas no cartão?".
    que compõem esse valor.
 3. **Given** uma pergunta já respondida, **When** o usuário pergunta "e no mês anterior?",
    **Then** o assistente mantém o mesmo assunto e responde para o mês anterior.
-4. **Given** uma pergunta ambígua (por exemplo, "quanto gastei?" sem período), **When** o
-   usuário a envia, **Then** o assistente pede o esclarecimento que falta em vez de supor.
+4. **Given** uma pergunta que cita uma categoria ou uma conta que não existe (por exemplo,
+   "quanto gastei com viagens?", sem essa categoria), ou um pedido realmente ambíguo, **When**
+   o usuário a envia, **Then** o assistente pede o esclarecimento que falta em vez de supor.
+   **Given** uma pergunta sem período (por exemplo, "quanto gastei?"), **When** o usuário a
+   envia, **Then** o assistente responde para o mês atual e deixa isso claro na resposta.
 5. **Given** uma pergunta fora do tema de finanças do usuário, **When** o usuário a envia,
    **Then** recebe uma recusa educada, com exemplos do que pode perguntar.
 6. **Given** uma pergunta sobre um período sem dados, **When** o usuário a envia, **Then** o
@@ -726,7 +733,11 @@ os 7 dias, não consegue mais entrar.
 - **FR-063**: Junto de cada resposta numérica, o assistente DEVE mostrar as transações que
   compõem o valor.
 - **FR-064**: O assistente DEVE entender perguntas de continuação dentro da mesma conversa.
-- **FR-065**: Perguntas ambíguas DEVEM gerar um pedido de esclarecimento; perguntas fora do tema
+- **FR-065**: Uma pergunta sem período DEVE ser respondida para o mês atual, com a resposta
+  dizendo de que mês é o valor; a falta de período NÃO DEVE gerar pedido de esclarecimento.
+  Perguntas que citam categoria ou conta inexistente, e pedidos realmente ambíguos, DEVEM gerar
+  um pedido de esclarecimento. O assistente DEVE falar diretamente com o usuário ("as suas
+  finanças"), nunca dele em terceira pessoa. Perguntas fora do tema
   de finanças do usuário DEVEM receber uma recusa educada.
 - **FR-066**: O usuário DEVE poder descrever um lançamento em texto livre e receber a transação
   preenchida para confirmar ou ajustar.

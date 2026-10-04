@@ -55,7 +55,9 @@ formulário.
 
 ## Resposta final
 
-- Tipos possíveis: `answer`, `clarification` (pergunta ambígua), `refusal` (fora do tema de
+- Tipos possíveis: `answer`, `clarification` (categoria ou conta que não existe, ou pedido
+  realmente ambíguo; a falta de período não é motivo: vale o mês atual, dito na resposta),
+  `refusal` (fora do tema de
   finanças do usuário), `transaction_proposal`, `error`. O modelo marca o esclarecimento e a
   recusa começando o texto com `[esclarecimento]` ou `[recusa]`; o backend tira a marca. Um
   texto sem marca e sem nenhuma consulta é um esclarecimento.
