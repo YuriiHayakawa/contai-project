@@ -66,7 +66,7 @@ class ProposalRead(BaseModel):
     amount_cents: int
     date: dt.date
     description: str
-    # Nulos quando a frase não deixou claro: o usuário escolhe ao conferir.
+    # Nulos quando a frase não deixou claro: o usuário escolhe ao ajustar.
     account_id: uuid.UUID | None
     category_id: uuid.UUID | None
     # De onde veio a categoria: de uma regra que o usuário ensinou ou de uma sugestão da IA.

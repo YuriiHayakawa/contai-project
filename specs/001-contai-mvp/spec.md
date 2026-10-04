@@ -367,7 +367,8 @@ o total.
 ### User Story 8 - Lançar um gasto escrevendo uma frase (Priority: P3)
 
 O usuário escreve algo como "gastei 45 no ifood ontem no cartão" e recebe a transação preenchida
-para confirmar ou ajustar.
+para confirmar ou ajustar. Com todos os campos obrigatórios preenchidos, ele pode salvar a
+proposta como está, direto do cartão; se preferir, ou se faltar algum campo, ajusta no formulário.
 
 **Why this priority**: torna o lançamento ainda mais rápido, mas é um atalho para algo que a
 história 2 já permite.
@@ -380,11 +381,15 @@ ajusta uma e confirma; as transações aparecem na lista.
 1. **Given** um usuário com um cartão cadastrado, **When** escreve "gastei 45 no ifood ontem no
    cartão", **Then** recebe uma proposta de despesa de R$ 45,00, com a data de ontem, no cartão
    e com categoria sugerida, e nada é salvo ainda.
-2. **Given** uma proposta, **When** o usuário ajusta um campo e confirma, **Then** a transação é
-   salva com os valores ajustados; **When** ele cancela, **Then** nada é salvo.
+2. **Given** uma proposta com todos os campos obrigatórios preenchidos, **When** o usuário
+   escolhe "Salvar", **Then** a transação é salva como foi proposta, sem passar pelo formulário;
+   **When** escolhe "Ajustar", **Then** o formulário abre preenchido, e a transação é salva com
+   os valores ajustados quando ele confirma; **When** ele cancela ou descarta, **Then** nada é
+   salvo.
 3. **Given** uma frase sem informação suficiente (por exemplo, sem valor, ou "no cartão" quando
    há dois cartões), **When** o usuário a envia, **Then** o assistente pergunta o que falta ou
-   deixa o campo para o usuário escolher.
+   deixa o campo para o usuário escolher; com um campo em aberto, a proposta só pode ser
+   ajustada no formulário, e não salva direto.
 4. **Given** o fluxo completo, **When** o usuário lança um gasto por texto, **Then** conclui em
    menos de 10 segundos, incluindo a confirmação.
 

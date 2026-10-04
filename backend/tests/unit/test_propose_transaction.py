@@ -211,7 +211,7 @@ async def test_two_cards_leave_the_account_for_the_user_to_choose(
     assert result.proposal["account_id"] is None
     assert result.data["missing"] == ["account"]
     assert result.summary == (
-        "Preparei o lançamento, mas não sei em qual conta ele entra: você escolhe ao conferir."
+        "Preparei o lançamento, mas não sei em qual conta ele entra: você escolhe ao ajustar."
     )
     # Dizendo qual dos dois, a conta vem preenchida.
     assert (await _proposal(context, account_hint="cartão azul"))["account_id"] == blue["id"]
@@ -352,7 +352,7 @@ async def test_a_category_that_does_not_fit_stays_open(
     assert unknown.proposal is not None and unknown.proposal["category_id"] is None
     assert unknown.data["missing"] == ["category"]
     assert unknown.summary == (
-        "Preparei o lançamento, mas não encontrei uma categoria para ele: você escolhe ao conferir."
+        "Preparei o lançamento, mas não encontrei uma categoria para ele: você escolhe ao ajustar."
     )
     # Uma categoria de receita não serve a um gasto.
     assert wrong_kind["category_id"] is None and wrong_kind["category_source"] is None
@@ -393,7 +393,7 @@ async def test_the_proposal_is_complete_and_nothing_is_recorded(
         "status": "pending",
         "transaction_id": None,
     }
-    assert result.summary == "Preparei o lançamento. Confira e salve."
+    assert result.summary == "Preparei o lançamento. Salve como está ou ajuste antes de salvar."
     assert result.data["missing"] == []
     assert result.data["proposal"] == {
         "type": "expense",

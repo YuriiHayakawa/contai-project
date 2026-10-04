@@ -47,7 +47,7 @@ export interface Proposal {
   amount_cents: number;
   date: ISODate;
   description: string;
-  /** Nulas quando a frase não deixou claro: o usuário escolhe ao conferir. */
+  /** Nulas quando a frase não deixou claro: o usuário escolhe ao ajustar. */
   account_id: string | null;
   category_id: string | null;
   /** De onde veio a categoria: de uma regra que o usuário ensinou ou de uma sugestão da IA. */

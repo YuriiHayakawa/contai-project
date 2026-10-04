@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { RouterProvider, createMemoryRouter } from "react-router";
 
 import { ToastProvider } from "../../../components/ui/Toast";
+import { ApiError } from "../../../lib/api-client";
 import { addDays, today } from "../../../lib/dates";
 import * as accountsService from "../../accounts/services/accountsService";
 import type { Account } from "../../accounts/types";
@@ -31,7 +32,7 @@ const createTransaction = vi.mocked(transactionsService.createTransaction);
 
 const YESTERDAY = addDays(today(), -1);
 
-function account(id: string, name: string, type: Account["type"]): Account {
+function account(id: string, name: string, type: Account["type"], archived = false): Account {
   return {
     id,
     type,
@@ -41,7 +42,7 @@ function account(id: string, name: string, type: Account["type"]): Account {
     initial_balance_date: "2026-01-01",
     closing_day: type === "credit_card" ? 10 : null,
     due_day: type === "credit_card" ? 17 : null,
-    archived: false,
+    archived,
     balance_cents: 0,
   };
 }
@@ -77,7 +78,7 @@ function messageWith(changes: Partial<Proposal>): ChatMessage {
     id: "msg-1",
     role: "assistant",
     kind: "transaction_proposal",
-    content: "Preparei o lançamento. Confira e salve.",
+    content: "Preparei o lançamento. Salve como está ou ajuste antes de salvar.",
     highlight: null,
     transactions: [],
     transactions_total_count: 0,
@@ -177,14 +178,71 @@ describe("ProposalCard", () => {
     expect(within(region).getByText("−R$ 45,00")).toHaveClass("money", "text-money-lg");
   });
 
-  it('"Conferir e salvar" abre o formulário preenchido, e nada é salvo antes da confirmação', async () => {
+  it('"Salvar" grava o lançamento direto, sem abrir o formulário', async () => {
+    const user = userEvent.setup();
+    createTransaction.mockResolvedValue(saved({}));
+    renderCard();
+    await within(await card()).findByText("Cartão Verde");
+    expect(createTransaction).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    // Todos os campos obrigatórios vieram na proposta: o lançamento nasce como ela está.
+    await waitFor(() =>
+      expect(createTransaction).toHaveBeenCalledWith({
+        type: "expense",
+        amount_cents: 4_500,
+        date: YESTERDAY,
+        description: "iFood",
+        account_id: "acc-card",
+        category_id: "cat-restaurant",
+        notes: null,
+        source: "assistant",
+      }),
+    );
+    const region = await card("Lançamento salvo");
+    expect(createTransaction).toHaveBeenCalledTimes(1);
+    expect(markProposalSaved).toHaveBeenCalledWith("msg-1", "tx-1");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(within(region).getByText("Lançamento salvo")).toBeInTheDocument();
+    expect(within(region).getByRole("link", { name: "Ver nos lançamentos" })).toBeInTheDocument();
+    for (const name of ["Salvar", "Ajustar", "Descartar"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
+
+  it('"Salvar" que falha diz o que fazer e deixa a proposta à espera', async () => {
+    const user = userEvent.setup();
+    createTransaction.mockRejectedValue(
+      new ApiError({
+        status: 422,
+        code: "validation_error",
+        message: "Confira os campos destacados.",
+        details: { fields: { account_id: "Esta conta foi arquivada. Escolha outra conta." } },
+      }),
+    );
+    renderCard();
+    await within(await card()).findByText("Cartão Verde");
+
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+
+    expect(
+      await screen.findByText("Esta conta foi arquivada. Escolha outra conta."),
+    ).toBeInTheDocument();
+    expect(markProposalSaved).not.toHaveBeenCalled();
+    expect(await card()).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salvar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ajustar" })).toBeInTheDocument();
+  });
+
+  it('"Ajustar" abre o formulário preenchido, e nada é salvo antes da confirmação', async () => {
     const user = userEvent.setup();
     renderCard();
     await within(await card()).findByText("Cartão Verde");
 
-    await user.click(screen.getByRole("button", { name: "Conferir e salvar" }));
+    await user.click(screen.getByRole("button", { name: "Ajustar" }));
 
-    const form = await screen.findByRole("dialog", { name: "Conferir lançamento" });
+    const form = await screen.findByRole("dialog", { name: "Ajustar lançamento" });
     expect(within(form).getByLabelText("Valor")).toHaveValue("45,00");
     expect(within(form).getByLabelText("Descrição")).toHaveValue("iFood");
     expect(within(form).getByLabelText("Categoria")).toHaveValue("cat-restaurant");
@@ -198,17 +256,18 @@ describe("ProposalCard", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(createTransaction).not.toHaveBeenCalled();
     expect(markProposalSaved).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Conferir e salvar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salvar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ajustar" })).toBeInTheDocument();
   });
 
-  it("depois de conferir, ajustar e salvar, o cartão mostra o lançamento salvo", async () => {
+  it("depois de ajustar e salvar no formulário, o cartão mostra o lançamento salvo", async () => {
     const user = userEvent.setup();
     createTransaction.mockResolvedValue(saved({ description: "iFood jantar" }));
     renderCard();
     await within(await card()).findByText("Cartão Verde");
 
-    await user.click(screen.getByRole("button", { name: "Conferir e salvar" }));
-    const form = await screen.findByRole("dialog", { name: "Conferir lançamento" });
+    await user.click(screen.getByRole("button", { name: "Ajustar" }));
+    const form = await screen.findByRole("dialog", { name: "Ajustar lançamento" });
     await user.type(within(form).getByLabelText("Descrição"), " jantar");
     await user.click(within(form).getByRole("button", { name: "Salvar lançamento" }));
 
@@ -230,7 +289,7 @@ describe("ProposalCard", () => {
     expect(region).toHaveTextContent("iFood jantar");
     expect(within(region).getByText("Lançamento salvo")).toBeInTheDocument();
     expect(within(region).getByRole("link", { name: "Ver nos lançamentos" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Conferir e salvar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ajustar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Descartar" })).toBeNull();
   });
 
@@ -249,19 +308,49 @@ describe("ProposalCard", () => {
     expect(screen.queryByRole("region", { name: "Lançamento sugerido" })).toBeNull();
   });
 
-  it("proposta sem conta definida: o formulário abre com a conta em aberto", async () => {
+  it('proposta com a conta em aberto: só o "Ajustar", e o formulário pede a conta', async () => {
     const user = userEvent.setup();
     renderCard({ account_id: null });
     const region = await card();
     await within(region).findByText("Alimentação › Restaurante");
-    expect(region).toHaveTextContent("ContaVocê escolhe ao conferir");
+    expect(region).toHaveTextContent("ContaVocê escolhe ao ajustar");
+    // Sem a conta, não há o que salvar direto: quem escolhe é o usuário, no formulário.
+    expect(screen.queryByRole("button", { name: "Salvar" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Descartar" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Conferir e salvar" }));
-    const form = await screen.findByRole("dialog", { name: "Conferir lançamento" });
+    await user.click(screen.getByRole("button", { name: "Ajustar" }));
+    const form = await screen.findByRole("dialog", { name: "Ajustar lançamento" });
     expect(within(form).getByLabelText("Conta")).toHaveValue("");
     await user.click(within(form).getByRole("button", { name: "Salvar lançamento" }));
 
     expect(await within(form).findByText("Escolha uma conta.")).toBeInTheDocument();
+    expect(createTransaction).not.toHaveBeenCalled();
+  });
+
+  it('proposta com a categoria em aberto: só o "Ajustar"', async () => {
+    renderCard({ category_id: null });
+
+    const region = await card();
+    await within(region).findByText("Cartão Verde");
+    expect(region).toHaveTextContent("CategoriaVocê escolhe ao ajustar");
+    expect(screen.queryByRole("button", { name: "Salvar" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Ajustar" })).toBeInTheDocument();
+  });
+
+  it('conta arquivada depois da proposta vale como campo em aberto: só o "Ajustar"', async () => {
+    const user = userEvent.setup();
+    listAccounts.mockResolvedValue([
+      account("acc-checking", "Conta corrente", "checking"),
+      account("acc-card", "Cartão Verde", "credit_card", true),
+    ]);
+    renderCard();
+    await within(await card()).findByText("Cartão Verde");
+
+    expect(screen.queryByRole("button", { name: "Salvar" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Ajustar" }));
+
+    const form = await screen.findByRole("dialog", { name: "Ajustar lançamento" });
+    expect(within(form).getByLabelText("Conta")).toHaveValue("");
     expect(createTransaction).not.toHaveBeenCalled();
   });
 
@@ -271,6 +360,6 @@ describe("ProposalCard", () => {
     const region = await card();
     expect(region).toHaveTextContent("Receita");
     expect(within(region).getByText("+R$ 200,00")).toHaveClass("text-income");
-    await waitFor(() => expect(region).toHaveTextContent("CategoriaVocê escolhe ao conferir"));
+    await waitFor(() => expect(region).toHaveTextContent("CategoriaVocê escolhe ao ajustar"));
   });
 });

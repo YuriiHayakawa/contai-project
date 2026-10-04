@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
+import { useCreateTransaction } from "../../transactions/hooks/useCreateTransaction";
 import { useNewTransaction } from "../../transactions/hooks/useNewTransaction";
 import type { Transaction, TransactionPreset } from "../../transactions/types";
 import { discardProposal, markProposalSaved } from "../services/assistantService";
@@ -15,6 +16,12 @@ interface SavedVariables {
 export interface ProposalChoices {
   accountId: string | null;
   categoryId: string | null;
+}
+
+/** Uma proposta com tudo o que um lançamento precisa: pode ser salva sem passar pelo formulário. */
+export interface CompleteChoices {
+  accountId: string;
+  categoryId: string;
 }
 
 /** Troca a proposta de uma mensagem em todas as conversas guardadas na tela. */
@@ -52,14 +59,21 @@ function savedProposal(proposal: Proposal, transaction: Transaction): Proposal {
   };
 }
 
+interface SaveOptions {
+  /** O lançamento não foi gravado: a proposta continua à espera. */
+  onError: (error: unknown) => void;
+}
+
 /**
- * Conferir e salvar uma proposta do assistente (FR-066, FR-067). `review` abre o formulário de
- * lançamento preenchido com a proposta; nada é salvo até o usuário confirmar nele. Quando ele
- * salva, o lançamento nasce com `source = assistant` e a proposta fica marcada como salva.
+ * Salvar uma proposta do assistente (FR-066, FR-067). Nada é salvo antes de o usuário pedir:
+ * `save` grava a proposta como está, quando ela já tem conta e categoria, e `review` abre o
+ * formulário de lançamento preenchido, para ajustar antes de salvar. Nos dois caminhos o
+ * lançamento nasce com `source = assistant` e a proposta fica marcada como salva.
  */
 export function useSaveProposal() {
   const queryClient = useQueryClient();
   const openNewTransaction = useNewTransaction();
+  const create = useCreateTransaction();
 
   const saved = useMutation({
     mutationFn: ({ messageId, transaction }: SavedVariables) =>
@@ -84,7 +98,28 @@ export function useSaveProposal() {
     openNewTransaction(preset);
   };
 
-  return { review };
+  const save = (
+    messageId: string,
+    proposal: Proposal,
+    choices: CompleteChoices,
+    { onError }: SaveOptions,
+  ): void => {
+    create.mutate(
+      {
+        type: proposal.type,
+        amount_cents: proposal.amount_cents,
+        date: proposal.date,
+        description: proposal.description,
+        account_id: choices.accountId,
+        category_id: choices.categoryId,
+        notes: null,
+        source: "assistant",
+      },
+      { onSuccess: (transaction) => saved.mutate({ messageId, transaction }), onError },
+    );
+  };
+
+  return { review, save, isSaving: create.isPending };
 }
 
 /** Descarta uma proposta: nada é salvo, e o cartão passa a dizer que ela foi descartada. */

@@ -195,7 +195,7 @@ async def _proposal_of(context: IsolationContext, owner: str) -> tuple[Json, str
         position=0,
         role=MessageRole.ASSISTANT,
         kind=MessageKind.TRANSACTION_PROPOSAL,
-        content="Preparei o lançamento. Confira e salve.",
+        content="Preparei o lançamento. Salve como está ou ajuste antes de salvar.",
         now=now,
         proposal=dict(PROPOSAL),
     )

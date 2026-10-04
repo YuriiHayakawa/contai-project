@@ -61,7 +61,8 @@ saiu e a conta em que entrou, mesmo quando o recorte só alcança uma das linhas
 nas somas de despesas e de receitas.
 
 `propose_transaction` não grava nada: nem lançamento, nem regra de categoria. O backend monta
-a proposta, que o usuário confirma no formulário:
+a proposta, que o usuário salva como está, quando ela já tem conta e categoria, ou ajusta no
+formulário:
 
 - **Valor**: convertido com `Decimal`. Sem valor, a ferramenta devolve `missing: ["amount"]` e
   o modelo pergunta qual foi; um valor que não se lê volta como erro descritivo.

@@ -533,8 +533,11 @@ parece anotações na caderneta.
 - **Pedido de esclarecimento**: o texto da pergunta e, abaixo, opções de resposta rápida.
 - **Recusa**: uma frase educada e sugestões do que perguntar.
 - **Lançamento sugerido**: cartão com valor em `money-lg`, data, conta e categoria, e os botões
-  "Conferir e salvar" (`primary`, abre o formulário preenchido) e "Descartar" (`ghost`). Nada é
-  salvo antes da confirmação; depois de salvo, o cartão mostra "Lançamento salvo" com o link.
+  "Salvar" (`primary`, grava o lançamento como está), "Ajustar" (`secondary`, abre o formulário
+  preenchido) e "Descartar" (`ghost`). Com a conta ou a categoria em aberto não há "Salvar", e
+  "Ajustar" passa a ser o `primary`. No celular os botões ficam empilhados, na largura toda.
+  Nada é salvo antes de "Salvar" ou da confirmação no formulário; depois de salvo, o cartão
+  mostra "Lançamento salvo" com o link.
 - **Aguardando**: o texto "Consultando seus lançamentos…" com três pontos pulsando.
 - **Chat vazio**: título em `title-2` ("Pergunte sobre o seu dinheiro") e de 4 a 6 sugestões de
   pergunta.
