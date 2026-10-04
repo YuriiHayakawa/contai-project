@@ -1,4 +1,12 @@
-import { CircleAlert, Clock, Copy, CopyCheck, CreditCard, TriangleAlert } from "lucide-react";
+import {
+  CircleAlert,
+  Clock,
+  Copy,
+  CopyCheck,
+  CreditCard,
+  Pencil,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 
@@ -120,7 +128,8 @@ function lineDetails(
 
 /**
  * Linha do modo de revisão (seção 6.6 do design-system.md): a caixa de seleção fica na margem
- * e o resto da linha abre a correção.
+ * e o resto da linha abre a edição. O "Editar", com o lápis, diz isso a quem olha: fica sob o
+ * valor no celular e ao lado dele a partir de `sm`.
  */
 function ReviewRow({ line, problem, accounts, categories, onToggle, onEdit }: ReviewRowProps) {
   const { item, selected, kind } = line;
@@ -144,8 +153,9 @@ function ReviewRow({ line, problem, accounts, categories, onToggle, onEdit }: Re
         type="button"
         onClick={onEdit}
         className={cn(
-          "grid min-h-16 grid-cols-[minmax(0,1fr)_auto] content-center items-center gap-x-3",
+          "group grid min-h-16 grid-cols-[minmax(0,1fr)_auto] content-center items-center gap-x-3",
           "py-2.5 pr-3 pl-3 text-left transition-colors duration-fast ease-out hover:bg-bg-sunken",
+          "sm:grid-cols-[minmax(0,1fr)_auto_auto]",
         )}
       >
         <span
@@ -154,12 +164,12 @@ function ReviewRow({ line, problem, accounts, categories, onToggle, onEdit }: Re
             selected ? "text-ink" : "text-ink-muted",
           )}
         >
-          <span className="sr-only">Corrigir: </span>
+          <span className="sr-only">Editar: </span>
           {line.description}
         </span>
         <span
           className={cn(
-            "money text-money-md sm:row-span-2",
+            "money justify-self-end text-money-md sm:row-span-2",
             !selected || kind === "transfer"
               ? "text-ink-muted"
               : isIncome
@@ -169,11 +179,27 @@ function ReviewRow({ line, problem, accounts, categories, onToggle, onEdit }: Re
         >
           {signedAmount(line)}
         </span>
-        {/* Em tela estreita, o que a linha vira e os selos usam a largura toda, sob o valor. */}
-        <span className="col-span-2 min-w-0 truncate text-small text-ink-muted sm:col-span-1">
+        <span className="col-start-1 row-start-2 min-w-0 truncate text-small text-ink-muted">
           {selected ? lineDetails(line, accounts, categories) : "Não será importada"}
         </span>
-        <span className="col-span-2 mt-1 flex flex-wrap gap-1 empty:hidden">
+        {/* O nome acessível da linha já começa com "Editar": aqui é só o sinal para os olhos. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "col-start-2 row-start-2 flex items-center gap-1.5 justify-self-end text-label",
+            "text-primary group-hover:underline",
+            "sm:col-start-3 sm:row-span-2 sm:row-start-1 sm:pl-2",
+          )}
+        >
+          <Pencil className="size-4" />
+          Editar
+        </span>
+        {line.notes && (
+          <span className="col-span-full min-w-0 truncate text-small text-ink-muted">
+            Observação: {line.notes}
+          </span>
+        )}
+        <span className="col-span-full mt-1 flex flex-wrap gap-1 empty:hidden">
           {item.duplicate_status === "probable" && (
             <Seal tone="warning" icon={Copy}>
               Possível duplicata
@@ -373,9 +399,9 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
       <div className="grid gap-3">
         <p className="text-body wrap-anywhere text-ink-muted">
           {lineCount(items.length)} de {record.original_filename}
-          {account && `, para ${account.name}`}. Confira, corrija o que precisar e desmarque o que
-          não quer importar. Cada alteração fica guardada, e nada vira lançamento antes da
-          confirmação.
+          {account && `, para ${account.name}`}. Desmarque o que não quer importar e use
+          &quot;Editar&quot; para dar um nome melhor à linha, trocar a categoria ou anotar uma
+          observação. Cada alteração fica guardada, e nada vira lançamento antes da confirmação.
           {duplicates > 0 &&
             ` ${duplicates === 1 ? "1 linha vem desmarcada porque parece" : `${duplicates} linhas vêm desmarcadas porque parecem`} já estar na conta.`}
         </p>
@@ -531,7 +557,7 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
 
 /**
  * Revisão de uma importação (FR-046), no modo de revisão da lista de lançamentos: marcar e
- * desmarcar linhas, corrigir valor, data, descrição e categoria, ver as duplicatas e os avisos
+ * desmarcar linhas, editar valor, data, descrição, categoria e observação, ver as duplicatas e os avisos
  * de total do documento, de saldo e de pagamento de fatura, e confirmar. Cada alteração é guardada no servidor, e a
  * revisão pode ser retomada depois de sair da página (FR-085); nada vira lançamento antes da
  * confirmação.

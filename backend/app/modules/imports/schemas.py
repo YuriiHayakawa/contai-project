@@ -37,6 +37,8 @@ class ImportItemRead(BaseModel):
     amount_cents: int
     date: dt.date
     description: str
+    # Observação opcional que o usuário escreveu na revisão.
+    notes: str | None
     suggested_category_id: uuid.UUID | None
     category_source: CategorySource | None
     suggested_counter_account_id: uuid.UUID | None
@@ -75,6 +77,7 @@ class ImportItemRead(BaseModel):
             amount_cents=item.amount_cents,
             date=item.date,
             description=item.description,
+            notes=item.notes,
             suggested_category_id=item.suggested_category_id,
             category_source=CategorySource(item.category_source) if item.category_source else None,
             suggested_counter_account_id=item.suggested_counter_account_id,
@@ -167,8 +170,8 @@ class ImportPage(BaseModel):
 class ImportItemUpdate(BaseModel):
     """A correção de uma linha da revisão: só os campos enviados mudam.
 
-    `category_id` e `counter_account_id` aceitam `null`, que deixa a linha sem a escolha; nos
-    outros campos, `null` é o mesmo que não enviar.
+    `category_id` e `counter_account_id` aceitam `null`, que deixa a linha sem a escolha, e
+    `notes: null` apaga a observação; nos outros campos, `null` é o mesmo que não enviar.
     """
 
     selected: bool | None = None
@@ -177,6 +180,7 @@ class ImportItemUpdate(BaseModel):
     amount_cents: int | None = None
     date: dt.date | None = None
     description: str | None = None
+    notes: str | None = None
     category_id: uuid.UUID | None = None
     counter_account_id: uuid.UUID | None = None
 
@@ -200,6 +204,8 @@ class ConfirmItem(BaseModel):
     amount_cents: int | None = None
     date: dt.date | None = None
     description: str | None = None
+    # Opcional: a observação do lançamento, como em um lançamento feito à mão.
+    notes: str | None = None
     # Obrigatória em despesa e receita.
     category_id: uuid.UUID | None = None
     # Obrigatória em transferência: a outra conta, como o cartão em um pagamento de fatura.

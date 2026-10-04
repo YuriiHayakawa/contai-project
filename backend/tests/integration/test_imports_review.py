@@ -549,6 +549,7 @@ async def test_history_before_the_reference_date_does_not_change_the_balance(
         ({"amount_cents": None}, "amount_cents"),
         ({"description": "   "}, "description"),
         ({"description": "x" * 201}, "description"),
+        ({"notes": "x" * 1001}, "notes"),
         ({"date": None}, "date"),
         ({"type": None}, "type"),
         ({"type": "transfer"}, "counter_account_id"),
@@ -563,6 +564,7 @@ async def test_history_before_the_reference_date_does_not_change_the_balance(
         "sem valor",
         "descrição em branco",
         "descrição longa demais",
+        "observação longa demais",
         "sem data",
         "sem tipo",
         "transferência sem a outra conta",
@@ -773,6 +775,61 @@ async def test_a_correction_is_kept_and_comes_back_when_the_review_is_resumed(
     assert (await list_transactions(client_a))["total_count"] == 0
 
 
+async def test_a_name_and_a_note_given_in_the_review_go_to_the_transaction(
+    client_a: AsyncClient, checking: Json, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    record = await _small_review(client_a, run_jobs, checking)
+    lines = _by_description(record)
+    bakery, station = lines["Padaria São João"], lines["Posto Estrela"]
+    assert [item["notes"] for item in record["items"]] == [None, None, None]
+
+    named = await update_item(
+        client_a,
+        record,
+        bakery,
+        description="Café da manhã com a Amanda",
+        notes="  Dividimos a conta; ela me devolve metade.  ",
+    )
+    await update_item(client_a, record, station, notes="Viagem a trabalho")
+    # Apagar a observação é enviar `null` ou deixá-la em branco.
+    cleared = await update_item(client_a, record, station, notes="   ")
+
+    assert (named["description"], named["notes"]) == (
+        "Café da manhã com a Amanda",
+        "Dividimos a conta; ela me devolve metade.",
+    )
+    assert cleared["notes"] is None
+    resumed = await get_import(client_a, record)
+    assert _by_description(resumed)["Café da manhã com a Amanda"]["notes"] == named["notes"]
+    # Nada virou lançamento ainda.
+    assert (await list_transactions(client_a))["total_count"] == 0
+
+    await confirm(client_a, resumed, saved_decisions(resumed))
+
+    saved = {line["description"]: line for line in await _saved(client_a)}
+    assert (
+        saved["Café da manhã com a Amanda"]["notes"] == "Dividimos a conta; ela me devolve metade."
+    )
+    assert saved["Posto Estrela"]["notes"] is None
+    # A regra de categoria continua valendo para a descrição que veio do banco (FR-048).
+    assert saved["Café da manhã com a Amanda"]["source"] == "import"
+
+
+async def test_the_note_of_a_transfer_goes_to_both_sides(
+    client_a: AsyncClient, checking: Json, card: Json, run_jobs: JobRunner
+) -> None:
+    record = await _review(client_a, run_jobs, checking, "banco_azul.ofx")
+    payment = _by_description(record)["PAGAMENTO FATURA CARTÃO"]
+    await update_item(client_a, record, payment, notes="Fatura de agosto")
+
+    resumed = await get_import(client_a, record)
+    await confirm(client_a, resumed, _only(resumed, "PAGAMENTO FATURA CARTÃO"))
+
+    sides = await _saved(client_a)
+    assert sorted(side["transfer_direction"] for side in sides) == ["in", "out"]
+    assert {side["notes"] for side in sides} == {"Fatura de agosto"}
+
+
 async def test_the_resumed_review_is_confirmed_with_the_saved_corrections(
     client_a: AsyncClient,
     session: AsyncSession,
@@ -903,6 +960,7 @@ async def test_a_corrected_line_keeps_the_direction_of_the_statement(
         ({"amount_cents": 0}, "amount_cents"),
         ({"description": "   "}, "description"),
         ({"description": "x" * 201}, "description"),
+        ({"notes": "x" * 1001}, "notes"),
         ({"date": "2026-02-30"}, "date"),
         ({"counter_account_id": "00000000-0000-4000-8000-000000000000"}, "counter_account_id"),
         ({"counter_account_id": "self"}, "counter_account_id"),
@@ -914,6 +972,7 @@ async def test_a_corrected_line_keeps_the_direction_of_the_statement(
         "valor zero",
         "descrição em branco",
         "descrição longa demais",
+        "observação longa demais",
         "data que não existe",
         "outra conta que não existe",
         "transferência para a própria conta",

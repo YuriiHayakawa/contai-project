@@ -43,6 +43,8 @@ export const reviewLineSchema = z
       .min(1, "Escreva o que foi, como o nome da loja.")
       .max(200, "Use uma descrição com até 200 caracteres."),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Escolha a data do lançamento."),
+    /** Opcional, como no lançamento feito à mão. */
+    notes: z.string().trim().max(1000, "Use uma observação com até 1.000 caracteres."),
     /** Só em despesa, receita e estorno. */
     categoryId: z.string(),
     /** Só em transferência: a outra conta. */

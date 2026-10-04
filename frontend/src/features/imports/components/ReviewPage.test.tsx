@@ -72,6 +72,7 @@ function item(id: string, overrides: Partial<ImportItem>): ImportItem {
     amount_cents: 4_590,
     date: "2026-09-10",
     description: "PADARIA SÃO JOÃO",
+    notes: null,
     suggested_category_id: "cat-mercado",
     category_source: "ai",
     suggested_counter_account_id: null,
@@ -105,6 +106,7 @@ const items: ImportItem[] = [
     amount_cents: 545_000,
     date: "2026-09-05",
     description: "SALÁRIO EMPRESA",
+    notes: null,
     suggested_category_id: "cat-salario",
   }),
   item("padaria", { row_index: 1 }),
@@ -329,11 +331,11 @@ describe("ReviewPage", () => {
     expect(rowOf("PAGAMENTO FATURA CARTÃO")).toHaveTextContent("Parece pagamento de fatura");
 
     await user.click(screen.getByRole("button", { name: /PAGAMENTO FATURA CARTÃO/ }));
-    const sheet = await screen.findByRole("dialog", { name: "Corrigir linha" });
+    const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
     await user.click(within(sheet).getByRole("radio", { name: "Transferência" }));
     // Com um cartão só, a transferência já vem apontada para ele.
     expect(within(sheet).getByRole("combobox", { name: "Entra em" })).toHaveValue("acc-cartao");
-    await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
+    await user.click(within(sheet).getByRole("button", { name: "Salvar alterações" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await waitFor(() =>
@@ -356,7 +358,7 @@ describe("ReviewPage", () => {
     const { router } = renderReview();
 
     await user.click(await screen.findByRole("button", { name: /SALÁRIO EMPRESA/ }));
-    const sheet = await screen.findByRole("dialog", { name: "Corrigir linha" });
+    const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
     // Uma entrada não vira despesa: as opções são receita, estorno e transferência.
     expect(within(sheet).queryByRole("radio", { name: "Despesa" })).not.toBeInTheDocument();
     await user.click(within(sheet).getByRole("radio", { name: "Estorno" }));
@@ -364,12 +366,12 @@ describe("ReviewPage", () => {
     // As categorias passam a ser as de despesa, e a de receita escolhida deixa de valer.
     const categoryField = within(sheet).getByRole("combobox", { name: "Categoria da compra" });
     expect(categoryField).toHaveValue("");
-    await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
+    await user.click(within(sheet).getByRole("button", { name: "Salvar alterações" }));
     expect(await within(sheet).findByText("Escolha uma categoria.")).toBeVisible();
     expect(updateImportItem).not.toHaveBeenCalled();
 
     await user.selectOptions(categoryField, "Livros");
-    await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
+    await user.click(within(sheet).getByRole("button", { name: "Salvar alterações" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await waitFor(() => expect(rowOf("SALÁRIO EMPRESA")).toHaveTextContent("Estorno · Livros"));
     // O estorno é salvo como a mesma receita, agora na categoria de despesa da compra.
@@ -391,6 +393,7 @@ describe("ReviewPage", () => {
       amount_cents: 545_000,
       date: "2026-09-05",
       description: "SALÁRIO EMPRESA",
+      notes: null,
       category_id: "cat-livros",
       counter_account_id: null,
     });
@@ -405,15 +408,83 @@ describe("ReviewPage", () => {
     ).toBeInTheDocument();
   });
 
+  it('cada linha mostra "Editar", que abre os campos de um lançamento, com a observação', async () => {
+    const user = userEvent.setup();
+    confirmImport.mockImplementation(() =>
+      Promise.resolve(importOf({ status: "completed", imported_count: 3, items: null })),
+    );
+    renderReview();
+    const row = await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ });
+    // O sinal de que a linha pode ser editada fica à vista, e o nome acessível começa por ele.
+    expect(row).toHaveAccessibleName(/^Editar:\s?PADARIA SÃO JOÃO/);
+    expect(within(row).getByText("Editar", { selector: "[aria-hidden='true']" })).toBeVisible();
+    expect(screen.getByText(/use "Editar" para dar um nome melhor à linha/)).toBeInTheDocument();
+
+    await user.click(row);
+    const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
+    const name = within(sheet).getByRole("textbox", { name: "Descrição" });
+    const note = within(sheet).getByRole("textbox", { name: /Observação/ });
+    expect(name).toHaveValue("PADARIA SÃO JOÃO");
+    expect(note).toHaveValue("");
+    await user.clear(name);
+    await user.type(name, "Café da manhã com a Amanda");
+    await user.type(note, "Ela me devolve metade");
+    await user.click(within(sheet).getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(rowOf("Café da manhã com a Amanda")).toHaveTextContent(
+        "Observação: Ela me devolve metade",
+      ),
+    );
+    // Só o que mudou vai ao servidor, e fica guardado na revisão.
+    expect(updateImportItem.mock.calls).toEqual([
+      [
+        "imp-1",
+        "padaria",
+        { description: "Café da manhã com a Amanda", notes: "Ela me devolve metade" },
+      ],
+    ]);
+
+    await user.click(await importButton("Importar 3 lançamentos"));
+
+    await waitFor(() => expect(confirmImport).toHaveBeenCalledTimes(1));
+    const [, body] = confirmImport.mock.calls[0] ?? [];
+    expect(body?.find((line) => line.id === "padaria")).toMatchObject({
+      description: "Café da manhã com a Amanda",
+      notes: "Ela me devolve metade",
+    });
+    expect(body?.find((line) => line.id === "salario")).toMatchObject({ notes: null });
+  });
+
+  it("apagar a observação de uma linha a deixa sem observação", async () => {
+    const user = userEvent.setup();
+    saved = items.map((line) =>
+      line.id === "padaria" ? { ...line, notes: "Ela me devolve metade" } : line,
+    );
+    renderReview();
+    await user.click(await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ }));
+    const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
+    const note = within(sheet).getByRole("textbox", { name: /Observação/ });
+    expect(note).toHaveValue("Ela me devolve metade");
+
+    await user.clear(note);
+    await user.click(within(sheet).getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(updateImportItem).toHaveBeenCalledWith("imp-1", "padaria", { notes: null });
+    await waitFor(() => expect(rowOf("PADARIA SÃO JOÃO")).not.toHaveTextContent("Observação"));
+  });
+
   it("quem sai da página e volta encontra a revisão como a deixou", async () => {
     const user = userEvent.setup();
     const first = renderReview();
     await user.click(await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ }));
-    const sheet = await screen.findByRole("dialog", { name: "Corrigir linha" });
+    const sheet = await screen.findByRole("dialog", { name: "Editar lançamento" });
     await user.clear(within(sheet).getByRole("textbox", { name: "Descrição" }));
     await user.type(within(sheet).getByRole("textbox", { name: "Descrição" }), "Café na padaria");
     await user.selectOptions(within(sheet).getByRole("combobox", { name: "Categoria" }), "Livros");
-    await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
+    await user.click(within(sheet).getByRole("button", { name: "Salvar alterações" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await user.click(lineBox("SALÁRIO EMPRESA"));
     await user.click(lineBox("TARIFA PACOTE"));
