@@ -278,13 +278,13 @@ async def _category(
 
 def _summary(missing: Sequence[str]) -> str:
     if not missing:
-        return "Preparei o lançamento. Confira e salve."
+        return "Preparei o lançamento. Salve como está ou ajuste antes de salvar."
     what = {
         ("account",): "não sei em qual conta ele entra",
         ("category",): "não encontrei uma categoria para ele",
         ("account", "category"): "faltam a conta e a categoria",
     }[tuple(missing)]
-    return f"Preparei o lançamento, mas {what}: você escolhe ao conferir."
+    return f"Preparei o lançamento, mas {what}: você escolhe ao ajustar."
 
 
 def _id(value: uuid.UUID | None) -> str | None:

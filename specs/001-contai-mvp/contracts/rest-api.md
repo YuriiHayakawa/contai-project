@@ -214,8 +214,10 @@ Com `kind = "transaction_proposal"`, `proposal` traz `type`, `amount_cents`, `da
 usuário escolher), `category_source` (`user_rule` quando a categoria veio de uma regra que o
 usuário ensinou, `ai` quando foi sugerida pela IA, ou nulo), `status` (`pending`, `saved` ou
 `discarded`) e `transaction_id` (o lançamento, depois de salva). O texto da mensagem é fixo, e
-o modelo é chamado uma vez só. O frontend mostra a proposta em um cartão, abre o formulário
-preenchido, salva com `POST /transactions` e `source = assistant` e marca a proposta com
+o modelo é chamado uma vez só. O frontend mostra a proposta em um cartão. Com a conta e a
+categoria definidas, "Salvar" grava a proposta como está; "Ajustar" abre o formulário
+preenchido, e com um campo em aberto só há "Ajustar". Nos dois caminhos o lançamento nasce de
+`POST /transactions` com `source = assistant`, e a proposta é marcada com
 `POST /assistant/messages/{id}/proposal/saved` (FR-066, FR-067). Uma frase sem valor não gera
 proposta: o assistente pergunta o valor (`clarification`).
 

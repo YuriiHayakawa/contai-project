@@ -261,7 +261,7 @@ export function TransactionSheet({ open, transaction, preset, onClose }: Transac
   else if (number !== null && count !== null) title = `Editar parcela ${number} de ${count}`;
   else if (transaction) title = "Editar lançamento";
   else if (preset?.type === "transfer") title = "Nova transferência";
-  else if (preset?.source === "assistant") title = "Conferir lançamento";
+  else if (preset?.source === "assistant") title = "Ajustar lançamento";
 
   return (
     <>

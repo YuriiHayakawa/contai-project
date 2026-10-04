@@ -154,9 +154,11 @@ Esperado: SC-014 (90% das respostas em até 10 segundos).
 ### 8. Lançamento por texto (história 8)
 
 1. No assistente, escreva "gastei 45 no ifood ontem no cartão": chega um cartão com o valor,
-   a data, a conta e a categoria. "Conferir e salvar" abre o formulário preenchido; nada é
-   salvo antes de confirmar nele. Depois de salvo, o cartão mostra "Lançamento salvo".
-2. Com dois cartões cadastrados, repita: a conta fica em aberto, para escolher no formulário.
+   a data, a conta e a categoria. "Salvar" grava o lançamento como está, e "Ajustar" abre o
+   formulário preenchido; nada é salvo antes de um dos dois. Depois de salvo, o cartão mostra
+   "Lançamento salvo".
+2. Com dois cartões cadastrados, repita: a conta fica em aberto, e o cartão só oferece
+   "Ajustar", para escolher a conta no formulário.
 3. Escreva "almoço 32,50": a conta é a última usada. "Descartar" não salva nada.
 
 Esperado: SC-005 (menos de 10 segundos, incluindo a confirmação).

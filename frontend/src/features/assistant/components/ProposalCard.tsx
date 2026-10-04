@@ -6,7 +6,7 @@ import { CategoryChip } from "../../../components/ui/CategoryChip";
 import { Skeleton } from "../../../components/ui/Skeleton";
 import { TextLink } from "../../../components/ui/TextLink";
 import { useToast } from "../../../components/ui/Toast";
-import { errorMessage } from "../../../lib/api-client";
+import { errorMessage, fieldErrors } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
 import { dayLabel, yearMonthOf } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
@@ -29,7 +29,7 @@ interface RowProps {
 }
 
 const TYPE_LABELS: Record<Proposal["type"], string> = { expense: "Despesa", income: "Receita" };
-const TO_CHOOSE = "Você escolhe ao conferir";
+const TO_CHOOSE = "Você escolhe ao ajustar";
 
 function Row({ label, children }: RowProps) {
   return (
@@ -42,15 +42,17 @@ function Row({ label, children }: RowProps) {
 
 /**
  * Lançamento sugerido (seção 8 do design-system.md): o valor, a data, a conta e a categoria
- * que o assistente entendeu de uma frase. "Conferir e salvar" abre o formulário preenchido, e
- * nada é salvo antes da confirmação nele (FR-067). Depois de salvo, o cartão mostra o que
- * ficou gravado e o caminho até ele.
+ * que o assistente entendeu de uma frase. Com a conta e a categoria definidas, "Salvar" grava o
+ * lançamento como está; "Ajustar" abre o formulário preenchido. Se a frase deixou a conta ou a
+ * categoria em aberto, só há "Ajustar": quem escolhe é o usuário. Nada é salvo antes de um
+ * desses dois pedidos (FR-067). Depois de salvo, o cartão mostra o que ficou gravado e o
+ * caminho até ele.
  */
 export function ProposalCard({ messageId, proposal }: ProposalCardProps) {
   const toast = useToast();
   const accounts = useAccounts();
   const categories = useCategories();
-  const { review } = useSaveProposal();
+  const { review, save, isSaving } = useSaveProposal();
   const discard = useDiscardProposal();
 
   const amount =
@@ -78,6 +80,16 @@ export function ProposalCard({ messageId, proposal }: ProposalCardProps) {
   // Uma conta ou categoria arquivada depois da proposta já não serve a um lançamento novo.
   const usableAccount = account && !account.archived ? account : undefined;
   const usableCategory = category && !category.category.archived ? category : undefined;
+  // Todos os campos obrigatórios preenchidos: o lançamento pode ser salvo direto do cartão.
+  const complete =
+    usableAccount && usableCategory
+      ? { accountId: usableAccount.id, categoryId: usableCategory.category.id }
+      : null;
+  const openForm = (): void =>
+    review(messageId, proposal, {
+      accountId: usableAccount?.id ?? null,
+      categoryId: usableCategory?.category.id ?? null,
+    });
 
   return (
     <section
@@ -134,21 +146,35 @@ export function ProposalCard({ messageId, proposal }: ProposalCardProps) {
           </TextLink>
         </div>
       ) : (
-        // No celular os dois botões não cabem lado a lado: ficam empilhados, na largura toda.
+        // No celular os botões não cabem lado a lado: ficam empilhados, na largura toda.
         <div className="mt-4 grid gap-2 sm:flex">
+          {/* Enquanto as contas e as categorias carregam, ainda não se sabe se dá para salvar. */}
+          {(complete || !ready) && (
+            <Button
+              disabled={!complete || discard.isPending}
+              loading={isSaving}
+              onClick={() => {
+                if (!complete) return;
+                save(messageId, proposal, complete, {
+                  // A recusa de um campo já diz o que fazer com ele.
+                  onError: (error) =>
+                    toast.error(Object.values(fieldErrors(error))[0] ?? errorMessage(error)),
+                });
+              }}
+            >
+              Salvar
+            </Button>
+          )}
           <Button
-            disabled={!ready || discard.isPending}
-            onClick={() =>
-              review(messageId, proposal, {
-                accountId: usableAccount?.id ?? null,
-                categoryId: usableCategory?.category.id ?? null,
-              })
-            }
+            variant={complete || !ready ? "secondary" : "primary"}
+            disabled={!ready || discard.isPending || isSaving}
+            onClick={openForm}
           >
-            Conferir e salvar
+            Ajustar
           </Button>
           <Button
             variant="ghost"
+            disabled={isSaving}
             loading={discard.isPending}
             onClick={() =>
               discard.mutate(messageId, { onError: (error) => toast.error(errorMessage(error)) })

@@ -772,7 +772,7 @@ async def test_a_phrase_about_a_purchase_becomes_a_proposal_and_nothing_is_saved
 
     assert (reply["kind"], reply["content"]) == (
         "transaction_proposal",
-        "Preparei o lançamento. Confira e salve.",
+        "Preparei o lançamento. Salve como está ou ajuste antes de salvar.",
     )
     # R$ 45,00, com a data de ontem, no cartão e com a categoria sugerida.
     assert reply["proposal"] == {
@@ -949,7 +949,7 @@ async def test_two_cards_leave_the_account_for_the_user_to_choose_in_the_form(
     assert reply["kind"] == "transaction_proposal"
     assert reply["proposal"]["account_id"] is None
     assert reply["content"] == (
-        "Preparei o lançamento, mas não sei em qual conta ele entra: você escolhe ao conferir."
+        "Preparei o lançamento, mas não sei em qual conta ele entra: você escolhe ao ajustar."
     )
 
 
