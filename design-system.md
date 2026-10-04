@@ -380,13 +380,15 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
     transferência em `--ink-muted` com ícone de setas, com o sinal da conta da linha (`−` na que
     sai, `+` na que entra) e "saiu de" ou "entrou em" nos metadados.
 - **Transferência com os dois lados na lista**: vira uma linha só, desenhada como um trajeto de
-  mapa. A descrição ocupa a largura toda; embaixo, duas paradas ligadas por um pontilhado de 2px
+  mapa. Embaixo da descrição, duas paradas ligadas por um pontilhado de 2px
   `--ink-subtle`: "Saiu de Investimento" e "Entrou em Conta Principal", em `small`
   `--ink-muted`, com o nome da conta no mesmo tom. Cada parada é um círculo de 22px com o
   ícone do tipo de conta (12px): a origem vazada (`--surface`, contorno `--border-strong`) e o
-  destino em `--primary` sobre `--primary-soft`. O valor de cada parada fica à direita em
-  `money-sm` `--ink-muted`, com `−` e `+`. O verde fica para receita: transferência não é gasto
-  nem ganho.
+  destino em `--primary` sobre `--primary-soft`. O valor aparece uma vez, à direita e no meio
+  da linha, como nos outros lançamentos, em `money-md` `--ink-muted` e sem sinal: quem diz o
+  sentido são as paradas. Abaixo de `sm`, o valor fica ao lado da descrição e as paradas usam a
+  largura toda, para os nomes das contas não serem cortados. O verde fica para receita:
+  transferência não é gasto nem ganho.
 - A linha inteira é um botão que abre o detalhe. Não há ação por deslizar.
 - Carregando: 5 linhas de esqueleto. Vazio: estado vazio. Erro: mensagem com "Tentar de novo".
 - Lista longa: carregar mais ao rolar, sempre com um botão "Carregar mais" como alternativa.
