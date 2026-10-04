@@ -63,6 +63,8 @@ TITLE_LENGTH = 80
 INVALID_CURSOR = "Use o valor de next_cursor da página anterior."
 _CURSOR_SEPARATOR = "|"
 _PROMPTS = Path(__file__).parent / "prompts"
+# A versão em uso do prompt de sistema; as anteriores ficam na pasta, como registro.
+SYSTEM_PROMPT_FILE = "system_v2.md"
 _WEEKDAYS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira")
 _WEEKEND = ("sábado", "domingo")
 _MARKER = re.compile(r"^\s*\[(esclarecimento|recusa)\]\s*", re.IGNORECASE)
@@ -88,7 +90,7 @@ _CORRECTION = (
 @cache
 def system_prompt() -> str:
     """As instruções do assistente, versionadas em arquivo."""
-    return (_PROMPTS / "system_v1.md").read_text(encoding="utf-8")
+    return (_PROMPTS / SYSTEM_PROMPT_FILE).read_text(encoding="utf-8")
 
 
 def encode_cursor(conversation: Conversation) -> str:
