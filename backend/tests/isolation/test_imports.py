@@ -214,6 +214,58 @@ async def confirm_the_import_of_another_user(context: IsolationContext) -> None:
     assert (await get_import(context.client_b, own))["status"] == "awaiting_review"
 
 
+@isolation_case("PATCH", "/api/v1/imports/{import_id}/items/{item_id}")
+async def correct_a_line_of_the_import_of_another_user(context: IsolationContext) -> None:
+    record = await _import_in_review(context, context.user_a, context.client_a)
+    [line] = record["items"]
+    category_of_a = await create_category(
+        context.client_a, name=f"Categoria {uuid.uuid4().hex[:8]}"
+    )
+    change = {"selected": False, "description": "Alterada por B"}
+
+    await _same_as_unknown(
+        context.client_b, "PATCH", f"{IMPORTS}/{record['id']}/items/{line['id']}", json=change
+    )
+
+    # Pela própria importação, B também não alcança a linha de A: é como uma que não existe.
+    own = await _import_in_review(context, context.user_b, context.client_b)
+    [own_line] = own["items"]
+    through_own = await context.client_b.patch(
+        f"{IMPORTS}/{own['id']}/items/{line['id']}", json=change
+    )
+    unknown_line = await context.client_b.patch(
+        f"{IMPORTS}/{own['id']}/items/{uuid.uuid4()}", json=change
+    )
+    assert through_own.status_code == 404, through_own.text
+    assert through_own.json()["error"] == unknown_line.json()["error"]
+
+    # Nem usa a categoria ou a conta de A na própria linha: são recusadas como as que não
+    # existem.
+    own_url = f"{IMPORTS}/{own['id']}/items/{own_line['id']}"
+    for field, of_other in (
+        ("category_id", category_of_a["id"]),
+        ("counter_account_id", record["account_id"]),
+    ):
+        refused = await context.client_b.patch(own_url, json={field: of_other})
+        unknown = await context.client_b.patch(own_url, json={field: str(uuid.uuid4())})
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"] == unknown.json()["error"]
+
+    assert (await get_import(context.client_a, record)) == record
+    assert (await get_import(context.client_b, own)) == own
+
+
+@isolation_case("PATCH", "/api/v1/imports/{import_id}/items")
+async def unmark_the_lines_of_the_import_of_another_user(context: IsolationContext) -> None:
+    record = await _import_in_review(context, context.user_a, context.client_a)
+
+    await _same_as_unknown(
+        context.client_b, "PATCH", f"{IMPORTS}/{record['id']}/items", json={"selected": False}
+    )
+
+    assert (await get_import(context.client_a, record)) == record
+
+
 @isolation_case("POST", "/api/v1/imports/{import_id}/undo")
 async def undo_the_import_of_another_user(context: IsolationContext) -> None:
     record = await _confirmed_import_of_a(context)

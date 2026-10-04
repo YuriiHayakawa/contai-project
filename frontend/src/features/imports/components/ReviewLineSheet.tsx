@@ -194,8 +194,8 @@ function LineForm({ id, line, counterAccounts, categories, onSave }: LineFormPro
 /**
  * Folha para corrigir uma linha da revisão (FR-046): tipo, valor, descrição, categoria ou a
  * outra conta, e data. Uma entrada pode ser marcada como estorno de uma compra (FR-084), e uma
- * saída, como transferência para o cartão, que é o pagamento da fatura (FR-081). Nada é salvo
- * no servidor aqui: a correção fica na revisão até a confirmação.
+ * saída, como transferência para o cartão, que é o pagamento da fatura (FR-081). Ao salvar, a
+ * correção é guardada na revisão; a linha só vira lançamento na confirmação.
  */
 export function ReviewLineSheet({
   open,

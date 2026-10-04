@@ -24,7 +24,11 @@ from app.modules.transactions.models import TransactionType, TransferDirection
 
 
 class ImportItemRead(BaseModel):
-    """Uma transação proposta, para a revisão. Nada dela está salvo ainda (FR-046)."""
+    """Uma linha da revisão: a transação proposta, com o que o usuário já corrigiu nela.
+
+    Nada dela virou transação ainda (FR-046). `type`, `amount_cents`, `date` e `description`
+    trazem o valor corrigido, quando houve correção.
+    """
 
     id: uuid.UUID
     row_index: int
@@ -41,6 +45,11 @@ class ImportItemRead(BaseModel):
     duplicate_of_id: uuid.UUID | None
     # Duplicata chega desmarcada (FR-049).
     selected_by_default: bool
+    # Como a linha está na revisão agora: marcada ou não, e a categoria e a outra conta
+    # escolhidas. Começam iguais à sugestão.
+    selected: bool
+    category_id: uuid.UUID | None
+    counter_account_id: uuid.UUID | None
     # Aviso para o usuário conferir a linha, com o que fazer; hoje, só
     # `invoice_payment_without_card`.
     warning_code: str | None
@@ -51,7 +60,9 @@ class ImportItemRead(BaseModel):
         # Com um cartão cadastrado a linha teria vindo como transferência (FR-081). Como
         # despesa, ela conta como gasto; se as compras do cartão também são lançadas, conta
         # duas vezes.
-        payment_without_card = is_invoice_payment(
+        # Quem recebeu a sugestão do cartão e preferiu tratar a linha como despesa comum
+        # (FR-081) decidiu sabendo: o aviso é só para a linha que ficou sem cartão a sugerir.
+        payment_without_card = item.suggested_counter_account_id is None and is_invoice_payment(
             TransactionType(item.type), item.description_normalized
         )
         return cls(
@@ -70,6 +81,9 @@ class ImportItemRead(BaseModel):
             duplicate_status=DuplicateStatus(item.duplicate_status),
             duplicate_of_id=item.duplicate_of_id,
             selected_by_default=item.selected_by_default,
+            selected=item.selected,
+            category_id=item.category_id,
+            counter_account_id=item.counter_account_id,
             warning_code=INVOICE_PAYMENT_WITHOUT_CARD if payment_without_card else None,
             warning_message=(
                 INVOICE_PAYMENT_WITHOUT_CARD_MESSAGE if payment_without_card else None
@@ -150,10 +164,34 @@ class ImportPage(BaseModel):
     next_cursor: str | None
 
 
+class ImportItemUpdate(BaseModel):
+    """A correção de uma linha da revisão: só os campos enviados mudam.
+
+    `category_id` e `counter_account_id` aceitam `null`, que deixa a linha sem a escolha; nos
+    outros campos, `null` é o mesmo que não enviar.
+    """
+
+    selected: bool | None = None
+    # Uma saída do extrato é despesa ou transferência; uma entrada, receita ou transferência.
+    type: TransactionType | None = None
+    amount_cents: int | None = None
+    date: dt.date | None = None
+    description: str | None = None
+    category_id: uuid.UUID | None = None
+    counter_account_id: uuid.UUID | None = None
+
+
+class ImportSelection(BaseModel):
+    """Marca (`true`) ou desmarca (`false`) todas as linhas da revisão."""
+
+    selected: bool
+
+
 class ConfirmItem(BaseModel):
     """A decisão final de uma linha da revisão.
 
-    Os campos de uma linha desmarcada não são conferidos: ela não vira transação.
+    Os campos de uma linha desmarcada não são conferidos: ela não vira transação. A exceção
+    é o tipo, que em nenhuma linha inverte o sentido do dinheiro no extrato.
     """
 
     id: uuid.UUID

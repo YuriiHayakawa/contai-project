@@ -135,7 +135,12 @@ class Import(UUIDPrimaryKey, Timestamps, Base):
 
 
 class ImportItem(UUIDPrimaryKey, Base):
-    """Uma transação proposta, à espera da revisão do usuário."""
+    """Uma transação proposta, à espera da revisão do usuário.
+
+    Tipo, valor, data e descrição começam como vieram do arquivo e guardam o que o usuário
+    corrigiu na revisão; `selected`, `category_id` e `counter_account_id` começam iguais à
+    sugestão. Assim a revisão pode ser retomada depois de sair da página.
+    """
 
     __tablename__ = "import_items"
     __table_args__ = (
@@ -186,3 +191,13 @@ class ImportItem(UUIDPrimaryKey, Base):
     )
     # Falso para `exact` e `probable`: duplicata chega desmarcada (FR-049).
     selected_by_default: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # Se a linha está marcada na revisão: só as marcadas viram transação na confirmação.
+    selected: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # A categoria e a outra conta escolhidas na revisão. A sugestão fica nos campos
+    # `suggested_*`: é comparando com ela que a confirmação sabe o que foi corrigido (FR-048).
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("categories.id", ondelete="SET NULL")
+    )
+    counter_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL")
+    )

@@ -257,7 +257,10 @@ A divergência de total é `document_total_cents != extracted_total_cents`. A di
 
 ### import_items
 
-Transações propostas, existentes só entre o processamento e a confirmação.
+Transações propostas, existentes só entre o processamento e a confirmação. Guardam também o
+que o usuário já decidiu na revisão, para ela poder ser retomada (FR-085): `type`,
+`amount_cents`, `date` e `description` recebem as correções, e a marcação, a categoria e a
+outra conta escolhidas ficam em colunas próprias, ao lado da sugestão.
 
 | Campo | Tipo | Regras |
 |-------|------|--------|
@@ -266,11 +269,11 @@ Transações propostas, existentes só entre o processamento e a confirmação.
 | `user_id` | UUID | FK |
 | `row_index` | inteiro | ordem no documento |
 | `type` | enum | `expense`, `income`, `transfer` |
-| `transfer_direction` | enum | preenchido quando sugerido como transferência |
+| `transfer_direction` | enum | preenchido quando a linha é uma transferência, sugerida ou marcada na revisão: `out` para o que sai da conta |
 | `amount_cents` | BIGINT | maior que zero |
 | `date` | DATE | |
 | `description` | texto | |
-| `description_normalized` | texto | |
+| `description_normalized` | texto | da descrição como veio do arquivo; não muda com a correção |
 | `suggested_category_id` | UUID | FK (FR-047) |
 | `category_source` | enum | `user_rule`, `ai`, `fallback`; nulo em transferência |
 | `suggested_counter_account_id` | UUID | cartão ou conta sugerida em pagamento de fatura (FR-081) |
@@ -279,6 +282,9 @@ Transações propostas, existentes só entre o processamento e a confirmação.
 | `duplicate_status` | enum | `none`, `exact`, `probable` (FR-049) |
 | `duplicate_of_id` | UUID | transação existente que motivou o aviso |
 | `selected_by_default` | booleano | falso para `exact` e `probable` |
+| `selected` | booleano | se a linha está marcada na revisão; começa igual a `selected_by_default` |
+| `category_id` | UUID | FK, `ON DELETE SET NULL`; a categoria escolhida; começa igual a `suggested_category_id` |
+| `counter_account_id` | UUID | FK, `ON DELETE SET NULL`; a outra conta da transferência; começa igual a `suggested_counter_account_id` |
 
 ### import_templates
 

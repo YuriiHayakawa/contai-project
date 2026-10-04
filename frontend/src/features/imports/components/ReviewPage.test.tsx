@@ -20,6 +20,8 @@ vi.mock("../../categories/services/categoriesService");
 
 const getImport = vi.mocked(importsService.getImport);
 const confirmImport = vi.mocked(importsService.confirmImport);
+const updateImportItem = vi.mocked(importsService.updateImportItem);
+const selectAllImportItems = vi.mocked(importsService.selectAllImportItems);
 const listAccounts = vi.mocked(accountsService.listAccounts);
 const listCategories = vi.mocked(categoriesService.listCategories);
 
@@ -60,8 +62,9 @@ const categories: CategoryTree = {
   income: [category("cat-salario", "Salário", "income")],
 };
 
+/** Uma linha como o servidor a propõe: marcada e com a categoria sugerida. */
 function item(id: string, overrides: Partial<ImportItem>): ImportItem {
-  return {
+  const proposed: ImportItem = {
     id,
     row_index: 0,
     type: "expense",
@@ -75,9 +78,18 @@ function item(id: string, overrides: Partial<ImportItem>): ImportItem {
     duplicate_status: "none",
     duplicate_of_id: null,
     selected_by_default: true,
+    selected: true,
+    category_id: null,
+    counter_account_id: null,
     warning_code: null,
     warning_message: null,
     ...overrides,
+  };
+  return {
+    ...proposed,
+    selected: proposed.selected_by_default,
+    category_id: proposed.suggested_category_id,
+    counter_account_id: proposed.suggested_counter_account_id,
   };
 }
 
@@ -122,6 +134,9 @@ const items: ImportItem[] = [
   }),
 ];
 
+/** As linhas que o servidor guarda; as correções salvas pela tela mudam o que está aqui. */
+let saved: ImportItem[];
+
 function importOf(overrides: Partial<Import> = {}): Import {
   return {
     id: "imp-1",
@@ -132,14 +147,14 @@ function importOf(overrides: Partial<Import> = {}): Import {
     status: "awaiting_review",
     error_code: null,
     error_message: null,
-    item_count: items.length,
+    item_count: saved.length,
     imported_count: 0,
     created_at: "2026-10-03T15:00:00Z",
     completed_at: null,
     undone_at: null,
     expires_at: "2026-10-10T15:00:00Z",
     already_imported_at: null,
-    items,
+    items: saved,
     total_check: null,
     balance_check: {
       bank_balance_cents: 460_410,
@@ -162,14 +177,14 @@ function renderReview() {
     { initialEntries: [importReviewPath("imp-1")] },
   );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const view = render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <RouterProvider router={router} />
       </ToastProvider>
     </QueryClientProvider>,
   );
-  return router;
+  return { router, unmount: view.unmount };
 }
 
 const rowOf = (description: string): HTMLElement => {
@@ -181,9 +196,32 @@ const rowOf = (description: string): HTMLElement => {
 const lineBox = (description: string): HTMLElement =>
   within(rowOf(description)).getByRole("checkbox");
 
+/** O botão de importar fica em espera enquanto uma alteração ainda está sendo salva. */
+const importButton = async (name: string): Promise<HTMLElement> => {
+  const button = await screen.findByRole("button", { name });
+  await waitFor(() => expect(button).not.toHaveAttribute("aria-busy"));
+  return button;
+};
+
 beforeEach(() => {
   vi.resetAllMocks();
-  getImport.mockResolvedValue(importOf());
+  saved = items;
+  getImport.mockImplementation(() => Promise.resolve(importOf()));
+  updateImportItem.mockImplementation((_, id, patch) => {
+    saved = saved.map((line) => {
+      if (line.id !== id) return line;
+      const next = { ...line, ...patch };
+      // A despesa marcada como transferência sai da conta; de volta a despesa, perde o sentido.
+      if (patch.type) next.transfer_direction = patch.type === "transfer" ? "out" : null;
+      return next;
+    });
+    const line = saved.find((candidate) => candidate.id === id);
+    return line ? Promise.resolve(line) : Promise.reject(new Error("linha desconhecida"));
+  });
+  selectAllImportItems.mockImplementation((_, selected) => {
+    saved = saved.map((line) => ({ ...line, selected }));
+    return Promise.resolve();
+  });
   listAccounts.mockResolvedValue([
     account("acc-conta", "Conta Principal"),
     account("acc-cartao", "Cartão Verde", "credit_card"),
@@ -208,9 +246,11 @@ describe("ReviewPage", () => {
     expect(screen.getByText("3 de 5 marcadas")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Importar 3 lançamentos" })).toBeInTheDocument();
     expect(screen.getByText(/disponível por 7 dias, até 10 de out\. às 12:00/)).toBeVisible();
+    // Abrir a revisão não grava nada.
+    expect(updateImportItem).not.toHaveBeenCalled();
   });
 
-  it("marcar todas e desmarcar uma linha atualizam a contagem e o saldo", async () => {
+  it("marcar todas e desmarcar uma linha atualizam a contagem e o saldo, e são salvas", async () => {
     const user = userEvent.setup();
     renderReview();
     await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ });
@@ -218,7 +258,7 @@ describe("ReviewPage", () => {
 
     await user.click(screen.getByRole("checkbox", { name: "Marcar todas" }));
 
-    expect(screen.getByText("5 de 5 marcadas")).toBeInTheDocument();
+    expect(await screen.findByText("5 de 5 marcadas")).toBeInTheDocument();
     // As duas duplicatas entraram na conta: o saldo deixa de bater, e a tela mostra os dois.
     const warning = screen.getByText(/O saldo não bate com o do banco/);
     expect(warning).toHaveTextContent("Em 30 de set., o banco informa R$ 4.604,10");
@@ -226,8 +266,18 @@ describe("ReviewPage", () => {
 
     await user.click(lineBox("TARIFA PACOTE"));
 
-    expect(screen.getByText("4 de 5 marcadas")).toBeInTheDocument();
+    expect(await screen.findByText("4 de 5 marcadas")).toBeInTheDocument();
     expect(rowOf("TARIFA PACOTE")).toHaveTextContent("Não será importada");
+    await waitFor(() =>
+      expect(updateImportItem).toHaveBeenCalledWith("imp-1", "tarifa", { selected: false }),
+    );
+    expect(selectAllImportItems).toHaveBeenCalledWith("imp-1", true);
+    expect(saved.filter((line) => line.selected).map((line) => line.id)).toEqual([
+      "salario",
+      "padaria",
+      "mercado",
+      "fatura",
+    ]);
   });
 
   it("avisa do pagamento de fatura sem cartão e deixa marcar a linha como transferência", async () => {
@@ -246,17 +296,24 @@ describe("ReviewPage", () => {
     await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(rowOf("PAGAMENTO FATURA CARTÃO")).toHaveTextContent("Transferência para Cartão Verde");
+    await waitFor(() =>
+      expect(rowOf("PAGAMENTO FATURA CARTÃO")).toHaveTextContent("Transferência para Cartão Verde"),
+    );
     expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
     expect(rowOf("PAGAMENTO FATURA CARTÃO")).not.toHaveTextContent("Parece pagamento de fatura");
+    // Só o que mudou vai ao servidor.
+    expect(updateImportItem).toHaveBeenCalledWith("imp-1", "fatura", {
+      type: "transfer",
+      counter_account_id: "acc-cartao",
+    });
   });
 
   it("uma entrada pode ser marcada como estorno, na categoria da compra, e vai assim na confirmação", async () => {
     const user = userEvent.setup();
-    confirmImport.mockResolvedValue(
-      importOf({ status: "completed", imported_count: 3, items: null }),
+    confirmImport.mockImplementation(() =>
+      Promise.resolve(importOf({ status: "completed", imported_count: 3, items: null })),
     );
-    const router = renderReview();
+    const { router } = renderReview();
 
     await user.click(await screen.findByRole("button", { name: /SALÁRIO EMPRESA/ }));
     const sheet = await screen.findByRole("dialog", { name: "Corrigir linha" });
@@ -269,13 +326,18 @@ describe("ReviewPage", () => {
     expect(categoryField).toHaveValue("");
     await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
     expect(await within(sheet).findByText("Escolha uma categoria.")).toBeVisible();
+    expect(updateImportItem).not.toHaveBeenCalled();
 
     await user.selectOptions(categoryField, "Livros");
     await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(rowOf("SALÁRIO EMPRESA")).toHaveTextContent("Estorno · Livros");
+    await waitFor(() => expect(rowOf("SALÁRIO EMPRESA")).toHaveTextContent("Estorno · Livros"));
+    // O estorno é salvo como a mesma receita, agora na categoria de despesa da compra.
+    expect(updateImportItem.mock.calls).toEqual([
+      ["imp-1", "salario", { category_id: "cat-livros" }],
+    ]);
 
-    await user.click(screen.getByRole("button", { name: "Importar 3 lançamentos" }));
+    await user.click(await importButton("Importar 3 lançamentos"));
 
     await waitFor(() => expect(router.state.location.pathname).toBe(paths.imports));
     expect(confirmImport).toHaveBeenCalledTimes(1);
@@ -301,6 +363,58 @@ describe("ReviewPage", () => {
     expect(
       await screen.findByText("3 lançamentos importados em Conta Principal."),
     ).toBeInTheDocument();
+  });
+
+  it("quem sai da página e volta encontra a revisão como a deixou", async () => {
+    const user = userEvent.setup();
+    const first = renderReview();
+    await user.click(await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ }));
+    const sheet = await screen.findByRole("dialog", { name: "Corrigir linha" });
+    await user.clear(within(sheet).getByRole("textbox", { name: "Descrição" }));
+    await user.type(within(sheet).getByRole("textbox", { name: "Descrição" }), "Café na padaria");
+    await user.selectOptions(within(sheet).getByRole("combobox", { name: "Categoria" }), "Livros");
+    await user.click(within(sheet).getByRole("button", { name: "Salvar linha" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await user.click(lineBox("SALÁRIO EMPRESA"));
+    await user.click(lineBox("TARIFA PACOTE"));
+    await importButton("Importar 3 lançamentos");
+    expect(updateImportItem).toHaveBeenCalledTimes(3);
+
+    // Sai da página e abre de novo, sem nada na memória: vale o que o servidor guardou.
+    first.unmount();
+    renderReview();
+
+    expect(await screen.findByRole("button", { name: /Café na padaria/ })).toBeVisible();
+    expect(rowOf("Café na padaria")).toHaveTextContent("Livros");
+    expect(lineBox("Café na padaria")).toBeChecked();
+    expect(lineBox("SALÁRIO EMPRESA")).not.toBeChecked();
+    expect(rowOf("SALÁRIO EMPRESA")).toHaveTextContent("Não será importada");
+    // A provável duplicata que o usuário marcou continua marcada, com o selo.
+    expect(lineBox("TARIFA PACOTE")).toBeChecked();
+    expect(rowOf("TARIFA PACOTE")).toHaveTextContent("Possível duplicata");
+    expect(screen.getByText("3 de 5 marcadas")).toBeInTheDocument();
+    expect(screen.getByText(/Você pode sair e continuar esta revisão depois/)).toBeVisible();
+  });
+
+  it("alteração que não foi salva: a linha volta ao que estava e a tela diz o que fazer", async () => {
+    const user = userEvent.setup();
+    updateImportItem.mockRejectedValue(
+      new ApiError({
+        status: 0,
+        code: "network_error",
+        message: "Não foi possível falar com o servidor. Confira sua conexão e tente de novo.",
+      }),
+    );
+    renderReview();
+    await screen.findByRole("button", { name: /PADARIA SÃO JOÃO/ });
+
+    await user.click(lineBox("PADARIA SÃO JOÃO"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "A alteração não foi salva. Não foi possível falar com o servidor. Confira sua conexão e tente de novo.",
+    );
+    await waitFor(() => expect(lineBox("PADARIA SÃO JOÃO")).toBeChecked());
+    expect(screen.getByText("3 de 5 marcadas")).toBeInTheDocument();
   });
 
   it("linha recusada pelo servidor fica destacada, com o que fazer", async () => {

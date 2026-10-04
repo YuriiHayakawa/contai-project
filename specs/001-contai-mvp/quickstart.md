@@ -106,7 +106,8 @@ de dados de teste).
 
 Os arquivos de exemplo ficam em `backend/tests/fixtures/`.
 
-1. Importe um OFX, corrija uma categoria, desmarque duas linhas e confirme.
+1. Importe um OFX, corrija uma categoria e desmarque duas linhas. Recarregue a página: a
+   revisão volta como você a deixou. Confirme.
 2. Importe o mesmo OFX de novo e confirme o que vier marcado: nenhuma transação nova (SC-008).
 3. Lance um gasto à mão e importe um extrato que o contém: a linha vem como possível duplicata e
    desmarcada.

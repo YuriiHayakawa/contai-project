@@ -1,6 +1,13 @@
 // Chamadas HTTP de importações. Só os hooks desta feature chamam este módulo.
 import { api } from "../../../lib/api-client";
-import type { ColumnMapping, ConfirmItem, Import, ImportPage } from "../types";
+import type {
+  ColumnMapping,
+  ConfirmItem,
+  Import,
+  ImportItem,
+  ImportItemPatch,
+  ImportPage,
+} from "../types";
 
 /** Envia o arquivo de um extrato para a conta escolhida; a leitura segue em segundo plano. */
 export function uploadImport(file: File, accountId: string): Promise<Import> {
@@ -26,7 +33,21 @@ export function submitMapping(id: string, mapping: ColumnMapping): Promise<Impor
   return api.post<Import>(`/imports/${id}/mapping`, mapping);
 }
 
-/** Salva as linhas marcadas, com as correções: tudo de uma vez, ou nada. */
+/** Guarda a correção de uma linha da revisão, para ela poder ser retomada depois. */
+export function updateImportItem(
+  id: string,
+  itemId: string,
+  patch: ImportItemPatch,
+): Promise<ImportItem> {
+  return api.patch<ImportItem>(`/imports/${id}/items/${itemId}`, patch);
+}
+
+/** Marca ou desmarca todas as linhas da revisão de uma vez. */
+export async function selectAllImportItems(id: string, selected: boolean): Promise<void> {
+  await api.patch<undefined>(`/imports/${id}/items`, { selected });
+}
+
+/** Transforma as linhas marcadas em lançamentos, com as correções: tudo de uma vez, ou nada. */
 export function confirmImport(id: string, items: ConfirmItem[]): Promise<Import> {
   return api.post<Import>(`/imports/${id}/confirm`, { items });
 }
