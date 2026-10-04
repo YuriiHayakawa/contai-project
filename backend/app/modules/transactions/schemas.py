@@ -20,6 +20,9 @@ Notes = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)
 AmountCents = Annotated[int, Field(gt=0, le=9_999_999_999_99)]
 # Transferências têm rota própria: aqui só entram despesa e receita.
 EntryType = Literal[TransactionType.EXPENSE, TransactionType.INCOME]
+# De onde um lançamento novo pode vir pela rota: digitado, ou conferido a partir de uma proposta
+# do assistente (FR-066). `import` é só da importação.
+EntrySource = Literal[TransactionSource.MANUAL, TransactionSource.ASSISTANT]
 
 
 class TransactionCreate(BaseModel):
@@ -30,6 +33,7 @@ class TransactionCreate(BaseModel):
     account_id: uuid.UUID
     category_id: uuid.UUID
     notes: Notes | None = None
+    source: EntrySource = TransactionSource.MANUAL
 
 
 class InstallmentPurchaseCreate(BaseModel):

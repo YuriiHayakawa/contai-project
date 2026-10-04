@@ -15,7 +15,12 @@ from app.modules.accounts.repository import AccountRepository
 from app.modules.categories.models import Category, CategoryKind
 from app.modules.categories.repository import CategoryRepository
 from app.modules.categorization.service import CategorizationService
-from app.modules.transactions.models import Transaction, TransactionType, TransferDirection
+from app.modules.transactions.models import (
+    Transaction,
+    TransactionSource,
+    TransactionType,
+    TransferDirection,
+)
 from app.modules.transactions.normalize import fingerprint, normalize_description
 from app.modules.transactions.repository import (
     PageCursor,
@@ -211,6 +216,7 @@ class TransactionService:
         installment_group_id: uuid.UUID | None = None,
         installment_number: int | None = None,
         installment_count: int | None = None,
+        source: TransactionSource = TransactionSource.MANUAL,
     ) -> Transaction:
         normalized = normalize_description(description)
         return await self._transactions.create(
@@ -236,6 +242,7 @@ class TransactionService:
             installment_group_id=installment_group_id,
             installment_number=installment_number,
             installment_count=installment_count,
+            source=source,
         )
 
     # ---------- criar
@@ -252,6 +259,7 @@ class TransactionService:
             description=data.description,
             notes=data.notes,
             category_id=category.id,
+            source=data.source,
         )
         # A categoria escolhida vale para os próximos lançamentos com esta descrição (FR-048).
         await self._categorization.learn(

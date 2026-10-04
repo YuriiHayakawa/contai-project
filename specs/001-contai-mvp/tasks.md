@@ -409,16 +409,17 @@ confirmar; as transações aparecem na lista
 
 ### Tests for User Story 8 ⚠️
 
-- [ ] T180 [P] [US8] Escrever `backend/tests/unit/test_propose_transaction.py`: valor em texto (`"45"`, `"45,90"`) convertido com `Decimal`; `today`, `yesterday` e data explícita resolvidos em Brasília; conta e categoria encontradas pelas dicas; dois cartões deixam a conta em aberto; frase sem valor devolve o que falta; nada é gravado
-- [ ] T181 [P] [US8] Acrescentar em `backend/tests/integration/test_assistant.py` os casos de lançamento por texto: mensagem `transaction_proposal`, nenhuma transação criada antes da confirmação, uso contado como pergunta e a proposta marcada como salva
-- [ ] T182 [P] [US8] Escrever `frontend/src/features/assistant/components/ProposalCard.test.tsx`: mostra valor, data, conta e categoria; "Conferir e salvar" abre o formulário preenchido; nada é salvo antes da confirmação; "Descartar" remove a proposta; depois de salvo mostra "Lançamento salvo"
+- [X] T180 [P] [US8] Escrever `backend/tests/unit/test_propose_transaction.py`: valor em texto (`"45"`, `"45,90"`) convertido com `Decimal`; `today`, `yesterday` e data explícita resolvidos em Brasília; conta e categoria encontradas pelas dicas; dois cartões deixam a conta em aberto; frase sem valor devolve o que falta; nada é gravado
+- [X] T181 [P] [US8] Acrescentar em `backend/tests/integration/test_assistant.py` os casos de lançamento por texto: mensagem `transaction_proposal`, nenhuma transação criada antes da confirmação, uso contado como pergunta e a proposta marcada como salva
+- [X] T182 [P] [US8] Escrever `frontend/src/features/assistant/components/ProposalCard.test.tsx`: mostra valor, data, conta e categoria; "Conferir e salvar" abre o formulário preenchido; nada é salvo antes da confirmação; "Descartar" remove a proposta; depois de salvo mostra "Lançamento salvo"
 
 ### Implementation for User Story 8
 
-- [ ] T183 [US8] Implementar `backend/app/modules/assistant/tools/propose.py` (`propose_transaction`, sem gravação) e tratar o tipo `transaction_proposal` em `backend/app/modules/assistant/service.py`
-- [ ] T184 [US8] Implementar `POST /assistant/messages/{id}/proposal/saved` em `backend/app/modules/assistant/router.py` e `service.py`: marca a proposta como salva com o id de uma transação do próprio usuário; registrar o caso de isolamento
-- [ ] T185 [P] [US8] Implementar `frontend/src/features/assistant/components/ProposalCard.tsx` conforme a seção 8 do `design-system.md`: valor, data, conta e categoria, "Conferir e salvar" e "Descartar"; depois de salvo, mostra "Lançamento salvo" com o link
-- [ ] T186 [US8] Abrir `frontend/src/features/transactions/components/TransactionForm.tsx` preenchido a partir da proposta, salvar com `source = assistant` e marcar a proposta como salva, em `frontend/src/features/assistant/hooks/useSaveProposal.ts`
+- [X] T183 [US8] Implementar `backend/app/modules/assistant/tools/propose.py` (`propose_transaction`, sem gravação) e tratar o tipo `transaction_proposal` em `backend/app/modules/assistant/service.py`
+- [X] T184 [US8] Implementar `POST /assistant/messages/{id}/proposal/saved` em `backend/app/modules/assistant/router.py` e `service.py`: marca a proposta como salva com o id de uma transação do próprio usuário; registrar o caso de isolamento
+- [X] T185 [P] [US8] Implementar `frontend/src/features/assistant/components/ProposalCard.tsx` conforme a seção 8 do `design-system.md`: valor, data, conta e categoria, "Conferir e salvar" e "Descartar"; depois de salvo, mostra "Lançamento salvo" com o link
+- [X] T186 [US8] Abrir `frontend/src/features/transactions/components/TransactionForm.tsx` preenchido a partir da proposta, salvar com `source = assistant` e marcar a proposta como salva, em `frontend/src/features/assistant/hooks/useSaveProposal.ts`
+- [X] T235 [US8] Completar o lançamento por texto: prompt de sistema `backend/app/modules/assistant/prompts/system_v3.md`, em uso por `SYSTEM_PROMPT_FILE` (quando chamar `propose_transaction`, valor copiado como escrito, conta só quando a frase a diz); a proposta encerra a pergunta com texto fixo, em uma chamada só ao modelo, registrada como `text_entry`; categoria pelas regras aprendidas antes da dica do modelo (`CategorizationService.learned`) e última conta usada (`TransactionRepository.last_used_account_id`); `source` (`manual` ou `assistant`) em `POST /transactions`; `status` e `transaction_id` na proposta e a rota `POST /assistant/messages/{id}/proposal/discarded`, com o caso de isolamento; contratos, modelo de dados e quickstart atualizados
 
 **Checkpoint**: SC-005 (por texto, em menos de 10 segundos) conferido com o provedor real
 

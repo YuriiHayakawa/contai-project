@@ -56,3 +56,18 @@ export function deleteConversation(id: string): Promise<void> {
 export function deleteAllConversations(): Promise<void> {
   return api.delete("/assistant/conversations");
 }
+
+/**
+ * Guarda na proposta qual lançamento o usuário salvou a partir dela. O lançamento em si é
+ * criado pelo formulário, depois da conferência.
+ */
+export function markProposalSaved(messageId: string, transactionId: string): Promise<void> {
+  return api.post(`/assistant/messages/${messageId}/proposal/saved`, {
+    transaction_id: transactionId,
+  });
+}
+
+/** Descarta uma proposta de lançamento; nada é salvo. */
+export function discardProposal(messageId: string): Promise<void> {
+  return api.post(`/assistant/messages/${messageId}/proposal/discarded`);
+}

@@ -15,6 +15,7 @@ from app.modules.assistant.schemas import (
     ConversationRead,
     MessageCreate,
     MessageRead,
+    ProposalSaved,
     SuggestionList,
     UsageRead,
 )
@@ -133,3 +134,33 @@ async def ask(
     service: AssistantServiceDep,
 ) -> MessageRead:
     return await service.ask(current.id, conversation_id, body.content)
+
+
+@router.post(
+    "/messages/{message_id}/proposal/saved",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Marcar uma proposta de lançamento como salva",
+    description=(
+        "O lançamento é criado pelo próprio usuário, em `POST /transactions`, depois de conferir "
+        "a proposta. Esta rota só guarda na proposta qual lançamento foi salvo a partir dela."
+    ),
+)
+async def mark_proposal_saved(
+    message_id: uuid.UUID,
+    body: ProposalSaved,
+    current: CurrentUserDep,
+    service: AssistantServiceDep,
+) -> None:
+    await service.mark_proposal_saved(current.id, message_id, body.transaction_id)
+
+
+@router.post(
+    "/messages/{message_id}/proposal/discarded",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Descartar uma proposta de lançamento",
+    description="Nada é salvo. Uma proposta que já virou lançamento continua como salva.",
+)
+async def discard_proposal(
+    message_id: uuid.UUID, current: CurrentUserDep, service: AssistantServiceDep
+) -> None:
+    await service.discard_proposal(current.id, message_id)

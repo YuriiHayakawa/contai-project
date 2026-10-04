@@ -4,7 +4,8 @@
 
 ## Regras comuns
 
-- Todas as ferramentas são somente leitura. Nenhuma grava dados.
+- Todas as ferramentas são somente leitura. Nenhuma grava dados: nem `propose_transaction`,
+  que só monta uma proposta para o usuário conferir.
 - O `user_id` nunca é parâmetro: o backend o injeta a partir da sessão autenticada.
 - Os parâmetros são validados por schemas Pydantic. Parâmetro inválido devolve ao modelo um erro
   descritivo, e não uma exceção.
@@ -49,9 +50,27 @@ os números do assistente iguais aos do painel quando há lançamentos de data f
 | `get_card_invoices` | `account_ids` | por cartão: fatura atual e parcelas futuras por mês e no total | "Quanto ainda tenho de parcelas no cartão?" |
 | `propose_transaction` | `type`, `amount` (texto, por exemplo `"45"` ou `"45,90"`), `date_reference` (`today`, `yesterday` ou data explícita), `description`, `account_hint`, `category_hint` | proposta com conta e categoria resolvidas pelo backend, ou a lista do que falta | "gastei 45 no ifood ontem no cartão" |
 
-`propose_transaction` não grava nada: o backend converte o valor com `Decimal`, resolve a data,
-procura a conta e a categoria pelas dicas e devolve a proposta, que o usuário confirma no
-formulário.
+`propose_transaction` não grava nada: nem lançamento, nem regra de categoria. O backend monta
+a proposta, que o usuário confirma no formulário:
+
+- **Valor**: convertido com `Decimal`. Sem valor, a ferramenta devolve `missing: ["amount"]` e
+  o modelo pergunta qual foi; um valor que não se lê volta como erro descritivo.
+- **Data**: `today`, `yesterday` ou uma data explícita (`AAAA-MM-DD`, `DD/MM` ou `DD/MM/AAAA`),
+  a partir do dia de hoje em Brasília. Sem `date_reference`, hoje.
+- **Conta**: a dica vale pelo nome da conta, pelo nome da instituição ou pelo tipo ("cartão",
+  "poupança", "débito"). Se duas contas servem (dois cartões para "no cartão"), ou se a frase
+  cita uma conta que o usuário não tem, a conta fica em aberto. Sem dica, vale a última conta
+  usada: a conta ativa do lançamento criado por último, sem contar transferências; em um
+  recebimento, a última que não é cartão de crédito. Uma dica que só repete a descrição ("de
+  um freela") não é uma conta.
+- **Categoria**: primeiro a regra de categoria da descrição normalizada (FR-048), do usuário ou
+  a sugestão da IA já guardada; só sem regra vale a `category_hint` do modelo, pelo nome ou
+  pelo nome completo (`Categoria > Subcategoria`), do tipo do lançamento. Sem nenhuma das
+  duas, a categoria fica em aberto. A categoria não gera outra chamada à IA.
+
+Quando a ferramenta devolve uma proposta, ela já é a resposta: o backend grava a mensagem
+`transaction_proposal` com um texto fixo e não chama o modelo de novo. O uso é registrado como
+`text_entry` e conta como uma pergunta no limite do dia.
 
 ## Resposta final
 

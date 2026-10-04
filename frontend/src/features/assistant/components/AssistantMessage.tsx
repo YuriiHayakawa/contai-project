@@ -1,5 +1,6 @@
 import { cn } from "../../../lib/cn";
 import type { ChatMessage } from "../types";
+import { ProposalCard } from "./ProposalCard";
 import { SourceTransactions } from "./SourceTransactions";
 
 export interface AssistantMessageProps {
@@ -58,7 +59,8 @@ function AssistantLabel() {
 /**
  * Resposta do assistente (seção 8 do design-system.md): sem balão, escrita direto sobre o
  * fundo. O valor principal recebe o marca-texto, um só por mensagem; os demais valores usam a
- * classe `money`. Abaixo vêm as transações que compõem o número.
+ * classe `money`. Abaixo vêm as transações que compõem o número ou, no lançamento por texto, a
+ * proposta para conferir.
  */
 export function AssistantMessage({ message, fresh = false }: AssistantMessageProps) {
   return (
@@ -92,6 +94,7 @@ export function AssistantMessage({ message, fresh = false }: AssistantMessagePro
           totalCount={message.transactions_total_count}
         />
       )}
+      {message.proposal && <ProposalCard messageId={message.id} proposal={message.proposal} />}
     </div>
   );
 }

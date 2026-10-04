@@ -1,6 +1,6 @@
 // Tipos das rotas do Assistente (contracts/rest-api.md). Os nomes dos campos são os da API.
 import type { ISODate } from "../../lib/dates";
-import type { TransactionType } from "../transactions/types";
+import type { EntryType, TransactionType } from "../transactions/types";
 
 export type MessageRole = "user" | "assistant";
 
@@ -25,6 +25,31 @@ export interface SourceTransaction {
   amount_cents: number;
 }
 
+/**
+ * - `pending`: à espera; nada foi salvo.
+ * - `saved`: o usuário conferiu e salvou; `transaction_id` é o lançamento.
+ * - `discarded`: o usuário descartou a proposta.
+ */
+export type ProposalStatus = "pending" | "saved" | "discarded";
+
+/**
+ * Transação proposta a partir de uma frase (FR-066). Nada dela é salvo antes de o usuário
+ * conferir no formulário (FR-067). Depois de salva, os campos são os do lançamento gravado.
+ */
+export interface Proposal {
+  type: EntryType;
+  amount_cents: number;
+  date: ISODate;
+  description: string;
+  /** Nulas quando a frase não deixou claro: o usuário escolhe ao conferir. */
+  account_id: string | null;
+  category_id: string | null;
+  /** De onde veio a categoria: de uma regra que o usuário ensinou ou de uma sugestão da IA. */
+  category_source: "user_rule" | "ai" | null;
+  status: ProposalStatus;
+  transaction_id: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -36,7 +61,8 @@ export interface ChatMessage {
   transactions: SourceTransaction[];
   /** Quantas transações compõem a resposta ao todo. */
   transactions_total_count: number;
-  proposal: Record<string, unknown> | null;
+  /** Só em `transaction_proposal`. */
+  proposal: Proposal | null;
   created_at: string;
 }
 

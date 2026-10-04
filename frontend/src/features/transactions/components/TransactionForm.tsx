@@ -109,10 +109,14 @@ const installmentOptions: SelectOption[] = [
 const isCard = (account: Account | undefined): boolean => account?.type === "credit_card";
 
 /** Um estorno é uma receita lançada em categoria de despesa: abate o gasto da categoria. */
-function isRefund(transaction: Transaction | undefined, categories: CategoryTree): boolean {
-  if (transaction?.type !== "income") return false;
+function isRefund(
+  type: TransactionType | undefined,
+  categoryId: string | null | undefined,
+  categories: CategoryTree,
+): boolean {
+  if (type !== "income") return false;
   return categoryOptions(categories, "expense", { includeArchived: true }).some(
-    ({ category }) => category.id === transaction.category_id,
+    ({ category }) => category.id === categoryId,
   );
 }
 
@@ -155,12 +159,13 @@ function initialValues(
     type,
     amountCents: preset?.amountCents ?? 0,
     description: preset?.description ?? (type === "transfer" ? TRANSFER_DESCRIPTION : ""),
-    categoryId: "",
-    accountId: account?.id ?? "",
+    categoryId: preset?.categoryId ?? "",
+    // Uma proposta sem conta definida deixa o campo em aberto: quem escolhe é o usuário.
+    accountId: preset?.accountId === null ? "" : (preset?.accountId ?? account?.id ?? ""),
     installments: "1",
     fromAccountId: source ?? "",
     toAccountId: preset?.toAccountId ?? "",
-    date: today(),
+    date: preset?.date ?? today(),
     notes: "",
   };
 }
@@ -268,7 +273,11 @@ export function TransactionForm({
 }: TransactionFormProps) {
   const amountId = useId();
   const [formError, setFormError] = useState<string | null>(null);
-  const [refund, setRefund] = useState(() => isRefund(transaction, categories));
+  const [refund, setRefund] = useState(() =>
+    transaction
+      ? isRefund(transaction.type, transaction.category_id, categories)
+      : isRefund(preset?.type, preset?.categoryId, categories),
+  );
   const {
     register: field,
     control,
@@ -395,6 +404,7 @@ export function TransactionForm({
           account_id: values.accountId,
           category_id: values.categoryId,
           notes,
+          source: preset?.source,
         },
       };
     }
@@ -540,6 +550,7 @@ export function TransactionForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <Select
               label="Conta"
+              placeholder={preset?.accountId === null ? "Escolha uma conta" : undefined}
               options={accountOptions([transaction?.account_id ?? ""])}
               error={errors.accountId?.message}
               {...accountField}

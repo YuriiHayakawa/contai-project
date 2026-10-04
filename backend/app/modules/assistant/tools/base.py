@@ -53,6 +53,8 @@ class ToolResult:
     # Frase pronta com os números, para a resposta de reserva.
     summary: str = ""
     is_error: bool = False
+    # Só no lançamento por texto: a transação proposta, que o usuário confere antes de salvar.
+    proposal: dict[str, Any] | None = None
 
 
 class ToolError(Exception):

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import ColumnElement, delete, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.accounts.models import Account, AccountType
 from app.modules.transactions.models import (
     Transaction,
     TransactionSource,
@@ -155,6 +156,30 @@ class TransactionRepository:
             select(Transaction).where(
                 Transaction.id == transaction_id, Transaction.user_id == user_id
             )
+        )
+        return result.scalar_one_or_none()
+
+    async def last_used_account_id(
+        self, user_id: uuid.UUID, *, include_cards: bool = True
+    ) -> uuid.UUID | None:
+        """A conta ativa do lançamento criado por último, sem contar transferências.
+
+        Com `include_cards=False`, os cartões de crédito ficam de fora: é a última conta em que
+        faz sentido entrar dinheiro.
+        """
+        conditions = [
+            Transaction.user_id == user_id,
+            Transaction.type != TransactionType.TRANSFER,
+            Account.archived_at.is_(None),
+        ]
+        if not include_cards:
+            conditions.append(Account.type != AccountType.CREDIT_CARD)
+        result = await self._session.execute(
+            select(Transaction.account_id)
+            .join(Account, Account.id == Transaction.account_id)
+            .where(*conditions)
+            .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
 

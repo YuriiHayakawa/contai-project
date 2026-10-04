@@ -75,6 +75,7 @@ def test_every_tool_of_the_contract_is_offered_and_none_takes_a_user_id() -> Non
         "search_transactions",
         "get_account_balances",
         "get_card_invoices",
+        "propose_transaction",
     }
     for spec in specs.values():
         assert spec.description
