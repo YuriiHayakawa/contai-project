@@ -335,7 +335,7 @@ arquivada são ignoradas.
 | `transaction_ids` | JSONB | ids das transações que compõem a resposta, até 50, vindos das ferramentas (FR-063) |
 | `transactions_total_count` | inteiro | quantas transações compõem a resposta ao todo |
 | `tool_calls` | JSONB | nome e parâmetros das ferramentas chamadas, para dar contexto às continuações (FR-064); sem resultados |
-| `proposal` | JSONB | transação proposta no lançamento por texto (FR-066) |
+| `proposal` | JSONB | transação proposta no lançamento por texto (FR-066): `type`, `amount_cents`, `date`, `description`, `account_id`, `category_id`, `category_source`, `status` (`pending`, `saved`, `discarded`) e `transaction_id` |
 
 ### ai_usage
 

@@ -2,12 +2,13 @@
 
 import datetime as dt
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints
 
-from app.modules.assistant.models import MessageKind, MessageRole
+from app.modules.assistant.models import MessageKind, MessageRole, ProposalStatus
 from app.modules.transactions.models import TransactionType
+from app.modules.transactions.schemas import EntryType
 
 MAX_QUESTION_LENGTH = 1_000
 
@@ -52,6 +53,29 @@ class SourceTransaction(BaseModel):
     amount_cents: int
 
 
+class ProposalRead(BaseModel):
+    """A transação proposta no lançamento por texto (FR-066). Nada dela está salvo enquanto
+    `status` é `pending`: o usuário confere no formulário e salva (FR-067)."""
+
+    type: EntryType
+    amount_cents: int
+    date: dt.date
+    description: str
+    # Nulos quando a frase não deixou claro: o usuário escolhe ao conferir.
+    account_id: uuid.UUID | None
+    category_id: uuid.UUID | None
+    # De onde veio a categoria: de uma regra que o usuário ensinou ou de uma sugestão da IA.
+    category_source: Literal["user_rule", "ai"] | None
+    status: ProposalStatus
+    # O lançamento criado a partir da proposta; depois de salva, os campos acima são os dele.
+    transaction_id: uuid.UUID | None
+
+
+class ProposalSaved(BaseModel):
+    # O lançamento que o usuário salvou a partir da proposta.
+    transaction_id: uuid.UUID
+
+
 class MessageRead(BaseModel):
     id: uuid.UUID
     role: MessageRole
@@ -63,7 +87,7 @@ class MessageRead(BaseModel):
     # Vêm das ferramentas, nunca do texto do modelo: até 50, das que ainda existem.
     transactions: list[SourceTransaction]
     transactions_total_count: int
-    proposal: dict[str, Any] | None
+    proposal: ProposalRead | None
     created_at: dt.datetime
 
 

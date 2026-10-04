@@ -34,7 +34,13 @@ from tests.assistant import (
     seed_finances,
     send_question,
 )
-from tests.finance import create_category, list_transactions
+from tests.finance import (
+    TRANSACTIONS,
+    create_account,
+    create_category,
+    create_transaction,
+    list_transactions,
+)
 
 Json = dict[str, Any]
 
@@ -131,7 +137,7 @@ async def test_the_model_gets_today_the_accounts_and_categories_and_the_tool_res
         f'"id": "{finances.savings["id"]}", "nome": "Poupança", "tipo": "poupança"' in first.system
     )
     assert "balance" not in first.system and "saldo" not in first.system.split("<dados")[1]
-    assert len(first.tools) == 7
+    assert len(first.tools) == 8
     assert [message.role for message in first.messages] == [LLMRole.USER]
     # Na segunda rodada o modelo recebe o pedido que fez e o resultado da ferramenta.
     assert [message.role for message in second.messages] == [
@@ -268,7 +274,7 @@ async def test_the_instructions_make_the_assistant_talk_to_the_user_directly(
         "Eu só respondo sobre as suas finanças no Contaí.",
     )
     instructions = fake_llm.calls[0].system
-    assert service.SYSTEM_PROMPT_FILE == "system_v2.md"
+    assert service.SYSTEM_PROMPT_FILE == "system_v3.md"
     assert 'tratando-a por "você"' in instructions
     assert 'Nunca fale dela em terceira pessoa. Não escreva "o usuário"' in instructions
     # A recusa pedida pelas instruções já vem na segunda pessoa.
@@ -361,7 +367,7 @@ async def test_at_most_five_tool_rounds_per_question(
 
     assert reply["content"] == "Você tem R$ 7.000,00 na Poupança."
     # Na sexta chamada o modelo já não recebe ferramentas: precisa responder.
-    assert [len(recorded.tools) for recorded in fake_llm.calls] == [7, 7, 7, 7, 7, 0]
+    assert [len(recorded.tools) for recorded in fake_llm.calls] == [8, 8, 8, 8, 8, 0]
 
 
 async def test_a_model_that_only_calls_tools_gets_the_answer_built_from_the_results(
@@ -721,3 +727,284 @@ async def test_a_question_to_a_conversation_that_does_not_exist_is_not_found(
 
     assert response.status_code == 404, response.text
     assert fake_llm.calls == []
+
+
+# ---------- lançamento por texto (história 8)
+
+IFOOD = "gastei 45 no ifood ontem no cartão"
+
+
+def _ifood_on_the_card(**changes: Any) -> Any:
+    arguments = {
+        "type": "expense",
+        "amount": "45",
+        "date_reference": "yesterday",
+        "description": "iFood",
+        "account_hint": "cartão",
+        "category_hint": "Alimentação > Restaurante",
+        **changes,
+    }
+    return call("propose_transaction", **{k: v for k, v in arguments.items() if v is not None})
+
+
+async def _proposed(client: AsyncClient, conversation: Json) -> Json:
+    """A última mensagem da conversa, que é a da proposta."""
+    return (await _messages(client, conversation))[-1]
+
+
+async def test_a_phrase_about_a_purchase_becomes_a_proposal_and_nothing_is_saved(
+    client_a: AsyncClient,
+    session: AsyncSession,
+    finances: Finances,
+    conversation: Json,
+    fake_llm: FakeLLMProvider,
+) -> None:
+    before = (await list_transactions(client_a, limit=1))["total_count"]
+    fake_llm.queue_tool_calls(_ifood_on_the_card())
+
+    reply = await ask(client_a, conversation, IFOOD)
+
+    assert (reply["kind"], reply["content"]) == (
+        "transaction_proposal",
+        "Preparei o lançamento. Confira e salve.",
+    )
+    # R$ 45,00, com a data de ontem, no cartão e com a categoria sugerida.
+    assert reply["proposal"] == {
+        "type": "expense",
+        "amount_cents": 4_500,
+        "date": "2026-09-30",
+        "description": "iFood",
+        "account_id": finances.card["id"],
+        "category_id": finances.restaurant["id"],
+        "category_source": "ai",
+        "status": "pending",
+        "transaction_id": None,
+    }
+    assert (reply["highlight"], reply["transactions"]) == (None, [])
+    # A proposta já é a resposta: uma chamada só ao modelo.
+    assert len(fake_llm.calls) == 1
+    # Nada foi salvo (FR-067): nem lançamento, nem regra de categoria para "ifood".
+    assert (await list_transactions(client_a, limit=1))["total_count"] == before
+    assert (await list_transactions(client_a, q="ifood"))["items"] == []
+    # O lançamento por texto conta como uma pergunta no limite do dia.
+    assert await _used(client_a) == 1
+    rows = (await session.execute(select(AiUsage.task, AiUsage.counts_toward_limit))).all()
+    assert rows == [("text_entry", True)]
+    # A conversa guarda a pergunta e a proposta.
+    question, proposal = await _messages(client_a, conversation)
+    assert (question["kind"], question["content"]) == ("text", IFOOD)
+    assert proposal == reply
+
+
+async def test_the_instructions_tell_the_model_how_to_propose_an_entry(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(_ifood_on_the_card())
+
+    await ask(client_a, conversation, IFOOD)
+
+    instructions = fake_llm.calls[0].system
+    assert "chame\n  `propose_transaction`" in instructions
+    assert "A ferramenta não grava nada" in instructions
+    assert "Se a frase não tiver valor, não chame a ferramenta" in instructions
+    assert "Se ela não\n  disse a conta, não envie o campo" in instructions
+    proposing = next(tool for tool in fake_llm.calls[0].tools if tool.name == "propose_transaction")
+    assert proposing.parameters["required"] == ["type", "description"]
+    assert proposing.parameters["properties"]["type"]["enum"] == ["expense", "income"]
+    assert "user_id" not in str(proposing.parameters)
+
+
+async def test_the_user_reviews_adjusts_and_saves_the_proposal(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(_ifood_on_the_card())
+    reply = await ask(client_a, conversation, IFOOD)
+
+    # O usuário confere no formulário, corrige o valor e salva: só agora o lançamento existe.
+    saved = await create_transaction(
+        client_a,
+        finances.card,
+        finances.restaurant,
+        amount_cents=4_750,
+        date=reply["proposal"]["date"],
+        description=reply["proposal"]["description"],
+        source="assistant",
+    )
+    marked = await client_a.post(
+        f"{ASSISTANT}/messages/{reply['id']}/proposal/saved", json={"transaction_id": saved["id"]}
+    )
+
+    assert marked.status_code == 204, marked.text
+    assert saved["source"] == "assistant"
+    # A proposta passa a mostrar o que ficou salvo, com o ajuste.
+    assert (await _proposed(client_a, conversation))["proposal"] == {
+        **reply["proposal"],
+        "amount_cents": 4_750,
+        "status": "saved",
+        "transaction_id": saved["id"],
+    }
+    listed = await list_transactions(client_a, q="ifood")
+    assert [item["id"] for item in listed["items"]] == [saved["id"]]
+
+
+async def test_a_discarded_proposal_saves_nothing(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(_ifood_on_the_card())
+    reply = await ask(client_a, conversation, IFOOD)
+
+    discarded = await client_a.post(f"{ASSISTANT}/messages/{reply['id']}/proposal/discarded")
+
+    assert discarded.status_code == 204, discarded.text
+    assert (await _proposed(client_a, conversation))["proposal"] == {
+        **reply["proposal"],
+        "status": "discarded",
+    }
+    assert (await list_transactions(client_a, q="ifood"))["items"] == []
+
+
+async def test_a_saved_proposal_stays_saved_when_discarded(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(_ifood_on_the_card())
+    reply = await ask(client_a, conversation, IFOOD)
+    saved = await create_transaction(
+        client_a, finances.card, finances.restaurant, description="iFood", source="assistant"
+    )
+    url = f"{ASSISTANT}/messages/{reply['id']}/proposal"
+    await client_a.post(f"{url}/saved", json={"transaction_id": saved["id"]})
+
+    discarded = await client_a.post(f"{url}/discarded")
+
+    assert discarded.status_code == 204, discarded.text
+    proposal = (await _proposed(client_a, conversation))["proposal"]
+    assert (proposal["status"], proposal["transaction_id"]) == ("saved", saved["id"])
+
+
+async def test_a_category_the_user_taught_is_used_before_the_one_the_model_names(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    # O usuário já lançou "iFood" em Restaurante: é a categoria dessa descrição (FR-048).
+    await create_transaction(client_a, finances.checking, finances.restaurant, description="iFood")
+    fake_llm.queue_tool_calls(_ifood_on_the_card(category_hint="Transporte"))
+
+    reply = await ask(client_a, conversation, IFOOD)
+
+    assert reply["proposal"]["category_id"] == finances.restaurant["id"]
+    assert reply["proposal"]["category_source"] == "user_rule"
+    assert len(fake_llm.calls) == 1
+
+
+async def test_without_an_account_in_the_phrase_the_last_used_one_comes_filled(
+    client_a: AsyncClient,
+    finances: Finances,
+    conversation: Json,
+    fake_llm: FakeLLMProvider,
+    frozen_time: datetime,
+) -> None:
+    clock.set_fixed_time(frozen_time + timedelta(minutes=1))
+    await create_transaction(client_a, finances.savings, finances.food, description="Feira")
+    fake_llm.queue_tool_calls(
+        call(
+            "propose_transaction",
+            type="expense",
+            amount="32,50",
+            description="Almoço",
+            category_hint="Alimentação",
+        )
+    )
+
+    reply = await ask(client_a, conversation, "almoço 32,50")
+
+    assert reply["proposal"] == {
+        "type": "expense",
+        "amount_cents": 3_250,
+        # Sem data na frase, hoje.
+        "date": "2026-10-01",
+        "description": "Almoço",
+        "account_id": finances.savings["id"],
+        "category_id": finances.food["id"],
+        "category_source": "ai",
+        "status": "pending",
+        "transaction_id": None,
+    }
+
+
+async def test_two_cards_leave_the_account_for_the_user_to_choose_in_the_form(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    await create_account(
+        client_a, name="Cartão Azul", type="credit_card", closing_day=5, due_day=12
+    )
+    fake_llm.queue_tool_calls(_ifood_on_the_card())
+
+    reply = await ask(client_a, conversation, IFOOD)
+
+    assert reply["kind"] == "transaction_proposal"
+    assert reply["proposal"]["account_id"] is None
+    assert reply["content"] == (
+        "Preparei o lançamento, mas não sei em qual conta ele entra: você escolhe ao conferir."
+    )
+
+
+async def test_a_phrase_without_a_value_gets_a_question_and_no_proposal(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(_ifood_on_the_card(amount=None))
+    fake_llm.queue_text("[esclarecimento] Qual foi o valor do iFood?")
+
+    reply = await ask(client_a, conversation, "gastei no ifood ontem no cartão")
+
+    assert (reply["kind"], reply["content"], reply["proposal"]) == (
+        "clarification",
+        "Qual foi o valor do iFood?",
+        None,
+    )
+    # A ferramenta devolveu ao modelo o que falta, e ele perguntou.
+    assert "Falta o valor do lançamento" in fake_llm.calls[1].messages[-1].content
+    assert await _used(client_a) == 1
+
+
+async def test_only_a_proposal_of_the_user_and_a_transaction_of_the_user_can_be_marked(
+    client_a: AsyncClient, finances: Finances, conversation: Json, fake_llm: FakeLLMProvider
+) -> None:
+    fake_llm.queue_tool_calls(_food_this_month(finances))
+    fake_llm.queue_text(FOOD_ANSWER)
+    answer = await ask(client_a, conversation, "quanto gastei com comida esse mês?")
+    fake_llm.queue_tool_calls(_ifood_on_the_card())
+    proposal = await ask(client_a, conversation, IFOOD)
+    existing = (await list_transactions(client_a, limit=1))["items"][0]
+    unknown = "00000000-0000-4000-8000-000000000000"
+
+    # Uma resposta comum não é uma proposta, e uma mensagem que não existe também não.
+    for message_id in (answer["id"], unknown):
+        url = f"{ASSISTANT}/messages/{message_id}/proposal"
+        saved = await client_a.post(f"{url}/saved", json={"transaction_id": existing["id"]})
+        discarded = await client_a.post(f"{url}/discarded")
+        assert (saved.status_code, discarded.status_code) == (404, 404)
+    # O lançamento informado precisa existir.
+    missing = await client_a.post(
+        f"{ASSISTANT}/messages/{proposal['id']}/proposal/saved", json={"transaction_id": unknown}
+    )
+    assert missing.status_code == 422, missing.text
+    assert "transaction_id" in missing.json()["error"]["details"]["fields"]
+    assert (await _proposed(client_a, conversation))["proposal"]["status"] == "pending"
+
+
+async def test_the_form_cannot_claim_that_an_entry_came_from_an_import(
+    client_a: AsyncClient, finances: Finances
+) -> None:
+    response = await client_a.post(
+        TRANSACTIONS,
+        json={
+            "type": "expense",
+            "amount_cents": 4_500,
+            "date": "2026-10-01",
+            "description": "iFood",
+            "account_id": finances.card["id"],
+            "category_id": finances.restaurant["id"],
+            "source": "import",
+        },
+    )
+
+    assert response.status_code == 422, response.text

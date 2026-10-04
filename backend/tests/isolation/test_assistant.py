@@ -17,6 +17,7 @@ from app.core import clock
 from app.modules.assistant.models import MessageKind, MessageRole
 from app.modules.assistant.repository import AssistantRepository
 from tests.assistant import ASSISTANT, CONVERSATIONS
+from tests.finance import create_account, create_category, create_transaction
 from tests.isolation.registry import IsolationContext, exempt, isolation_case
 
 Json = dict[str, Any]
@@ -163,3 +164,83 @@ async def get_usage(context: IsolationContext) -> None:
     # As perguntas de A não gastam o limite de B.
     assert seen_by_a["used"] >= 1
     assert (seen_by_b["used"], seen_by_b["remaining"]) == (0, seen_by_b["limit"])
+
+
+# ---------- proposta de lançamento por texto
+
+PROPOSAL = {
+    "type": "expense",
+    "amount_cents": 4_500,
+    "date": "2026-09-30",
+    "description": "iFood",
+    "account_id": None,
+    "category_id": None,
+    "category_source": None,
+    "status": "pending",
+    "transaction_id": None,
+}
+
+
+async def _proposal_of(context: IsolationContext, owner: str) -> tuple[Json, str]:
+    """Uma conversa do usuário com uma proposta à espera; devolve a conversa e a mensagem."""
+    user, client = (
+        (context.user_a, context.client_a) if owner == "a" else (context.user_b, context.client_b)
+    )
+    assistant = AssistantRepository(context.session)
+    now = clock.utcnow()
+    conversation = await assistant.create_conversation(user.id, now=now)
+    message = await assistant.add_message(
+        user.id,
+        conversation.id,
+        position=0,
+        role=MessageRole.ASSISTANT,
+        kind=MessageKind.TRANSACTION_PROPOSAL,
+        content="Preparei o lançamento. Confira e salve.",
+        now=now,
+        proposal=dict(PROPOSAL),
+    )
+    await context.session.commit()
+    return await _detail(client, str(conversation.id)), str(message.id)
+
+
+async def _transaction_of(client: AsyncClient) -> Json:
+    account = await create_account(client)
+    category = await create_category(client)
+    return await create_transaction(client, account, category, description="iFood")
+
+
+@isolation_case("POST", "/api/v1/assistant/messages/{message_id}/proposal/saved")
+async def mark_the_proposal_of_another_user_as_saved(context: IsolationContext) -> None:
+    conversation, message_id = await _proposal_of(context, "a")
+    own_transaction = await _transaction_of(context.client_b)
+
+    # B não marca a proposta de A, nem com um lançamento dele mesmo.
+    await _same_as_unknown(
+        context.client_b,
+        "POST",
+        f"{ASSISTANT}/messages/{message_id}/proposal/saved",
+        json={"transaction_id": own_transaction["id"]},
+    )
+    assert await _detail(context.client_a, conversation["id"]) == conversation
+
+    # E um lançamento de A não serve para marcar uma proposta de B: é como se não existisse.
+    of_a = await _transaction_of(context.client_a)
+    own_conversation, own_message_id = await _proposal_of(context, "b")
+    url = f"{ASSISTANT}/messages/{own_message_id}/proposal/saved"
+    with_the_one_of_a = await context.client_b.post(url, json={"transaction_id": of_a["id"]})
+    with_unknown = await context.client_b.post(url, json={"transaction_id": str(uuid.uuid4())})
+
+    assert with_the_one_of_a.status_code == 422, with_the_one_of_a.text
+    assert with_the_one_of_a.json()["error"] == with_unknown.json()["error"]
+    assert await _detail(context.client_b, own_conversation["id"]) == own_conversation
+
+
+@isolation_case("POST", "/api/v1/assistant/messages/{message_id}/proposal/discarded")
+async def discard_the_proposal_of_another_user(context: IsolationContext) -> None:
+    conversation, message_id = await _proposal_of(context, "a")
+
+    await _same_as_unknown(
+        context.client_b, "POST", f"{ASSISTANT}/messages/{message_id}/proposal/discarded"
+    )
+
+    assert await _detail(context.client_a, conversation["id"]) == conversation

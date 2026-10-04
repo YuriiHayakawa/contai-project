@@ -31,6 +31,16 @@ class MessageKind(StrEnum):
     ERROR = "error"
 
 
+class ProposalStatus(StrEnum):
+    """O que o usuário fez com uma transação proposta no lançamento por texto."""
+
+    # À espera: nada foi salvo.
+    PENDING = "pending"
+    # Conferida e salva: a proposta guarda o id do lançamento.
+    SAVED = "saved"
+    DISCARDED = "discarded"
+
+
 def _in_list(column: str, values: type[StrEnum]) -> str:
     return f"{column} IN ({', '.join(repr(item.value) for item in values)})"
 
@@ -78,5 +88,6 @@ class ChatMessage(UUIDPrimaryKey, CreatedAt, Base):
     tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, server_default=text("'[]'::jsonb")
     )
-    # Transação proposta no lançamento por texto (FR-066).
+    # Transação proposta no lançamento por texto (FR-066): os campos do lançamento, de onde
+    # veio a categoria, a situação (`ProposalStatus`) e, depois de salva, o id do lançamento.
     proposal: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

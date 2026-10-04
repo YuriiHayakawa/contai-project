@@ -4,6 +4,7 @@ from app.modules.assistant.tools import (  # noqa: F401 - o import registra as f
     balances,
     cards,
     compare,
+    propose,
     search,
     spending,
     top_expenses,

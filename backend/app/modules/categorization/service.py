@@ -160,6 +160,37 @@ class CategorizationService:
             for category in categories
             if category.is_fallback
         }
+        found = await self._from_rules(user_id, lines, categories)
+
+        answers = await self._ask_ai(user_id, self._to_ask(lines, found), categories)
+        # A resposta da IA vale para todas as linhas com a mesma descrição, inclusive a entrada
+        # que repete a descrição de uma despesa: é o estorno dela.
+        by_description = {line.description_normalized: answer for line, answer in answers.items()}
+
+        def resolve(line: Line) -> Suggestion | None:
+            if line in found:
+                return found[line]
+            answer = by_description.get(line.description_normalized)
+            if answer is not None and category_fits(active[answer.category_id], line.kind):
+                return answer
+            category_id = fallback.get(line.kind)
+            if category_id is None:
+                return None
+            return Suggestion(category_id=category_id, source=SuggestionSource.FALLBACK)
+
+        return [resolve(line) for line in lines]
+
+    async def learned(self, user_id: uuid.UUID, line: Line) -> Suggestion | None:
+        """A categoria já aprendida para esta linha: a regra do usuário ou a sugestão da IA
+        guardada. Não consulta a IA nem grava nada; `None` quando não há regra que sirva."""
+        categories = await self._categories.list_all(user_id)
+        return (await self._from_rules(user_id, [line], categories)).get(line)
+
+    async def _from_rules(
+        self, user_id: uuid.UUID, lines: Sequence[Line], categories: Sequence[Category]
+    ) -> dict[Line, Suggestion]:
+        """As linhas que já têm regra válida, com a categoria dela."""
+        active = {category.id: category for category in categories}
         # Para uma entrada, vale também a regra da compra original: a descrição sem o prefixo
         # de estorno.
         purchases = {
@@ -199,24 +230,7 @@ class CategorizationService:
             ) or from_rule(line, purchases.get(line), refund_only=True)
             if suggestion is not None:
                 found[line] = suggestion
-
-        answers = await self._ask_ai(user_id, self._to_ask(lines, found), categories)
-        # A resposta da IA vale para todas as linhas com a mesma descrição, inclusive a entrada
-        # que repete a descrição de uma despesa: é o estorno dela.
-        by_description = {line.description_normalized: answer for line, answer in answers.items()}
-
-        def resolve(line: Line) -> Suggestion | None:
-            if line in found:
-                return found[line]
-            answer = by_description.get(line.description_normalized)
-            if answer is not None and category_fits(active[answer.category_id], line.kind):
-                return answer
-            category_id = fallback.get(line.kind)
-            if category_id is None:
-                return None
-            return Suggestion(category_id=category_id, source=SuggestionSource.FALLBACK)
-
-        return [resolve(line) for line in lines]
+        return found
 
     @staticmethod
     def _to_ask(lines: Sequence[Line], found: dict[Line, Suggestion]) -> list[Line]:

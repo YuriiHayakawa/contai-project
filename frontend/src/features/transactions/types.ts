@@ -36,6 +36,8 @@ export interface TransactionInput {
   category_id: string;
   /** `null` deixa o lançamento sem observação. */
   notes: string | null;
+  /** `assistant` quando o lançamento nasce de uma proposta do assistente; sem ele, `manual`. */
+  source?: "manual" | "assistant";
 }
 
 /** Corpo de `POST /transactions/installments`: uma compra parcelada no cartão. */
@@ -84,16 +86,29 @@ export interface InvoicePaymentContext {
 }
 
 /**
- * O que já vem preenchido ao abrir a folha de lançamento, como no "Pagar fatura" de um cartão:
- * uma transferência para o cartão, com o valor da fatura.
+ * O que já vem preenchido ao abrir a folha de lançamento: no "Pagar fatura" de um cartão, uma
+ * transferência para o cartão, com o valor da fatura; em uma proposta do assistente, o
+ * lançamento inteiro, para conferir antes de salvar.
  */
 export interface TransactionPreset {
   type?: TransactionType;
   amountCents?: number;
   description?: string;
+  /** Sem ela, a data de hoje. */
+  date?: ISODate;
+  /**
+   * Conta de uma despesa ou receita. `null` deixa o campo em aberto, para o usuário escolher;
+   * sem o campo, vem a última conta usada.
+   */
+  accountId?: string | null;
+  categoryId?: string;
   fromAccountId?: string;
   toAccountId?: string;
   invoicePayment?: InvoicePaymentContext;
+  /** De onde vem o lançamento: `assistant` em uma proposta do assistente. */
+  source?: "assistant";
+  /** Avisa quem abriu a folha de que o lançamento foi salvo, com o que ficou gravado. */
+  onSaved?: (transaction: Transaction) => void;
 }
 
 /** Filtros de `GET /transactions`: só voltam os lançamentos que atendem a todos. */

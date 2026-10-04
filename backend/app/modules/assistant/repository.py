@@ -81,6 +81,21 @@ class AssistantRepository:
         newest = statement.order_by(ChatMessage.position.desc()).limit(last)
         return list(reversed((await self._session.execute(newest)).scalars().all()))
 
+    async def get_message(
+        self, user_id: uuid.UUID, message_id: uuid.UUID, *, for_update: bool = False
+    ) -> ChatMessage | None:
+        statement = select(ChatMessage).where(
+            ChatMessage.id == message_id, ChatMessage.user_id == user_id
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self._session.execute(statement)).scalar_one_or_none()
+
+    async def save_message(self, user_id: uuid.UUID, message: ChatMessage) -> None:
+        if message.user_id != user_id:
+            raise ValueError("a mensagem não é deste usuário")
+        await self._session.flush()
+
     async def next_position(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> int:
         result = await self._session.execute(
             select(func.coalesce(func.max(ChatMessage.position) + 1, 0)).where(
@@ -103,6 +118,7 @@ class AssistantRepository:
         transaction_ids: list[str] | None = None,
         transactions_total_count: int = 0,
         tool_calls: list[dict[str, Any]] | None = None,
+        proposal: dict[str, Any] | None = None,
     ) -> ChatMessage:
         message = ChatMessage(
             conversation_id=conversation_id,
@@ -115,6 +131,7 @@ class AssistantRepository:
             transaction_ids=transaction_ids or [],
             transactions_total_count=transactions_total_count,
             tool_calls=tool_calls or [],
+            proposal=proposal,
             created_at=now,
         )
         self._session.add(message)

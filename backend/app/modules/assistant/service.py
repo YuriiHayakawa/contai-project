@@ -5,6 +5,10 @@ parâmetros; quem executa é o backend, com o `user_id` da sessão. O texto fina
 todo valor em reais e todo percentual dele estiver nos resultados das ferramentas: se não
 estiver, o backend pede a resposta de novo uma vez e, se falhar de novo, monta a resposta dos
 próprios resultados. As transações exibidas com a resposta vêm das ferramentas, nunca do texto.
+
+No lançamento por texto (FR-066), a proposta montada por `propose_transaction` já é a resposta:
+o texto é fixo, o modelo não é chamado de novo e nada é gravado além da própria mensagem. O
+lançamento só existe depois que o usuário confere a proposta no formulário e salva (FR-067).
 """
 
 import base64
@@ -17,6 +21,7 @@ import uuid
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,19 +41,27 @@ from app.core import clock
 from app.core.errors import AiQuotaExhausted, AiUnavailable, NotFound, ValidationFailed
 from app.modules.accounts.repository import AccountRepository
 from app.modules.assistant import tools, validation
-from app.modules.assistant.models import ChatMessage, Conversation, MessageKind, MessageRole
+from app.modules.assistant.models import (
+    ChatMessage,
+    Conversation,
+    MessageKind,
+    MessageRole,
+    ProposalStatus,
+)
 from app.modules.assistant.repository import AssistantRepository
 from app.modules.assistant.schemas import (
     ConversationDetail,
     ConversationPage,
     ConversationRead,
     MessageRead,
+    ProposalRead,
     SourceTransaction,
     SuggestionList,
     UsageRead,
 )
 from app.modules.assistant.tools.balances import ACCOUNT_TYPE_NAMES
 from app.modules.assistant.tools.base import MAX_TRANSACTION_IDS, ToolContext, ToolResult
+from app.modules.assistant.tools.propose import NAME as PROPOSE_TRANSACTION
 from app.modules.categories.models import CategoryKind
 from app.modules.categories.repository import CategoryRepository
 from app.modules.categorization.service import category_paths
@@ -61,10 +74,11 @@ MAX_TOOL_ROUNDS = 5
 HISTORY_MESSAGES = 20
 TITLE_LENGTH = 80
 INVALID_CURSOR = "Use o valor de next_cursor da página anterior."
+TRANSACTION_NOT_FOUND = "Esse lançamento não existe. Salve o lançamento de novo."
 _CURSOR_SEPARATOR = "|"
 _PROMPTS = Path(__file__).parent / "prompts"
 # A versão em uso do prompt de sistema; as anteriores ficam na pasta, como registro.
-SYSTEM_PROMPT_FILE = "system_v2.md"
+SYSTEM_PROMPT_FILE = "system_v3.md"
 _WEEKDAYS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira")
 _WEEKEND = ("sábado", "domingo")
 _MARKER = re.compile(r"^\s*\[(esclarecimento|recusa)\]\s*", re.IGNORECASE)
@@ -131,6 +145,8 @@ class _Answer:
     kind: MessageKind = MessageKind.ANSWER
     results: list[ToolResult] = field(default_factory=list)
     tool_calls: list[dict[str, object]] = field(default_factory=list)
+    # A transação proposta, quando a pergunta era um lançamento por texto.
+    proposal: dict[str, Any] | None = None
 
 
 class AssistantService:
@@ -241,11 +257,62 @@ class AssistantService:
                     if row is not None
                 ],
                 transactions_total_count=message.transactions_total_count,
-                proposal=message.proposal,
+                proposal=(
+                    ProposalRead.model_validate(message.proposal) if message.proposal else None
+                ),
                 created_at=message.created_at,
             )
             for message in messages
         ]
+
+    # ---------- lançamento por texto
+
+    async def _proposal_message(self, user_id: uuid.UUID, message_id: uuid.UUID) -> ChatMessage:
+        message = await self._assistant.get_message(user_id, message_id, for_update=True)
+        if (
+            message is None
+            or message.kind != MessageKind.TRANSACTION_PROPOSAL
+            or message.proposal is None
+        ):
+            raise NotFound()
+        return message
+
+    async def mark_proposal_saved(
+        self, user_id: uuid.UUID, message_id: uuid.UUID, transaction_id: uuid.UUID
+    ) -> None:
+        """Guarda na proposta o lançamento que o usuário salvou a partir dela.
+
+        Quem cria o lançamento é o próprio usuário, pelo formulário; aqui a proposta só passa a
+        mostrar o que ficou salvo, com os ajustes que ele fez.
+        """
+        message = await self._proposal_message(user_id, message_id)
+        transaction = await self._transactions.get(user_id, transaction_id)
+        if transaction is None:
+            raise ValidationFailed(details={"fields": {"transaction_id": TRANSACTION_NOT_FOUND}})
+        saved: dict[str, Any] = {
+            **(message.proposal or {}),
+            "status": str(ProposalStatus.SAVED),
+            "transaction_id": str(transaction.id),
+        }
+        if transaction.type != TransactionType.TRANSFER:
+            saved |= {
+                "type": str(transaction.type),
+                "amount_cents": transaction.amount_cents,
+                "date": transaction.date.isoformat(),
+                "description": transaction.description,
+                "account_id": str(transaction.account_id),
+                "category_id": str(transaction.category_id) if transaction.category_id else None,
+            }
+        message.proposal = saved
+        await self._assistant.save_message(user_id, message)
+
+    async def discard_proposal(self, user_id: uuid.UUID, message_id: uuid.UUID) -> None:
+        """Descarta a proposta. Uma proposta já salva continua salva: o lançamento existe."""
+        message = await self._proposal_message(user_id, message_id)
+        proposal = message.proposal or {}
+        if proposal.get("status") != ProposalStatus.SAVED:
+            message.proposal = {**proposal, "status": str(ProposalStatus.DISCARDED)}
+            await self._assistant.save_message(user_id, message)
 
     # ---------- pergunta e resposta
 
@@ -304,6 +371,7 @@ class AssistantService:
                 else 0
             ),
             tool_calls=answer.tool_calls,
+            proposal=answer.proposal,
         )
         if not conversation.title:
             conversation.title = content[:TITLE_LENGTH]
@@ -360,10 +428,12 @@ class AssistantService:
         except LLMError as error:
             logger.warning("assistant unavailable", extra={"error_code": type(error).__name__})
             raise AiUnavailable() from error
+        # O lançamento por texto é uma tarefa própria, e conta no mesmo limite das perguntas.
+        proposing = any(call.name == PROPOSE_TRANSACTION for call in result.tool_calls)
         await ai_usage.record_usage(
             self._session,
             user_id,
-            task=AiTask.CHAT,
+            task=AiTask.TEXT_ENTRY if proposing else AiTask.CHAT,
             model=result.model,
             usage=result.usage,
             # Uma pergunta conta uma vez no limite do dia, quantas chamadas ela precisar.
@@ -385,6 +455,14 @@ class AssistantService:
                 result = await tools.execute(context, call.name, call.arguments)
                 answer.results.append(result)
                 answer.tool_calls.append({"name": call.name, "arguments": call.arguments})
+                if result.proposal is not None:
+                    # A proposta já é a resposta: o texto é fixo, e o modelo não é chamado de
+                    # novo. Nada foi gravado; o usuário confere e salva (FR-067).
+                    answer.text = result.summary
+                    answer.kind = MessageKind.TRANSACTION_PROPOSAL
+                    answer.proposal = result.proposal
+                    answer.results = []
+                    return answer
                 messages.append(
                     LLMMessage(
                         role=LLMRole.TOOL,

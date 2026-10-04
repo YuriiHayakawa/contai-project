@@ -189,12 +189,15 @@ export function TransactionSheet({ open, transaction, preset, onClose }: Transac
       const parcels = await createInstallments.mutateAsync(submission.input);
       const what = `Compra em ${parcels.length}x salva.`;
       announce(parcels[0]?.date ?? submission.input.date, what, `${what} A 1ª parcela está em`);
+      if (parcels[0]) preset?.onSaved?.(parcels[0]);
     } else if (submission.kind === "transfer") {
-      await createTransfer.mutateAsync(submission.input);
+      const lines = await createTransfer.mutateAsync(submission.input);
       announce(submission.input.date, "Transferência salva.", "Transferência salva em");
+      if (lines[0]) preset?.onSaved?.(lines[0]);
     } else {
       const created = await create.mutateAsync(submission.input);
       announce(created.date, "Lançamento salvo.", "Lançamento salvo em");
+      preset?.onSaved?.(created);
     }
     close();
   };
@@ -258,6 +261,7 @@ export function TransactionSheet({ open, transaction, preset, onClose }: Transac
   else if (number !== null && count !== null) title = `Editar parcela ${number} de ${count}`;
   else if (transaction) title = "Editar lançamento";
   else if (preset?.type === "transfer") title = "Nova transferência";
+  else if (preset?.source === "assistant") title = "Conferir lançamento";
 
   return (
     <>

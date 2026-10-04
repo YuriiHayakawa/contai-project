@@ -109,7 +109,7 @@ redefinir a senha ou depois de 24 horas sem erros.
 | Método e rota | Corpo ou filtros | Resposta | Notas |
 |---------------|------------------|----------|-------|
 | `GET /transactions` | `from`, `to`, `account_id`, `category_id` (inclui subcategorias), `type`, `q`, `installment_group_id`, `transfer_group_id`, `ids` | lista paginada, mais `total_count` | filtros combináveis (FR-035); da mais nova para a mais antiga; `q` procura na descrição e na observação, sem diferenciar acentos nem maiúsculas; `ids` é repetido (`?ids=a&ids=b`) |
-| `POST /transactions` | `type` (`expense` ou `income`), `amount_cents`, `date`, `description`, `account_id`, `category_id`, `notes` | `201` com a transação | conta e categoria precisam ser do usuário e estar ativas, e a despesa precisa de uma categoria de despesa: caso contrário, `422` com a mensagem no campo. Uma receita aceita categoria de receita ou, como estorno de uma compra, de despesa (FR-084); grava ou atualiza a regra de categoria |
+| `POST /transactions` | `type` (`expense` ou `income`), `amount_cents`, `date`, `description`, `account_id`, `category_id`, `notes`, `source` (opcional: `manual`, o padrão, ou `assistant`) | `201` com a transação | conta e categoria precisam ser do usuário e estar ativas, e a despesa precisa de uma categoria de despesa: caso contrário, `422` com a mensagem no campo. Uma receita aceita categoria de receita ou, como estorno de uma compra, de despesa (FR-084); grava ou atualiza a regra de categoria. `source = assistant` é o lançamento conferido a partir de uma proposta do assistente (FR-066); `import` não é aceito aqui |
 | `POST /transactions/installments` | `total_cents`, `installments` (2 a 48), `date`, `description`, `account_id`, `category_id`, `notes` | `201` com `{ "items": [...] }`, as parcelas em ordem | conta precisa ser cartão (FR-030); a primeira parcela leva os centavos que sobram; a parcela k tem a data da compra mais k − 1 meses, no último dia do mês quando o dia não existe |
 | `POST /transactions/transfers` | `from_account_id`, `to_account_id`, `amount_cents`, `date`, `description` | `201` com `{ "items": [...] }`: a linha `out` e a `in` | contas diferentes e ativas (FR-033); o pagamento da fatura é uma transferência da conta para o cartão |
 | `GET /transactions/{id}` | — | transação | |
@@ -181,7 +181,8 @@ Transferências nunca entram em `income_cents` nem em `expense_cents`.
 | `POST /assistant/conversations` | — | `201` com a conversa | |
 | `GET /assistant/conversations/{id}` | — | conversa com `messages`, da mais antiga para a mais nova | |
 | `POST /assistant/conversations/{id}/messages` | `content` (1 a 1.000 caracteres) | mensagem do assistente | `429 ai_limit_reached` com `resets_at`; `429 ai_quota_exhausted`; `503 ai_unavailable`; `429 rate_limited`. Em qualquer um desses casos nada é gravado: nem a pergunta, nem o uso do dia |
-| `POST /assistant/messages/{id}/proposal/saved` | `transaction_id` | `204` | marca a proposta como salva; a transação precisa ser do próprio usuário |
+| `POST /assistant/messages/{id}/proposal/saved` | `transaction_id` | `204` | marca a proposta como salva e copia para ela os campos do lançamento gravado; a transação precisa ser do próprio usuário (`422` no campo, caso contrário); `404` se a mensagem não é uma proposta do usuário |
+| `POST /assistant/messages/{id}/proposal/discarded` | — | `204` | descarta a proposta; nada é salvo. Uma proposta já salva continua salva; `404` se a mensagem não é uma proposta do usuário |
 | `DELETE /assistant/conversations/{id}` | — | `204` | |
 | `DELETE /assistant/conversations` | — | `204` | apaga todo o histórico (FR-069) |
 
@@ -207,8 +208,14 @@ que compõem a resposta, das que ainda existem, e `transactions_total_count`, qu
 todo.
 
 Com `kind = "transaction_proposal"`, `proposal` traz `type`, `amount_cents`, `date`,
-`description`, `account_id` e `category_id` (qualquer um pode ser nulo, para o usuário
-completar); o frontend abre o formulário e salva com `POST /transactions` (FR-066, FR-067).
+`description`, `account_id` e `category_id` (a conta e a categoria podem ser nulas, para o
+usuário escolher), `category_source` (`user_rule` quando a categoria veio de uma regra que o
+usuário ensinou, `ai` quando foi sugerida pela IA, ou nulo), `status` (`pending`, `saved` ou
+`discarded`) e `transaction_id` (o lançamento, depois de salva). O texto da mensagem é fixo, e
+o modelo é chamado uma vez só. O frontend mostra a proposta em um cartão, abre o formulário
+preenchido, salva com `POST /transactions` e `source = assistant` e marca a proposta com
+`POST /assistant/messages/{id}/proposal/saved` (FR-066, FR-067). Uma frase sem valor não gera
+proposta: o assistente pergunta o valor (`clarification`).
 
 ## Saúde (rotas públicas)
 
