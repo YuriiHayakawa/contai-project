@@ -284,6 +284,9 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /* O espaço da barra de rolagem fica sempre reservado: quando uma lista cresce e a página
+       passa a rolar (ou um diálogo trava a rolagem), o conteúdo não salta para o lado. */
+    scrollbar-gutter: stable;
   }
 
   /* O fundo é papel (5): mancha de tinta no topo e pontilhado. */

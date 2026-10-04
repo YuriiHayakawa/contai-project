@@ -1,9 +1,10 @@
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronDown, Pencil, Plus } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { useId, useState } from "react";
 
 import { PageContent } from "../../../components/layout/AppShell";
 import { PageHeader } from "../../../components/layout/PageHeader";
-import { Button } from "../../../components/ui/Button";
+import { Button, IconButton } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { CategoryChip } from "../../../components/ui/CategoryChip";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -13,6 +14,7 @@ import { SkeletonList } from "../../../components/ui/Skeleton";
 import { useToast } from "../../../components/ui/Toast";
 import { errorMessage } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
+import { enterTransition, exitTransition } from "../../../lib/motion";
 import {
   categoryLabel,
   useArchiveCategory,
@@ -45,6 +47,8 @@ interface CategoryEditorProps {
   category?: Category;
   defaultKind: CategoryKind;
   tree: CategoryTree;
+  /** Uma categoria nova foi criada, para a lista mostrar onde ela entrou. */
+  onCreated: (category: Category) => void;
   onClose: () => void;
 }
 
@@ -58,6 +62,10 @@ const kindOptions = (Object.keys(CATEGORY_KIND_LABELS) as CategoryKind[]).map((v
   label: CATEGORY_KIND_LABELS[value],
 }));
 
+const subcategoryCount = (count: number): string =>
+  count === 1 ? "1 subcategoria" : `${count} subcategorias`;
+
+/** Uma categoria sem subcategorias à vista: a linha inteira abre a edição. */
 function CategoryRow({ category, label, nested = false, onSelect }: CategoryRowProps) {
   return (
     <li className="border-b border-border last:border-b-0">
@@ -65,7 +73,7 @@ function CategoryRow({ category, label, nested = false, onSelect }: CategoryRowP
         type="button"
         onClick={() => onSelect(category)}
         className={cn(
-          "flex min-h-14 w-full items-center gap-3 py-2 pr-3 text-left sm:pr-4",
+          "flex min-h-14 w-full items-center gap-3 py-2 pr-4 text-left",
           "transition-colors duration-fast ease-out hover:bg-bg-sunken",
           nested ? "pl-16 sm:pl-17" : "pl-4 sm:pl-5",
         )}
@@ -74,7 +82,8 @@ function CategoryRow({ category, label, nested = false, onSelect }: CategoryRowP
         <span className={cn("min-w-0 flex-1 truncate text-body text-ink", !nested && "font-bold")}>
           {label}
         </span>
-        <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-ink-subtle" />
+        {/* O lápis fica na mesma coluna do botão de editar das categorias que se abrem. */}
+        <Pencil aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
       </button>
     </li>
   );
@@ -92,7 +101,14 @@ function archivedEntries(parents: Category[]): ArchivedEntry[] {
 }
 
 /** Folha de criação e edição de uma categoria, com a ação de arquivar. */
-function CategoryEditor({ open, category, defaultKind, tree, onClose }: CategoryEditorProps) {
+function CategoryEditor({
+  open,
+  category,
+  defaultKind,
+  tree,
+  onCreated,
+  onClose,
+}: CategoryEditorProps) {
   const formId = useId();
   const toast = useToast();
   const create = useCreateCategory();
@@ -121,7 +137,7 @@ function CategoryEditor({ open, category, defaultKind, tree, onClose }: Category
       });
       toast.success("Categoria atualizada.");
     } else {
-      await create.mutateAsync(input);
+      onCreated(await create.mutateAsync(input));
       toast.success("Categoria criada.");
     }
     close();
@@ -205,36 +221,118 @@ function CategoryEditor({ open, category, defaultKind, tree, onClose }: Category
 
 interface CategoryGroupProps {
   parent: Category;
+  /** As subcategorias estão à vista. */
+  expanded: boolean;
+  onToggle: () => void;
   onSelect: (category: Category) => void;
 }
 
-/** Uma categoria principal seguida das subcategorias ativas dela. */
-function CategoryGroup({ parent, onSelect }: CategoryGroupProps) {
+/**
+ * Uma categoria principal. Com subcategorias ativas, a linha as abre e fecha embaixo dela, e o
+ * lápis ao lado edita a própria categoria; sem elas, a linha inteira abre a edição.
+ */
+function CategoryGroup({ parent, expanded, onToggle, onSelect }: CategoryGroupProps) {
+  const panelId = useId();
+  const children = parent.children.filter((child) => !child.archived);
+
+  if (children.length === 0) {
+    return <CategoryRow category={parent} label={parent.name} onSelect={onSelect} />;
+  }
+
   return (
-    <>
-      <CategoryRow category={parent} label={parent.name} onSelect={onSelect} />
-      {parent.children
-        .filter((child) => !child.archived)
-        .map((child) => (
-          <CategoryRow
-            key={child.id}
-            category={child}
-            label={child.name}
-            nested
-            onSelect={onSelect}
+    <li className="border-b border-border last:border-b-0">
+      <div className="flex items-center">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={onToggle}
+          className={cn(
+            "flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2 pr-2 pl-4 text-left sm:pl-5",
+            "transition-colors duration-fast ease-out hover:bg-bg-sunken",
+          )}
+        >
+          <CategoryChip color={parent.color} icon={parent.icon} />
+          <span className="grid min-w-0 flex-1">
+            <span className="truncate text-body font-bold text-ink">{parent.name}</span>
+            <span className="truncate text-small text-ink-muted">
+              {subcategoryCount(children.length)}
+            </span>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn(
+              "size-5 shrink-0 text-ink-subtle transition-transform duration-fast ease-out",
+              expanded && "rotate-180",
+            )}
           />
-        ))}
-    </>
+        </button>
+        <IconButton
+          aria-label={`Editar ${parent.name}`}
+          className="mr-1"
+          onClick={() => onSelect(parent)}
+        >
+          <Pencil aria-hidden="true" />
+        </IconButton>
+      </div>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          // Quem anima é só a altura deste invólucro, sem borda nem espaço interno: com a
+          // linha de pauta na própria lista, ela entraria de uma vez, antes das linhas.
+          <motion.div
+            className="overflow-hidden"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1, transition: enterTransition }}
+            exit={{ height: 0, opacity: 0, transition: exitTransition }}
+          >
+            <ul
+              id={panelId}
+              aria-label={`Subcategorias de ${parent.name}`}
+              className="border-t border-border bg-bg-sunken/40"
+            >
+              {children.map((child) => (
+                <CategoryRow
+                  key={child.id}
+                  category={child}
+                  label={child.name}
+                  nested
+                  onSelect={onSelect}
+                />
+              ))}
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </li>
   );
 }
 
-/** Categorias e subcategorias do usuário, por tipo; as arquivadas ficam em um grupo à parte. */
+/**
+ * Categorias do usuário, por tipo. A lista mostra só as categorias principais; as
+ * subcategorias de cada uma aparecem ao abri-la. As arquivadas ficam em um grupo à parte.
+ */
 export function CategoriesPage() {
   const categories = useCategories();
   const [kind, setKind] = useState<CategoryKind>("expense");
   const [editorOpen, setEditorOpen] = useState(false);
   // Fica guardada depois de fechar, para a folha não trocar de conteúdo enquanto sai da tela.
   const [editing, setEditing] = useState<Category | undefined>(undefined);
+  // As categorias principais abertas; todas começam fechadas, para a lista caber na tela.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+
+  const toggle = (id: string): void => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  };
+
+  // Uma subcategoria nova aparece logo: a categoria principal dela se abre.
+  const showCreated = (category: Category): void => {
+    const parentId = category.parent_id;
+    if (parentId) setExpanded((current) => new Set(current).add(parentId));
+  };
 
   const openEditor = (category?: Category): void => {
     setEditing(category);
@@ -291,7 +389,13 @@ export function CategoriesPage() {
             {active.length > 0 ? (
               <ul className="border-t border-border">
                 {active.map((parent) => (
-                  <CategoryGroup key={parent.id} parent={parent} onSelect={openEditor} />
+                  <CategoryGroup
+                    key={parent.id}
+                    parent={parent}
+                    expanded={expanded.has(parent.id)}
+                    onToggle={() => toggle(parent.id)}
+                    onSelect={openEditor}
+                  />
                 ))}
               </ul>
             ) : (
@@ -321,6 +425,7 @@ export function CategoriesPage() {
             category={editing}
             defaultKind={kind}
             tree={tree}
+            onCreated={showCreated}
             onClose={() => setEditorOpen(false)}
           />
         </div>

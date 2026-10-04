@@ -346,6 +346,11 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Cartão clicável: a área inteira é o alvo; hover com fundo `--bg-sunken`.
 - Não aninhar cartões. Dentro de um cartão, a separação é por linha de pauta.
 - Cartão de destaque: fundo `--primary-soft` e sem contorno; no máximo um por tela.
+- Lista que se abre dentro do cartão (categorias): a linha da categoria principal mostra o selo,
+  o nome em peso 700, quantas subcategorias ela tem em `small` `--ink-muted` e uma seta de 20px
+  `--ink-subtle`, que vira ao abrir. As subcategorias entram embaixo, recuadas, com altura e
+  opacidade (seção 9.2). Editar é sempre o lápis de 20px `--ink-muted`, na mesma coluna em todas
+  as linhas: um botão à parte nas linhas que se abrem, e o sinal da linha inteira nas demais.
 
 ### 6.5 Modal
 
