@@ -73,16 +73,22 @@ function renderList(transactions: Transaction[], overrides: Partial<TransactionL
 const rows = () => within(screen.getByRole("region", { name: "Hoje" })).getAllByRole("button");
 
 describe("TransactionList: transferência", () => {
-  it("com os dois lados na tela, vira uma linha só, com o que saiu e o que entrou", () => {
+  it("com os dois lados na tela, vira uma linha só, com de onde saiu e onde entrou", () => {
     renderList([received, out]);
 
     expect(rows()).toHaveLength(1);
     const row = rows()[0] as HTMLElement;
+    // O valor aparece uma vez, sem sinal: o sentido está nas duas paradas.
     expect(row).toHaveTextContent(
       "Transferência: Resgate" +
-        "Saiu de Investimento−R$ 500,00" +
-        "Entrou em Conta Principal (Inter)+R$ 500,00",
+        "R$ 500,00" +
+        "Saiu de Investimento" +
+        "Entrou em Conta Principal (Inter)",
     );
+    expect(within(row).getAllByText("R$ 500,00")).toHaveLength(1);
+    expect(row).not.toHaveTextContent("−R$");
+    expect(row).not.toHaveTextContent("+R$");
+    expect(within(row).getByText("R$ 500,00")).toHaveClass("text-money-md", "text-ink-muted");
   });
 
   it("a linha abre o detalhe da transferência", async () => {

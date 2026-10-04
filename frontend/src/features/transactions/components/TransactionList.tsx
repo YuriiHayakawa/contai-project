@@ -123,7 +123,8 @@ function countLabel(loaded: number, total: number): string {
 
 /**
  * Os dois lados de uma transferência em uma linha só, como um trajeto de mapa: a conta de onde
- * saiu e a em que entrou são duas paradas ligadas por um pontilhado, cada uma com o seu sinal.
+ * saiu e a em que entrou são duas paradas ligadas por um pontilhado. O valor aparece uma vez,
+ * sem sinal, no meio da linha, como nos outros lançamentos: quem diz o sentido são as paradas.
  * A linha abre o detalhe da transferência.
  */
 function TransferRow({ out, received, accounts, onSelect }: TransferRowProps) {
@@ -133,7 +134,8 @@ function TransferRow({ out, received, accounts, onSelect }: TransferRowProps) {
         type="button"
         onClick={() => onSelect(out)}
         className={cn(
-          "grid min-h-16 w-full grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5",
+          "grid min-h-16 w-full grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-x-3",
+          "gap-y-1.5",
           "px-3 py-2.5 text-left transition-colors duration-fast ease-out hover:bg-bg-sunken",
         )}
       >
@@ -142,7 +144,13 @@ function TransferRow({ out, received, accounts, onSelect }: TransferRowProps) {
           <span className="sr-only">Transferência: </span>
           {out.description}
         </span>
-        <span className="relative grid min-w-0 gap-3 pl-2 text-small text-ink-muted">
+        {/* A partir de `sm`, o valor fica no meio da linha inteira. No celular ele acompanha a
+            descrição, e as paradas usam a largura toda: ao lado dele, os nomes das contas
+            ficariam cortados em 320px. */}
+        <span className="money text-money-md text-ink-muted sm:row-span-2">
+          {formatBRL(out.amount_cents, { sign: "never" })}
+        </span>
+        <span className="relative col-span-2 col-start-2 grid min-w-0 gap-3 pl-2 text-small text-ink-muted sm:col-span-1">
           {/* O pontilhado passa por trás das paradas, de um centro ao outro. */}
           <span
             aria-hidden="true"
@@ -156,12 +164,12 @@ function TransferRow({ out, received, accounts, onSelect }: TransferRowProps) {
   );
 }
 
-/** Uma parada do trajeto: o ícone da conta, o nome e o valor com sinal, alinhado à direita. */
+/** Uma parada do trajeto: o ícone da conta e o que aconteceu nela, "Saiu de" ou "Entrou em". */
 function TransferLeg({ side, account }: TransferLegProps) {
   const Icon = account ? ACCOUNT_TYPE_ICONS[account.type] : undefined;
   const isOut = side.transfer_direction === "out";
   return (
-    <span className="grid grid-cols-[1.375rem_minmax(0,1fr)_auto] items-center gap-2">
+    <span className="grid grid-cols-[1.375rem_minmax(0,1fr)] items-center gap-2">
       {/* A origem é vazada e o destino, em azul: o dinheiro chega lá. */}
       <span
         aria-hidden="true"
@@ -177,7 +185,6 @@ function TransferLeg({ side, account }: TransferLegProps) {
       <span className="truncate">
         {transferVerb(side)} {account?.name ?? OTHER_ACCOUNT}
       </span>
-      <span className="money text-money-sm">{transferSideAmount(side)}</span>
     </span>
   );
 }
