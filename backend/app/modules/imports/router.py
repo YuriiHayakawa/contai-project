@@ -12,7 +12,14 @@ from app.core.rate_limit import limiter, user_or_ip
 from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.imports.mapping import ColumnMapping
 from app.modules.imports.models import ImportKind
-from app.modules.imports.schemas import ImportConfirm, ImportPage, ImportRead
+from app.modules.imports.schemas import (
+    ImportConfirm,
+    ImportItemRead,
+    ImportItemUpdate,
+    ImportPage,
+    ImportRead,
+    ImportSelection,
+)
 from app.modules.imports.service import ImportService
 
 router = APIRouter(prefix="/api/v1/imports", tags=["imports"])
@@ -105,12 +112,45 @@ async def submit_mapping(
     return await service.submit_mapping(current.id, import_id, body)
 
 
+@router.patch(
+    "/{import_id}/items/{item_id}",
+    summary="Salvar a correção de uma linha da revisão",
+    description=(
+        "Guarda o que o usuário mudou na linha: se está marcada, o tipo, o valor, a data, a "
+        "descrição, a categoria ou a outra conta. Só os campos enviados mudam, e nada vira "
+        "transação antes da confirmação. Fora de `awaiting_review` responde "
+        "`409 import_not_awaiting_review`."
+    ),
+)
+async def update_item(
+    import_id: uuid.UUID,
+    item_id: uuid.UUID,
+    body: ImportItemUpdate,
+    current: CurrentUserDep,
+    service: ImportServiceDep,
+) -> ImportItemRead:
+    return await service.update_item(current.id, import_id, item_id, body)
+
+
+@router.patch(
+    "/{import_id}/items",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Marcar ou desmarcar todas as linhas da revisão",
+    description="Fora de `awaiting_review` responde `409 import_not_awaiting_review`.",
+)
+async def select_all_items(
+    import_id: uuid.UUID, body: ImportSelection, current: CurrentUserDep, service: ImportServiceDep
+) -> None:
+    await service.select_all_items(current.id, import_id, selected=body.selected)
+
+
 @router.post(
     "/{import_id}/confirm",
     summary="Confirmar a revisão e salvar as linhas marcadas",
     description=(
         "Recebe a decisão final de todas as linhas da revisão. As marcadas viram transações, "
-        "com as correções feitas; tudo é gravado de uma vez, ou nada. Fora de "
+        "com as correções feitas; tudo é gravado de uma vez, ou nada. Como na correção de "
+        "uma linha, o tipo não inverte o sentido do dinheiro no extrato. Fora de "
         "`awaiting_review` responde `409 import_not_awaiting_review`."
     ),
 )

@@ -1,5 +1,6 @@
-"""Importação, da revisão em diante: categorias sugeridas, pagamento de fatura, conferência de
-saldo, confirmação, histórico, desfazer, descarte e expiração (FR-046 a FR-054, FR-081 a FR-083).
+"""Importação, da revisão em diante: categorias sugeridas, pagamento de fatura, correções
+guardadas, conferência de saldo, confirmação, histórico, desfazer, descarte e expiração (FR-046
+a FR-054, FR-081 a FR-083 e FR-085).
 """
 
 import os
@@ -42,8 +43,11 @@ from tests.imports import (
     confirm,
     decisions,
     get_import,
+    saved_decisions,
     send_confirmation,
+    send_item_update,
     stored_files,
+    update_item,
     upload,
 )
 
@@ -595,6 +599,81 @@ async def test_a_selected_line_that_is_wrong_is_refused_and_nothing_is_saved(
     assert (await get_import(client_a, record))["status"] == "awaiting_review"
 
 
+@pytest.mark.parametrize(
+    ("line", "inverted", "selected"),
+    [
+        ("PADARIA SÃO JOÃO", "income", True),
+        ("SALÁRIO EMPRESA FICTÍCIA LTDA", "expense", True),
+        ("PAGAMENTO FATURA CARTÃO", "income", True),
+        ("PADARIA SÃO JOÃO", "income", False),
+    ],
+    ids=[
+        "saída como receita",
+        "entrada como despesa",
+        "transferência que sai como receita",
+        "linha desmarcada",
+    ],
+)
+async def test_the_confirmation_refuses_to_invert_the_direction_of_any_line(
+    client_a: AsyncClient,
+    checking: Json,
+    card: Json,
+    categories: dict[str, str],
+    run_jobs: JobRunner,
+    line: str,
+    inverted: str,
+    selected: bool,
+) -> None:
+    record = await _review(client_a, run_jobs, checking, "banco_azul.ofx")
+    position = [item["description"] for item in record["items"]].index(line)
+    # Com uma categoria que serviria ao tipo pedido: o que se recusa é só a inversão.
+    category = categories["income:Salário" if inverted == "income" else "expense:Mercado"]
+
+    response = await send_confirmation(
+        client_a,
+        record,
+        _decision(record, line, type=inverted, category_id=category, selected=selected),
+    )
+
+    fields = _field_errors(response)
+    assert set(fields) == {f"items.{position}.type"}
+    # É a mesma regra da correção de uma linha, com a mesma orientação.
+    corrected = await send_item_update(client_a, record, record["items"][position], type=inverted)
+    assert _field_errors(corrected) == {"type": fields[f"items.{position}.type"]}
+    assert "saída do extrato pode ser despesa ou transferência" in fields[f"items.{position}.type"]
+    # Nenhuma linha entra, nem as que estavam certas: é tudo ou nada.
+    assert (await list_transactions(client_a))["total_count"] == 0
+    assert (await get_import(client_a, record))["status"] == "awaiting_review"
+
+
+async def test_the_confirmation_accepts_what_the_correction_accepts(
+    client_a: AsyncClient, card: Json, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    checking = await create_account(client_a, name="Conta corrente")
+    record = await _review(client_a, run_jobs, card, "cartao_verde.ofx")
+    lines = _by_description(record)
+    changes = {
+        # A saída vira transferência para outra conta, e a entrada, estorno ou transferência.
+        lines["Livraria Letras & Cia"]["id"]: {
+            "type": "transfer",
+            "category_id": None,
+            "counter_account_id": checking["id"],
+        },
+        lines["Estorno Livraria Letras & Cia"]["id"]: {
+            "category_id": categories["expense:Educação"]
+        },
+    }
+    items = [{**decision, **changes.get(decision["id"], {})} for decision in decisions(record)]
+
+    done = await confirm(client_a, record, items)
+
+    assert done["imported_count"] == 4
+    refund = (await _saved(client_a, q="Estorno"))[0]
+    assert (refund["type"], refund["category_id"]) == ("income", categories["expense:Educação"])
+    moved = await _saved(client_a, type="transfer", account_id=checking["id"])
+    assert [(side["transfer_direction"], side["amount_cents"]) for side in moved] == [("in", 5_990)]
+
+
 async def test_an_unselected_line_is_not_checked(
     client_a: AsyncClient, checking: Json, categories: dict[str, str], run_jobs: JobRunner
 ) -> None:
@@ -657,6 +736,275 @@ async def test_an_archived_destination_account_blocks_the_confirmation(
     assert response.status_code == 409, response.text
     assert response.json()["error"]["code"] == "account_archived"
     assert "Desarquive" in response.json()["error"]["message"]
+
+
+# ---------- correções guardadas na revisão
+
+
+async def test_a_correction_is_kept_and_comes_back_when_the_review_is_resumed(
+    client_a: AsyncClient, checking: Json, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    record = await _review(client_a, run_jobs, checking, "banco_azul.ofx")
+    lines = _by_description(record)
+    bakery, fee = lines["PADARIA SÃO JOÃO"], lines["TARIFA PACOTE DE SERVIÇOS"]
+    corrections = {
+        "category_id": categories["expense:Restaurante"],
+        "amount_cents": 4_600,
+        "date": "2026-09-11",
+    }
+
+    saved = await update_item(
+        client_a, record, bakery, description="  Café da manhã na padaria ", **corrections
+    )
+    await update_item(client_a, record, fee, selected=False)
+
+    # Quem sai da página e volta encontra a revisão como a deixou.
+    corrected = {**bakery, **corrections, "description": "Café da manhã na padaria"}
+    assert saved == corrected
+    resumed = {item["id"]: item for item in (await get_import(client_a, record))["items"]}
+    assert resumed[bakery["id"]] == corrected
+    assert resumed[fee["id"]] == {**fee, "selected": False}
+    # A sugestão continua guardada, e as outras linhas não mudaram.
+    assert corrected["suggested_category_id"] == categories["expense:Outros"]
+    assert resumed[fee["id"]]["selected_by_default"] is True
+    untouched = [item for item in record["items"] if item["id"] not in (bakery["id"], fee["id"])]
+    assert all(resumed[item["id"]] == item for item in untouched)
+    # Corrigir não salva nenhuma transação: isso é da confirmação (FR-046).
+    assert (await list_transactions(client_a))["total_count"] == 0
+
+
+async def test_the_resumed_review_is_confirmed_with_the_saved_corrections(
+    client_a: AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    checking: Json,
+    categories: dict[str, str],
+    run_jobs: JobRunner,
+) -> None:
+    record = await _small_review(client_a, run_jobs, checking)
+    lines = _by_description(record)
+    await update_item(
+        client_a, record, lines["Padaria São João"], category_id=categories["expense:Mercado"]
+    )
+    await update_item(client_a, record, lines["Posto Estrela"], selected=False)
+    # A correção guardada ainda não ensina nada: a regra só nasce na confirmação (FR-048).
+    assert await CategorizationRepository(session).list_all(user_a.id) == []
+
+    resumed = await get_import(client_a, record)
+    done = await confirm(client_a, resumed, saved_decisions(resumed))
+
+    assert done["imported_count"] == 2
+    saved = {line["description"]: line for line in await _saved(client_a)}
+    assert sorted(saved) == ["Padaria São João", "Salário"]
+    assert saved["Padaria São João"]["category_id"] == categories["expense:Mercado"]
+    rules = await CategorizationRepository(session).list_all(user_a.id)
+    assert [(rule.description_normalized, rule.source) for rule in rules] == [
+        ("padaria sao joao", RuleSource.USER)
+    ]
+
+
+async def test_marking_a_line_as_an_invoice_payment_is_kept(
+    client_a: AsyncClient, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    checking = await create_account(
+        client_a, name="Conta de setembro", initial_balance_date="2026-09-01"
+    )
+    record = await _review(client_a, run_jobs, checking, "banco_azul.ofx")
+    card = await create_account(
+        client_a,
+        name="Cartão Verde",
+        type="credit_card",
+        closing_day=3,
+        due_day=10,
+        initial_balance_cents=-80_000,
+        initial_balance_date="2026-09-01",
+    )
+    payment = _by_description(record)["PAGAMENTO FATURA CARTÃO"]
+
+    saved = await update_item(
+        client_a, record, payment, type="transfer", counter_account_id=card["id"]
+    )
+
+    # A saída virou uma transferência que sai da conta, e o aviso de gasto em dobro some.
+    assert (saved["type"], saved["transfer_direction"]) == ("transfer", "out")
+    assert (saved["counter_account_id"], saved["warning_code"]) == (card["id"], None)
+    resumed = await get_import(client_a, record)
+    assert _by_description(resumed)["PAGAMENTO FATURA CARTÃO"] == saved
+    await confirm(client_a, resumed, saved_decisions(resumed))
+    assert await balance_of(client_a, card) == 0
+    assert await _month_totals(client_a, "2026-09") == (545_000, 4_590 + 18_937 + 1_200)
+
+
+async def test_a_suggested_invoice_payment_can_be_kept_as_a_common_expense(
+    client_a: AsyncClient,
+    checking: Json,
+    card: Json,
+    categories: dict[str, str],
+    run_jobs: JobRunner,
+) -> None:
+    record = await _review(client_a, run_jobs, checking, "banco_azul.ofx")
+    payment = _by_description(record)["PAGAMENTO FATURA CARTÃO"]
+    assert (payment["type"], payment["counter_account_id"]) == ("transfer", card["id"])
+
+    saved = await update_item(
+        client_a, record, payment, type="expense", category_id=categories["expense:Outros"]
+    )
+
+    assert (saved["type"], saved["transfer_direction"]) == ("expense", None)
+    assert saved["category_id"] == categories["expense:Outros"]
+    # A sugestão do cartão continua registrada. O usuário decidiu com o cartão cadastrado: o
+    # aviso de quem não tem cartão não aparece.
+    assert saved["suggested_counter_account_id"] == card["id"]
+    assert saved["warning_code"] is None
+    assert _by_description(await get_import(client_a, record))["PAGAMENTO FATURA CARTÃO"] == saved
+
+
+async def test_a_corrected_line_keeps_the_direction_of_the_statement(
+    client_a: AsyncClient, card: Json, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    record = await _review(client_a, run_jobs, card, "cartao_verde.ofx")
+    lines = _by_description(record)
+    purchase, refund = lines["Livraria Letras & Cia"], lines["Estorno Livraria Letras & Cia"]
+    education = categories["expense:Educação"]
+
+    # A entrada marcada como estorno fica na categoria de despesa da compra (FR-084).
+    as_refund = await update_item(client_a, record, refund, category_id=education)
+    assert (as_refund["type"], as_refund["category_id"]) == ("income", education)
+
+    # Uma saída não vira receita, nem uma entrada, despesa; e despesa não vai em categoria de
+    # receita.
+    for line, changes, field in (
+        (purchase, {"type": "income"}, "type"),
+        (refund, {"type": "expense"}, "type"),
+        (purchase, {"category_id": categories["income:Salário"]}, "category_id"),
+    ):
+        response = await send_item_update(client_a, record, line, **changes)
+        assert set(_field_errors(response)) == {field}
+
+    # As duas podem ser transferência: a entrada, vinda de outra conta.
+    other = await create_account(client_a, name="Conta corrente")
+    moved = await update_item(
+        client_a, record, refund, type="transfer", counter_account_id=other["id"]
+    )
+    assert (moved["type"], moved["transfer_direction"]) == ("transfer", "in")
+    back = await update_item(client_a, record, refund, type="income")
+    assert (back["type"], back["transfer_direction"], back["category_id"]) == (
+        "income",
+        None,
+        education,
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"category_id": "00000000-0000-4000-8000-000000000000"}, "category_id"),
+        ({"category_id": "archived_category"}, "category_id"),
+        ({"amount_cents": 0}, "amount_cents"),
+        ({"description": "   "}, "description"),
+        ({"description": "x" * 201}, "description"),
+        ({"date": "2026-02-30"}, "date"),
+        ({"counter_account_id": "00000000-0000-4000-8000-000000000000"}, "counter_account_id"),
+        ({"counter_account_id": "self"}, "counter_account_id"),
+        ({"counter_account_id": "archived_account"}, "counter_account_id"),
+    ],
+    ids=[
+        "categoria que não existe",
+        "categoria arquivada",
+        "valor zero",
+        "descrição em branco",
+        "descrição longa demais",
+        "data que não existe",
+        "outra conta que não existe",
+        "transferência para a própria conta",
+        "transferência para conta arquivada",
+    ],
+)
+async def test_a_wrong_correction_is_refused_and_the_line_stays_as_it_was(
+    client_a: AsyncClient,
+    checking: Json,
+    categories: dict[str, str],
+    run_jobs: JobRunner,
+    changes: Json,
+    field: str,
+) -> None:
+    record = await _review(client_a, run_jobs, checking, "banco_azul.ofx")
+    archived = await create_account(client_a, name="Conta antiga")
+    await client_a.post(f"{ACCOUNTS}/{archived['id']}/archive")
+    await client_a.post(f"/api/v1/categories/{categories['expense:Lazer']}/archive")
+    placeholders = {
+        "archived_category": categories["expense:Lazer"],
+        "self": checking["id"],
+        "archived_account": archived["id"],
+    }
+    changes = {key: placeholders.get(str(value), value) for key, value in changes.items()}
+    bakery = _by_description(record)["PADARIA SÃO JOÃO"]
+
+    # Junto vai uma mudança que seria aceita: recusado um campo, nenhum é gravado.
+    response = await send_item_update(client_a, record, bakery, selected=False, **changes)
+
+    assert set(_field_errors(response)) == {field}
+    assert (await get_import(client_a, record))["items"] == record["items"]
+
+
+async def test_marking_and_unmarking_all_lines_is_kept_and_moves_the_checked_balance(
+    client_a: AsyncClient, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    account = await create_account(
+        client_a,
+        name="Conta de setembro",
+        initial_balance_cents=10_000,
+        initial_balance_date="2026-09-01",
+    )
+    food = categories["expense:Mercado"]
+    # Lançada à mão: a padaria do extrato chega desmarcada, como provável duplicata.
+    await create_transaction(
+        client_a, account, {"id": food, "kind": "expense"}, amount_cents=4_590, date="2026-09-10"
+    )
+    record = await _review(client_a, run_jobs, account, "banco_azul.ofx")
+    by_default = [True, False, True, True, True]
+    assert [item["selected"] for item in record["items"]] == by_default
+    suggested = record["balance_check"]["computed_balance_cents"]
+
+    marked = await client_a.patch(f"{IMPORTS}/{record['id']}/items", json={"selected": True})
+
+    assert marked.status_code == 204, marked.text
+    resumed = await get_import(client_a, record)
+    assert all(item["selected"] for item in resumed["items"])
+    # O que veio sugerido continua registrado, e o saldo conferido segue o que está marcado.
+    assert [item["selected_by_default"] for item in resumed["items"]] == by_default
+    assert resumed["balance_check"]["computed_balance_cents"] == suggested - 4_590
+
+    await client_a.patch(f"{IMPORTS}/{record['id']}/items", json={"selected": False})
+
+    resumed = await get_import(client_a, record)
+    assert not any(item["selected"] for item in resumed["items"])
+    check = resumed["balance_check"]
+    assert check["computed_balance_cents"] == check["account_balance_cents"]
+
+
+async def test_corrections_are_only_accepted_while_the_import_waits_for_review(
+    client_a: AsyncClient, checking: Json, categories: dict[str, str], run_jobs: JobRunner
+) -> None:
+    queued = await upload(client_a, checking, "banco_azul.ofx")
+    early = await client_a.patch(f"{IMPORTS}/{queued['id']}/items", json={"selected": False})
+    record = await _review(client_a, run_jobs, checking, "cartao_verde.ofx")
+    line = record["items"][0]
+
+    # Uma linha que não é desta importação responde como uma que não existe.
+    unknown = await client_a.patch(
+        f"{IMPORTS}/{record['id']}/items/{uuid.uuid4()}", json={"selected": False}
+    )
+    assert unknown.status_code == 404, unknown.text
+
+    await confirm(client_a, record)
+    late_line = await send_item_update(client_a, record, line, selected=False)
+    late_all = await client_a.patch(f"{IMPORTS}/{record['id']}/items", json={"selected": False})
+
+    for response in (early, late_line, late_all):
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "import_not_awaiting_review"
+    assert (await list_transactions(client_a))["total_count"] == 4
 
 
 # ---------- conferência de saldo

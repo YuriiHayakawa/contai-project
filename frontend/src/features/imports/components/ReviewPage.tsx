@@ -11,7 +11,12 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { Notice } from "../../../components/ui/Notice";
 import { SkeletonList } from "../../../components/ui/Skeleton";
 import { useToast } from "../../../components/ui/Toast";
-import { errorMessage, fieldErrors, isApiError } from "../../../lib/api-client";
+import {
+  errorMessage,
+  fieldErrors,
+  isApiError,
+  isSessionExpiredError,
+} from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
 import { dateTimeLabel, dayLabel, shortDate, type ISODate } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
@@ -234,7 +239,14 @@ function BalanceNotice({ check, lines }: BalanceNoticeProps) {
 function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
   const navigate = useNavigate();
   const toast = useToast();
-  const review = useImportReview(items, categories);
+  const review = useImportReview(record, categories, {
+    // A linha já voltou ao que estava salvo; o aviso diz o que fazer.
+    onSaveError: (error) => {
+      if (isSessionExpiredError(error)) return;
+      const reason = Object.values(fieldErrors(error))[0] ?? errorMessage(error);
+      toast.error(`A alteração não foi salva. ${reason}`);
+    },
+  });
   const confirm = useConfirmImport();
   const discard = useDiscardImport();
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -362,7 +374,8 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
         <p className="text-body wrap-anywhere text-ink-muted">
           {lineCount(items.length)} de {record.original_filename}
           {account && `, para ${account.name}`}. Confira, corrija o que precisar e desmarque o que
-          não quer importar: nada é salvo antes da confirmação.
+          não quer importar. Cada alteração fica guardada, e nada vira lançamento antes da
+          confirmação.
           {duplicates > 0 &&
             ` ${duplicates === 1 ? "1 linha vem desmarcada porque parece" : `${duplicates} linhas vêm desmarcadas porque parecem`} já estar na conta.`}
         </p>
@@ -445,8 +458,9 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
         <p className="mt-3 flex items-start gap-2 text-small text-ink-muted">
           <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>
-            Esta revisão fica disponível por 7 dias, até {dateTimeLabel(record.expires_at)}. Depois
-            disso nada é salvo, e é preciso enviar o arquivo de novo.
+            Você pode sair e continuar esta revisão depois: ela fica disponível por 7 dias, até{" "}
+            {dateTimeLabel(record.expires_at)}. Depois disso nada é importado, e é preciso enviar o
+            arquivo de novo.
           </span>
         </p>
       )}
@@ -468,14 +482,16 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
           </Notice>
         )}
         <p className="text-small text-ink-muted">
+          {review.isSaving && "Salvando as alterações… "}
           {selectedCount === 0
             ? "Marque ao menos uma linha para importar."
             : `${entryCount(selectedCount)} ${selectedCount === 1 ? "entra" : "entram"}${account ? ` em ${account.name}` : " na conta"}.`}
         </p>
+        {/* A confirmação espera a última alteração ser salva: o servidor recebe uma por vez. */}
         <Button
           block
           disabled={selectedCount === 0}
-          loading={confirm.isPending}
+          loading={confirm.isPending || review.isSaving}
           onClick={submit}
           className="sm:w-auto"
         >
@@ -494,7 +510,7 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
       <ConfirmDialog
         open={confirmingDiscard}
         title="Descartar esta importação?"
-        description="As linhas lidas do arquivo são apagadas e nada é importado. Para importar depois, envie o arquivo de novo."
+        description="As linhas lidas do arquivo e as correções feitas são apagadas, e nada é importado. Para importar depois, envie o arquivo de novo."
         confirmLabel="Descartar importação"
         loading={discard.isPending}
         onConfirm={confirmDiscard}
@@ -507,7 +523,9 @@ function ReviewBody({ record, items, accounts, categories }: ReviewBodyProps) {
 /**
  * Revisão de uma importação (FR-046), no modo de revisão da lista de lançamentos: marcar e
  * desmarcar linhas, corrigir valor, data, descrição e categoria, ver as duplicatas e os avisos
- * de saldo e de pagamento de fatura, e confirmar. Nada é salvo antes da confirmação.
+ * de saldo e de pagamento de fatura, e confirmar. Cada alteração é guardada no servidor, e a
+ * revisão pode ser retomada depois de sair da página (FR-085); nada vira lançamento antes da
+ * confirmação.
  */
 export function ReviewPage() {
   const { importId } = useParams();
@@ -517,7 +535,9 @@ export function ReviewPage() {
   const categories = useCategories();
 
   let body: ReactNode;
-  const loadError = record.error ?? accounts.error ?? categories.error;
+  const loaded = record.data && accounts.data && categories.data;
+  // Com a revisão na tela, uma conferência que falha em segundo plano não a tira dali.
+  const loadError = loaded ? null : (record.error ?? accounts.error ?? categories.error);
   if (isApiError(record.error) && record.error.status === 404) {
     body = (
       <EmptyState

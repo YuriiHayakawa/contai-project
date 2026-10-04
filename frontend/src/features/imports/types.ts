@@ -18,7 +18,11 @@ export type CategorySource = "user_rule" | "ai" | "fallback";
 /** A linha parece o pagamento de uma fatura e ficou como despesa: não há cartão cadastrado. */
 export const INVOICE_PAYMENT_WITHOUT_CARD = "invoice_payment_without_card";
 
-/** Uma transação proposta, para a revisão. Nada dela está salvo ainda (FR-046). */
+/**
+ * Uma linha da revisão: a transação proposta, com o que o usuário já corrigiu nela. Nada dela
+ * virou lançamento ainda (FR-046). `type`, `amount_cents`, `date` e `description` trazem o
+ * valor corrigido, quando houve correção.
+ */
 export interface ImportItem {
   id: string;
   /** Posição da linha no arquivo, a partir de zero. */
@@ -38,10 +42,32 @@ export interface ImportItem {
   duplicate_of_id: string | null;
   /** Duplicata chega desmarcada (FR-049). */
   selected_by_default: boolean;
+  /** Se a linha está marcada na revisão agora; começa igual a `selected_by_default`. */
+  selected: boolean;
+  /** A categoria e a outra conta escolhidas na revisão; começam iguais à sugestão. */
+  category_id: string | null;
+  counter_account_id: string | null;
   warning_code: string | null;
   /** O que fazer, em português, quando há `warning_code`. */
   warning_message: string | null;
 }
+
+/**
+ * Corpo de `PATCH /imports/{id}/items/{item_id}`: a correção de uma linha da revisão. Só os
+ * campos enviados mudam; `null` em `category_id` ou `counter_account_id` desfaz a escolha.
+ */
+export type ImportItemPatch = Partial<
+  Pick<
+    ImportItem,
+    | "selected"
+    | "type"
+    | "amount_cents"
+    | "date"
+    | "description"
+    | "category_id"
+    | "counter_account_id"
+  >
+>;
 
 export type DateFormat = "dmy" | "mdy" | "ymd";
 export type DecimalSeparator = "," | ".";

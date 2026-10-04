@@ -86,6 +86,10 @@ código, o termo é "transação" (`transaction`). Os dois nomes se referem à m
   despesa da compra. Ele abate as saídas e o gasto dessa categoria, e não conta como entrada:
   comprar e devolver um livro dá R$ 0 em Educação. Se o estorno cai em um mês diferente do da
   compra, a categoria fica negativa naquele mês (definido na implementação da importação).
+- Q: O que acontece com as correções da revisão se o usuário sair da página? → A: Ficam
+  guardadas. Cada alteração (marcar, desmarcar, categoria, tipo, valor, descrição e data) é
+  salva na hora, e a revisão pode ser retomada até expirar. Nenhuma transação é criada antes
+  da confirmação (definido na revisão da tela de importação).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -481,9 +485,10 @@ os 7 dias, não consegue mais entrar.
   importação são removidas mesmo assim, após o aviso de confirmação.
 - **Falha no meio do processamento de uma importação**: nada é salvo parcialmente, e o usuário
   pode tentar de novo.
-- **Importação revisada pela metade e abandonada**: a tela de revisão mostra até quando ela fica
-  disponível; depois de 7 dias sem confirmação, ela expira, nada é salvo, e o histórico a mostra
-  como expirada, com a orientação de enviar o arquivo de novo.
+- **Importação revisada pela metade e abandonada**: as correções já feitas ficam guardadas, e a
+  tela de revisão mostra até quando ela fica disponível; depois de 7 dias sem confirmação, ela
+  expira, nenhuma transação é salva, e o histórico a mostra como expirada, com a orientação de
+  enviar o arquivo de novo.
 - **CSV ou planilha enviado sem concluir o mapeamento de colunas**: o arquivo fica guardado por
   24 horas; depois disso é apagado, e a importação aparece no histórico como expirada.
 - **Limite de uso de IA atingido durante uma importação de PDF**: o usuário é informado de
@@ -674,6 +679,12 @@ os 7 dias, não consegue mais entrar.
   e um arquivo à espera do mapeamento de colunas DEVE ser apagado depois de 24 horas. Nos dois
   casos nada é salvo, o prazo DEVE aparecer na tela enquanto a importação está pendente, e o
   histórico DEVE mostrá-la como expirada, com a orientação de enviar o arquivo de novo.
+- **FR-085**: As correções feitas na revisão de uma importação (marcar e desmarcar linhas,
+  categoria, tipo, valor, descrição e data) DEVEM ser guardadas a cada alteração, para a
+  revisão poder ser retomada depois de sair da página ou recarregá-la, até ela expirar. Guardar
+  uma correção NÃO DEVE criar transações nem ensinar categorias: isso só acontece na
+  confirmação. Se uma alteração não puder ser guardada, o usuário DEVE ser avisado, e a linha
+  DEVE voltar a mostrar o que está guardado.
 
 **Painel**
 

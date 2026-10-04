@@ -61,6 +61,7 @@ from app.modules.imports.schemas import (
     ConfirmItem,
     ImportConfirm,
     ImportItemRead,
+    ImportItemUpdate,
     ImportPage,
     ImportRead,
     MappingPreviewRead,
@@ -145,6 +146,10 @@ AMOUNT_BOTH_WAYS = (
     "Escolha a coluna do valor ou as colunas de entrada e de saída, e não as duas formas."
 )
 TYPE_REQUIRED = "Escolha se a linha é despesa, receita ou transferência."
+TYPE_AGAINST_STATEMENT = (
+    "Uma saída do extrato pode ser despesa ou transferência, e uma entrada, receita ou "
+    "transferência. Escolha um desses tipos."
+)
 AMOUNT_INVALID = "Informe um valor maior que zero."
 DATE_REQUIRED = "Informe a data."
 DESCRIPTION_INVALID = "Informe uma descrição de até 200 caracteres."
@@ -203,6 +208,17 @@ def _leaves_account(transaction_type: str, transfer_direction: str | None) -> bo
     if transaction_type == TransactionType.TRANSFER:
         return transfer_direction == TransferDirection.OUT
     return transaction_type == TransactionType.EXPENSE
+
+
+def _keeps_direction(item: ImportItem, line_type: TransactionType) -> bool:
+    """O sentido do dinheiro é o do extrato: uma saída é despesa ou transferência, e uma
+    entrada, receita ou transferência. Uma saída não vira receita, nem uma entrada, despesa.
+
+    Vale para a correção de uma linha e para a confirmação.
+    """
+    leaves = _leaves_account(item.type, item.transfer_direction)
+    plain = TransactionType.EXPENSE if leaves else TransactionType.INCOME
+    return line_type in (plain, TransactionType.TRANSFER)
 
 
 def encode_cursor(record: Import) -> str:
@@ -353,9 +369,9 @@ class ImportService:
     async def _balance_check(self, record: Import, items: list[ImportItem]) -> BalanceCheck | None:
         """O saldo do banco contra o saldo da conta na data dele (FR-082).
 
-        Na revisão entram as linhas marcadas por padrão. Só contam as linhas com data entre a
-        data de referência do saldo inicial e a data do saldo do banco, como no saldo da conta
-        (FR-023). Depois da confirmação, vale o saldo da conta nessa data.
+        Na revisão entram as linhas marcadas, como o usuário as deixou. Só contam as linhas com
+        data entre a data de referência do saldo inicial e a data do saldo do banco, como no
+        saldo da conta (FR-023). Depois da confirmação, vale o saldo da conta nessa data.
         """
         status = ImportStatus(record.status)
         bank_balance, balance_date = record.bank_balance_cents, record.bank_balance_date
@@ -375,8 +391,7 @@ class ImportService:
             if _leaves_account(item.type, item.transfer_direction)
             else item.amount_cents
             for item in items
-            if item.selected_by_default
-            and account.initial_balance_date <= item.date <= balance_date
+            if item.selected and account.initial_balance_date <= item.date <= balance_date
         )
         computed = account_balance + selected
         return BalanceCheck(
@@ -464,6 +479,95 @@ class ImportService:
         await self._enqueue(record)
         return await self._read(record)
 
+    # ---------- correções da revisão
+
+    async def _load_in_review(self, user_id: uuid.UUID, import_id: uuid.UUID) -> Import:
+        """A importação, travada, à espera da revisão: só nesse estado as linhas mudam."""
+        record = await self._load(user_id, import_id, for_update=True)
+        if record.status != ImportStatus.AWAITING_REVIEW:
+            raise Conflict(NOT_AWAITING_REVIEW, code="import_not_awaiting_review")
+        return record
+
+    async def update_item(
+        self,
+        user_id: uuid.UUID,
+        import_id: uuid.UUID,
+        item_id: uuid.UUID,
+        changes: ImportItemUpdate,
+    ) -> ImportItemRead:
+        """Guarda a correção de uma linha da revisão, para ela poder ser retomada depois.
+
+        Só os campos enviados mudam, e nada vira transação antes da confirmação (FR-046). Se
+        um campo for recusado, nenhum é gravado.
+        """
+        record = await self._load_in_review(user_id, import_id)
+        item = await self._imports.get_item(user_id, record.id, item_id)
+        if item is None:
+            raise NotFound()
+
+        sent = changes.model_fields_set
+        fields: dict[str, str] = {}
+        leaves = _leaves_account(item.type, item.transfer_direction)
+        line_type = TransactionType(item.type)
+        if changes.type is not None:
+            if not _keeps_direction(item, changes.type):
+                fields["type"] = TYPE_AGAINST_STATEMENT
+            line_type = changes.type
+        if changes.amount_cents is not None and not 0 < changes.amount_cents <= MAX_AMOUNT_CENTS:
+            fields["amount_cents"] = AMOUNT_INVALID
+        description = None if changes.description is None else changes.description.strip()
+        if description is not None and not 1 <= len(description) <= MAX_DESCRIPTION_LENGTH:
+            fields["description"] = DESCRIPTION_INVALID
+
+        if "category_id" in sent and changes.category_id is not None:
+            category = await self._categories.get(user_id, changes.category_id)
+            if category is None:
+                fields["category_id"] = CATEGORY_NOT_FOUND
+            elif category.archived_at is not None:
+                fields["category_id"] = CATEGORY_ARCHIVED
+            elif line_type != TransactionType.TRANSFER and not category_fits(
+                str(category.kind), line_type
+            ):
+                fields["category_id"] = CATEGORY_KIND_MISMATCH
+        if "counter_account_id" in sent and changes.counter_account_id is not None:
+            counter = await self._accounts.get(user_id, changes.counter_account_id)
+            if counter is None:
+                fields["counter_account_id"] = ACCOUNT_NOT_FOUND
+            elif counter.archived_at is not None:
+                fields["counter_account_id"] = ACCOUNT_ARCHIVED
+            elif counter.id == record.account_id:
+                fields["counter_account_id"] = TRANSFER_SAME_ACCOUNT
+        if fields:
+            raise _invalid(fields)
+
+        if changes.selected is not None:
+            item.selected = changes.selected
+        if changes.type is not None:
+            item.type = changes.type
+            item.transfer_direction = None
+            if changes.type == TransactionType.TRANSFER:
+                item.transfer_direction = TransferDirection.OUT if leaves else TransferDirection.IN
+        if changes.amount_cents is not None:
+            item.amount_cents = changes.amount_cents
+        if changes.date is not None:
+            item.date = changes.date
+        if description is not None:
+            # A descrição normalizada continua a do banco: é ela que volta no próximo extrato,
+            # e é para ela que a correção de categoria vira regra (FR-048).
+            item.description = description
+        if "category_id" in sent:
+            item.category_id = changes.category_id
+        if "counter_account_id" in sent:
+            item.counter_account_id = changes.counter_account_id
+        return ImportItemRead.from_item(await self._imports.save_item(user_id, item))
+
+    async def select_all_items(
+        self, user_id: uuid.UUID, import_id: uuid.UUID, *, selected: bool
+    ) -> None:
+        """Marca ou desmarca todas as linhas da revisão de uma vez, inclusive as duplicatas."""
+        record = await self._load_in_review(user_id, import_id)
+        await self._imports.select_all_items(user_id, record.id, selected=selected)
+
     # ---------- confirmação, desfazer e descarte
 
     async def confirm(
@@ -500,9 +604,16 @@ class ImportService:
             if decision.selected
         ]
         fields: dict[str, str] = {}
+        # O sentido do dinheiro é conferido em toda linha que traz o tipo, marcada ou não, como
+        # na correção de uma linha: nenhuma inverte o que o extrato diz.
+        for position, decision in enumerate(data.items):
+            if decision.type is not None and not _keeps_direction(
+                items[decision.id], decision.type
+            ):
+                fields[f"items.{position}.type"] = TYPE_AGAINST_STATEMENT
         for position, decision, _ in selected:
             for field, message in self._check_decision(decision, account, accounts, categories):
-                fields[f"items.{position}.{field}"] = message
+                fields.setdefault(f"items.{position}.{field}", message)
         if fields:
             raise _invalid(fields)
 

@@ -96,6 +96,38 @@ def decisions(record: Json) -> list[Json]:
     ]
 
 
+def saved_decisions(record: Json) -> list[Json]:
+    """A decisão final de cada linha como está guardada na revisão, com o que o usuário já
+    corrigiu: é o que a tela envia ao confirmar uma revisão retomada."""
+    return [
+        {
+            "id": item["id"],
+            "selected": item["selected"],
+            "type": item["type"],
+            "amount_cents": item["amount_cents"],
+            "date": item["date"],
+            "description": item["description"],
+            "category_id": item["category_id"],
+            "counter_account_id": item["counter_account_id"],
+        }
+        for item in record["items"]
+    ]
+
+
+async def send_item_update(
+    client: AsyncClient, record: Json, item: Json, **changes: object
+) -> Response:
+    """Guarda a correção de uma linha da revisão."""
+    return await client.patch(f"{IMPORTS}/{record['id']}/items/{item['id']}", json=changes)
+
+
+async def update_item(client: AsyncClient, record: Json, item: Json, **changes: object) -> Json:
+    response = await send_item_update(client, record, item, **changes)
+    assert response.status_code == 200, response.text
+    body: Json = response.json()
+    return body
+
+
 async def send_confirmation(
     client: AsyncClient, record: Json, items: list[Json] | None = None
 ) -> Response:

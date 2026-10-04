@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import delete, func, select, tuple_
+from sqlalchemy import delete, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -169,6 +169,10 @@ class ImportRepository:
                 suggested_category_id=item.suggested_category_id,
                 category_source=item.category_source,
                 suggested_counter_account_id=item.suggested_counter_account_id,
+                # A revisão começa do jeito que foi sugerida.
+                selected=item.selected_by_default,
+                category_id=item.suggested_category_id,
+                counter_account_id=item.suggested_counter_account_id,
             )
             for item in items
         )
@@ -182,6 +186,36 @@ class ImportRepository:
             .order_by(ImportItem.row_index)
         )
         return list(result.scalars())
+
+    async def get_item(
+        self, user_id: uuid.UUID, import_id: uuid.UUID, item_id: uuid.UUID
+    ) -> ImportItem | None:
+        result = await self._session.execute(
+            select(ImportItem).where(
+                ImportItem.id == item_id,
+                ImportItem.import_id == import_id,
+                ImportItem.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def save_item(self, user_id: uuid.UUID, item: ImportItem) -> ImportItem:
+        """Grava as correções feitas em uma linha já carregada deste usuário."""
+        if item.user_id != user_id:
+            raise ValueError("a linha não é deste usuário")
+        await self._session.flush()
+        await self._session.refresh(item)
+        return item
+
+    async def select_all_items(
+        self, user_id: uuid.UUID, import_id: uuid.UUID, *, selected: bool
+    ) -> None:
+        """Marca ou desmarca, de uma vez, todas as linhas da revisão."""
+        await self._session.execute(
+            update(ImportItem)
+            .where(ImportItem.import_id == import_id, ImportItem.user_id == user_id)
+            .values(selected=selected)
+        )
 
     async def delete_items(self, user_id: uuid.UUID, import_id: uuid.UUID) -> None:
         await self._session.execute(
