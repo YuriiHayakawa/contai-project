@@ -138,10 +138,12 @@ export function ChatPage() {
                     <SquarePen aria-hidden="true" />
                   </IconButton>
                 )}
+                {/* A partir de `lg` o histórico fica na barra lateral, embaixo de "Assistente". */}
                 <IconButton
                   aria-label="Histórico de conversas"
                   title="Histórico de conversas"
                   aria-haspopup="dialog"
+                  className="lg:hidden"
                   onClick={() => setHistoryOpen(true)}
                 >
                   <History aria-hidden="true" />

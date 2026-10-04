@@ -1,23 +1,16 @@
 import { Trash2 } from "lucide-react";
-import { useState } from "react";
 import { Link } from "react-router";
 
 import { Button, IconButton } from "../../../components/ui/Button";
-import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { Modal } from "../../../components/ui/Modal";
 import { Notice } from "../../../components/ui/Notice";
 import { SkeletonList } from "../../../components/ui/Skeleton";
-import { useToast } from "../../../components/ui/Toast";
 import { errorMessage } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
 import { dayLabel, toISODate } from "../../../lib/dates";
 import { conversationPath } from "../../../lib/paths";
-import {
-  useConversations,
-  useDeleteAllConversations,
-  useDeleteConversation,
-} from "../hooks/useConversations";
-import type { Conversation } from "../types";
+import { useConversations } from "../hooks/useConversations";
+import { titleOf, useConversationDeletion } from "./useConversationDeletion";
 
 export interface ConversationHistoryProps {
   open: boolean;
@@ -28,17 +21,10 @@ export interface ConversationHistoryProps {
   onCurrentDeleted: () => void;
 }
 
-/** O que está para ser apagado: uma conversa ou o histórico inteiro. */
-type Target = { kind: "one"; conversation: Conversation } | { kind: "all" };
-
-// A conversa aberta para uma pergunta que não chegou a ser respondida.
-const UNTITLED = "Conversa sem perguntas";
-
-const titleOf = (conversation: Conversation): string => conversation.title || UNTITLED;
-
 /**
- * Histórico de conversas (FR-069): abrir uma conversa, apagar uma e apagar todas. Apagar pede
- * confirmação e não tem volta (FR-077).
+ * Histórico de conversas (FR-069) em uma folha, para as telas sem barra lateral: abrir uma
+ * conversa, apagar uma e apagar todas. A partir de `lg`, o histórico fica na barra lateral
+ * (`SidebarHistory`).
  */
 export function ConversationHistory({
   open,
@@ -46,49 +32,14 @@ export function ConversationHistory({
   currentId,
   onCurrentDeleted,
 }: ConversationHistoryProps) {
-  const toast = useToast();
   const conversations = useConversations(open);
-  const deleteOne = useDeleteConversation();
-  const deleteAll = useDeleteAllConversations();
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  // Fica guardado depois de fechar, para o diálogo não esvaziar enquanto sai da tela.
-  const [target, setTarget] = useState<Target | undefined>(undefined);
+  const { ask, dialog } = useConversationDeletion({
+    currentId,
+    onCurrentDeleted,
+    onAllDeleted: onClose,
+  });
 
   const items = conversations.data?.pages.flatMap((page) => page.items);
-
-  const ask = (next: Target): void => {
-    setTarget(next);
-    setConfirmOpen(true);
-  };
-
-  const fail = (error: unknown): void => {
-    setConfirmOpen(false);
-    toast.error(errorMessage(error));
-  };
-
-  const confirm = (): void => {
-    if (target?.kind === "one") {
-      const { id } = target.conversation;
-      deleteOne.mutate(id, {
-        onSuccess: () => {
-          setConfirmOpen(false);
-          toast.success("Conversa apagada.");
-          if (id === currentId) onCurrentDeleted();
-        },
-        onError: fail,
-      });
-    } else if (target?.kind === "all") {
-      deleteAll.mutate(undefined, {
-        onSuccess: () => {
-          setConfirmOpen(false);
-          toast.success("Histórico de conversas apagado.");
-          onClose();
-          if (currentId) onCurrentDeleted();
-        },
-        onError: fail,
-      });
-    }
-  };
 
   return (
     <>
@@ -182,21 +133,7 @@ export function ConversationHistory({
         )}
       </Modal>
 
-      {target && (
-        <ConfirmDialog
-          open={confirmOpen}
-          title={target.kind === "one" ? "Apagar esta conversa?" : "Apagar todas as conversas?"}
-          description={
-            target.kind === "one"
-              ? `A conversa "${titleOf(target.conversation)}" deixa de existir, com as perguntas e as respostas dela. Seus lançamentos não mudam.`
-              : "Todo o histórico do assistente deixa de existir. Seus lançamentos não mudam."
-          }
-          confirmLabel={target.kind === "one" ? "Apagar conversa" : "Apagar todas"}
-          loading={deleteOne.isPending || deleteAll.isPending}
-          onConfirm={confirm}
-          onCancel={() => setConfirmOpen(false)}
-        />
-      )}
+      {dialog}
     </>
   );
 }
