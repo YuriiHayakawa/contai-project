@@ -43,6 +43,25 @@ function focusableIn(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE));
 }
 
+// A rolagem da página fica travada enquanto houver alguma janela aberta. A conta é uma só para
+// todas: se cada janela guardasse e devolvesse o estado que encontrou, duas empilhadas que
+// fecham juntas (o detalhe de um lançamento e a confirmação de excluir) deixariam a página
+// travada, porque a de cima devolveria o "travado" que encontrou ao abrir.
+let openModals = 0;
+let overflowBeforeModals = "";
+
+function lockPageScroll(): () => void {
+  if (openModals === 0) {
+    overflowBeforeModals = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  }
+  openModals += 1;
+  return () => {
+    openModals -= 1;
+    if (openModals === 0) document.body.style.overflow = overflowBeforeModals;
+  };
+}
+
 /**
  * Modal (seção 6.5 do design-system.md): folha que sobe da base no celular e diálogo
  * centralizado a partir de `md`. O foco fica preso dentro e volta à origem ao fechar.
@@ -69,11 +88,10 @@ export function Modal({
     const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     (initialFocusRef?.current ?? panelRef.current)?.focus();
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const unlockPageScroll = lockPageScroll();
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      unlockPageScroll();
       origin?.focus();
     };
   }, [open, initialFocusRef]);

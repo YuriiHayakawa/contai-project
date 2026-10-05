@@ -11,6 +11,8 @@ export interface BottomNavProps {
   onNewTransaction: () => void;
   /** Sai da conta; o item "Sair" da folha "Mais" só aparece quando informado. */
   onSignOut?: () => void;
+  /** Mostra "Cartões" na folha "Mais": só para quem tem cartão de crédito ativo. */
+  hasCards?: boolean;
 }
 
 interface TabLinkProps {
@@ -77,14 +79,15 @@ function TabLink({ item }: TabLinkProps) {
 
 /**
  * Barra inferior (até `lg`): Início, Lançamentos, o botão central "Lançar", Assistente e
- * "Mais", que abre uma folha com Contas, Categorias, Importações e Configurações e, no fim,
- * a saída da conta.
+ * "Mais", que abre uma folha com Contas, Cartões (para quem tem cartão), Categorias,
+ * Importações e Configurações e, no fim, a saída da conta.
  */
-export function BottomNav({ onNewTransaction, onSignOut }: BottomNavProps) {
+export function BottomNav({ onNewTransaction, onSignOut, hasCards = false }: BottomNavProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const keyboardOpen = useVirtualKeyboardOpen();
   const { pathname } = useLocation();
-  const insideMore = moreItems.some((item) => pathname.startsWith(item.to));
+  const more = moreItems({ hasCards });
+  const insideMore = more.some((item) => pathname.startsWith(item.to));
 
   if (keyboardOpen) return null;
 
@@ -131,7 +134,7 @@ export function BottomNav({ onNewTransaction, onSignOut }: BottomNavProps) {
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="Mais">
         <nav aria-label="Mais opções">
           <ul>
-            {moreItems.map((item) => (
+            {more.map((item) => (
               <li key={item.to} className="border-b border-border last:border-b-0">
                 <NavLink
                   to={item.to}

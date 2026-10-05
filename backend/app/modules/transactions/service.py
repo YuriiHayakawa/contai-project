@@ -122,6 +122,7 @@ class TransactionService:
         account_id: uuid.UUID | None = None,
         category_id: uuid.UUID | None = None,
         transaction_type: TransactionType | None = None,
+        without_transfers: bool = False,
         text: str | None = None,
         installment_group_id: uuid.UUID | None = None,
         transfer_group_id: uuid.UUID | None = None,
@@ -140,6 +141,7 @@ class TransactionService:
                 else None
             ),
             transaction_type=transaction_type,
+            without_transfers=without_transfers,
             text=text.strip() if text else None,
             installment_group_id=installment_group_id,
             transfer_group_id=transfer_group_id,

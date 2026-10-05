@@ -36,6 +36,8 @@ class TransactionFilters:
     # Já resolvido pelo serviço: a categoria pedida e as subcategorias dela.
     category_ids: list[uuid.UUID] | None = None
     transaction_type: TransactionType | None = None
+    # Só despesas e receitas: o que compõe uma fatura de cartão, sem os pagamentos dela.
+    without_transfers: bool = False
     text: str | None = None
     installment_group_id: uuid.UUID | None = None
     transfer_group_id: uuid.UUID | None = None
@@ -97,6 +99,8 @@ def _conditions(user_id: uuid.UUID, filters: TransactionFilters) -> list[ColumnE
         conditions.append(Transaction.category_id.in_(filters.category_ids))
     if filters.transaction_type is not None:
         conditions.append(Transaction.type == filters.transaction_type)
+    if filters.without_transfers:
+        conditions.append(Transaction.type != TransactionType.TRANSFER)
     if filters.installment_group_id is not None:
         conditions.append(Transaction.installment_group_id == filters.installment_group_id)
     if filters.transfer_group_id is not None:

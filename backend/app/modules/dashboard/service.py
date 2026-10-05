@@ -14,7 +14,7 @@ from typing import Literal, Self
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
-from app.core.errors import ValidationFailed
+from app.core.errors import NotFound, ValidationFailed
 from app.modules.accounts.models import AccountType
 from app.modules.accounts.schemas import AccountRead
 from app.modules.accounts.service import AccountService
@@ -23,19 +23,29 @@ from app.modules.categories.repository import CategoryRepository
 from app.modules.dashboard.repository import NO_FILTERS, ReportFilters, ReportRepository
 from app.modules.dashboard.schemas import (
     AccountBalance,
+    CardInvoice,
+    CardInvoices,
     CardSummary,
     CategoryBreakdown,
     CategorySpending,
     ClosedInvoiceDue,
     FutureInstallments,
     InvoicePayment,
+    InvoiceStatus,
     InvoiceSummary,
     MonthAmount,
     MonthTotals,
     PeriodTotals,
     SubcategorySpending,
 )
-from app.modules.transactions.invoices import current_invoice, invoice_for
+from app.modules.transactions.invoices import (
+    Invoice,
+    current_invoice,
+    invoice_closing_in,
+    invoice_for,
+    next_invoice,
+    previous_invoice,
+)
 from app.modules.transactions.models import TransactionType
 from app.modules.transactions.schemas import TransactionRead
 
@@ -45,6 +55,10 @@ _MONTH_PATTERN = re.compile(r"(\d{4})-(0[1-9]|1[0-2])")
 # Anos fora desta faixa só aparecem por engano de digitação.
 _MIN_YEAR, _MAX_YEAR = 1900, 2200
 _ONE_DECIMAL = Decimal("0.1")
+# Até onde a tela de um cartão volta e avança a partir da fatura atual. Para a frente, cabem
+# todas as parcelas de uma compra, que são no máximo 48.
+MAX_PAST_INVOICES = 36
+MAX_FUTURE_INVOICES = 48
 
 
 @dataclass(frozen=True)
@@ -102,6 +116,12 @@ def card_reference_date(first_day: dt.date) -> dt.date:
     if (first_day.year, first_day.month) == (today.year, today.month):
         return today
     return clock.month_bounds(first_day)[1] if first_day < today else first_day
+
+
+def _card_days(card: AccountRead) -> dict[str, int]:
+    if card.closing_day is None or card.due_day is None:  # pragma: no cover - CHECK
+        raise ValueError("só cartão de crédito tem fatura")
+    return {"closing_day": card.closing_day, "due_day": card.due_day}
 
 
 def _totals(income_cents: int, expense_cents: int) -> dict[str, int]:
@@ -170,7 +190,9 @@ class ReportingService:
             for account in await self._accounts.list(user_id)
         ]
 
-    async def spending_by_category(self, user_id: uuid.UUID, period: Period) -> CategoryBreakdown:
+    async def spending_by_category(
+        self, user_id: uuid.UUID, period: Period, *, filters: ReportFilters = NO_FILTERS
+    ) -> CategoryBreakdown:
         """Gasto por categoria principal, com o das subcategorias somado nela (FR-056).
 
         Um estorno abate o gasto da categoria dele. Quando ele cai em um mês diferente do da
@@ -179,7 +201,7 @@ class ReportingService:
         Uma categoria arquivada continua aparecendo enquanto tiver gasto no período (FR-026).
         """
         amounts = await self._reports.expenses_by_category(
-            user_id, start=period.start, end=period.end
+            user_id, start=period.start, end=period.end, filters=filters
         )
         if not amounts:
             return CategoryBreakdown(total_cents=0, items=[])
@@ -386,9 +408,7 @@ class ReportingService:
         Os pagamentos quitam primeiro as faturas mais antigas. Por isso o que falta das
         fechadas é o total devido menos as compras da fatura aberta que já pesam no saldo.
         """
-        if card.closing_day is None or card.due_day is None:  # pragma: no cover - CHECK
-            raise ValueError("só cartão de crédito tem fatura")
-        days = {"closing_day": card.closing_day, "due_day": card.due_day}
+        days = _card_days(card)
         today = clock.today()
         open_invoice = current_invoice(today, **days)
         # O saldo só conta o que vem depois da data do saldo inicial e até hoje.
@@ -462,3 +482,101 @@ class ReportingService:
                 )
             )
         return summaries
+
+    async def _card(self, user_id: uuid.UUID, account_id: uuid.UUID) -> AccountRead:
+        """O cartão pedido. Uma conta de outro tipo responde como a que não existe."""
+        card = await self._accounts.get(user_id, account_id)
+        if card.type != AccountType.CREDIT_CARD:
+            raise NotFound()
+        return card
+
+    async def card_invoices(self, user_id: uuid.UUID, account_id: uuid.UUID) -> CardInvoices:
+        """As faturas de um cartão, da mais antiga para a mais nova, com o estado de cada uma.
+
+        Os pagamentos quitam primeiro as faturas mais antigas. Por isso o que se deve das
+        fechadas é repartido da mais nova para a mais antiga, cada uma até o valor das próprias
+        compras. A última fechada fica a pagar enquanto houver dívida das fechadas, mesmo a que
+        veio do saldo inicial do cartão e não está em compra nenhuma.
+        """
+        card = await self._card(user_id, account_id)
+        days = _card_days(card)
+        today = clock.today()
+        current = current_invoice(today, **days)
+        last_closed = previous_invoice(current, **days)
+        closing_month = current.closing_date.replace(day=1)
+        oldest, newest = (
+            clock.add_months(closing_month, months)
+            for months in (-MAX_PAST_INVOICES, MAX_FUTURE_INVOICES)
+        )
+
+        amounts: dict[dt.date, int] = {}
+        for day, kind, amount in await self._reports.account_entries_by_day(
+            user_id,
+            card.id,
+            start=invoice_closing_in(oldest.year, oldest.month, **days).period_start,
+            end=invoice_closing_in(newest.year, newest.month, **days).period_end,
+        ):
+            closing = invoice_for(day, **days).closing_date
+            # Compras menos estornos; o pagamento é transferência e não entra.
+            signed = amount if kind == TransactionType.EXPENSE else -amount
+            amounts[closing] = amounts.get(closing, 0) + signed
+
+        first = min([last_closed.closing_date, *amounts])
+        last = max([current.closing_date, *amounts])
+        invoices = [invoice_for(first - dt.timedelta(days=1), **days)]
+        while invoices[-1].closing_date < last:
+            invoices.append(next_invoice(invoices[-1], **days))
+
+        payment = await self.invoice_payment(user_id, card)
+        owed = payment.closed_invoice.amount_cents if payment.closed_invoice else 0
+        remaining: dict[dt.date, int] = {}
+        left = owed
+        for invoice in reversed(invoices):
+            if invoice.closing_date > last_closed.closing_date:
+                continue
+            share = min(max(amounts.get(invoice.closing_date, 0), 0), left)
+            remaining[invoice.closing_date] = share
+            left -= share
+
+        def status(invoice: Invoice) -> InvoiceStatus:
+            if invoice.closing_date > current.closing_date:
+                return InvoiceStatus.FUTURE
+            if invoice.closing_date == current.closing_date:
+                return InvoiceStatus.OPEN
+            unpaid = owed if invoice == last_closed else remaining[invoice.closing_date]
+            if unpaid <= 0:
+                return InvoiceStatus.PAID
+            return InvoiceStatus.OVERDUE if today > invoice.due_date else InvoiceStatus.DUE
+
+        return CardInvoices(
+            account_id=card.id,
+            name=card.name,
+            closing_day=days["closing_day"],
+            due_day=days["due_day"],
+            items=[
+                CardInvoice(
+                    period_start=invoice.period_start,
+                    period_end=invoice.period_end,
+                    closing_date=invoice.closing_date,
+                    due_date=invoice.due_date,
+                    amount_cents=amounts.get(invoice.closing_date, 0),
+                    status=status(invoice),
+                    remaining_cents=remaining.get(invoice.closing_date, 0),
+                )
+                for invoice in invoices
+            ],
+            payment=payment,
+        )
+
+    async def invoice_categories(
+        self, user_id: uuid.UUID, account_id: uuid.UUID, *, closing_month: dt.date
+    ) -> CategoryBreakdown:
+        """Para onde foi o gasto da fatura que fecha no mês de `closing_month`: as compras do
+        cartão no período dela, por categoria principal, como no painel."""
+        card = await self._card(user_id, account_id)
+        invoice = invoice_closing_in(closing_month.year, closing_month.month, **_card_days(card))
+        return await self.spending_by_category(
+            user_id,
+            Period(invoice.period_start, invoice.period_end),
+            filters=ReportFilters(account_ids=[card.id]),
+        )

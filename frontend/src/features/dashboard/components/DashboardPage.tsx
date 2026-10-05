@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 
 import { PageContent } from "../../../components/layout/AppShell";
 import { PageSkeleton } from "../../../components/layout/PageSkeleton";
+import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Skeleton } from "../../../components/ui/Skeleton";
@@ -11,12 +12,15 @@ import { errorMessage } from "../../../lib/api-client";
 import { cn } from "../../../lib/cn";
 import { monthName, yearMonthOf, type YearMonth } from "../../../lib/dates";
 import { cascade, cascadeItem } from "../../../lib/motion";
+import { paths } from "../../../lib/paths";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { InvoiceDueNotice } from "../../cards/components/InvoiceDueNotice";
 import {
   categoriesById,
   useCategories,
   type CategoryOption,
 } from "../../categories/hooks/useCategories";
+import { listSearch } from "../../transactions/filters";
 import { useNewTransaction } from "../../transactions/hooks/useNewTransaction";
 import { useDashboard } from "../hooks/useDashboard";
 import { TREND_MONTHS } from "../services/dashboardService";
@@ -114,6 +118,11 @@ export function DashboardPage() {
     <PageContent wide>
       <PeriodPicker month={month} onChange={changeMonth} />
 
+      {/* O aviso é de hoje: não acompanha o mês exibido, e some ao olhar um mês que passou. */}
+      {month === currentMonth && (
+        <InvoiceDueNotice cards={cards.items} onPay={openNewTransaction} className="mb-6" />
+      )}
+
       <motion.div
         variants={cascade}
         initial="hidden"
@@ -130,9 +139,20 @@ export function DashboardPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:items-start">
           <motion.div variants={cascadeItem}>
             <CategoryRanking
-              month={dashboard.categories.month}
-              categories={dashboard.categories}
-              onLaunch={() => openNewTransaction()}
+              items={dashboard.categories.items}
+              listPath={(filters) =>
+                `${paths.transactions}${listSearch(dashboard.categories.month, filters)}`
+              }
+              empty={
+                <div className="grid justify-items-start gap-1">
+                  <p className="text-body text-ink-muted">
+                    Nenhuma despesa em {monthName(dashboard.categories.month)}.
+                  </p>
+                  <Button variant="ghost" className="-ml-5" onClick={() => openNewTransaction()}>
+                    Lançar despesa
+                  </Button>
+                </div>
+              }
             />
           </motion.div>
 
@@ -153,9 +173,7 @@ export function DashboardPage() {
             {/* Contas e cartões entram juntos: a cascata tem no máximo seis passos (seção 9.2). */}
             <motion.div variants={cascadeItem} className="grid gap-6">
               <AccountsCard accounts={summary.accounts} />
-              {cards.items.map((card) => (
-                <CardsCard key={card.account_id} card={card} onPay={openNewTransaction} />
-              ))}
+              {cards.items.length > 0 && <CardsCard cards={cards.items} />}
             </motion.div>
             <motion.div variants={cascadeItem}>
               <TopExpenses

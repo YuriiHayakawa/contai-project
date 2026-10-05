@@ -65,6 +65,25 @@ def current_invoice(today: date, *, closing_day: int, due_day: int) -> Invoice:
     return invoice_for(today, closing_day=closing_day, due_day=due_day)
 
 
+def invoice_closing_in(year: int, month: int, *, closing_day: int, due_day: int) -> Invoice:
+    """A fatura que fecha no mês pedido. Cada mês tem um fechamento só, e por isso o mês do
+    fechamento identifica a fatura; o do vencimento pode ser o mesmo ou o seguinte."""
+    closing = closing_date(year, month, closing_day)
+    return invoice_for(closing - timedelta(days=1), closing_day=closing_day, due_day=due_day)
+
+
+def next_invoice(invoice: Invoice, *, closing_day: int, due_day: int) -> Invoice:
+    """A fatura seguinte: começa no dia em que esta fecha."""
+    return invoice_for(invoice.closing_date, closing_day=closing_day, due_day=due_day)
+
+
+def previous_invoice(invoice: Invoice, *, closing_day: int, due_day: int) -> Invoice:
+    """A fatura anterior: fecha no dia em que esta começa."""
+    return invoice_for(
+        invoice.period_start - timedelta(days=1), closing_day=closing_day, due_day=due_day
+    )
+
+
 def is_after_invoice(day: date, invoice: Invoice) -> bool:
     """Uma compra nessa data cai em uma fatura posterior a esta."""
     return day >= invoice.closing_date

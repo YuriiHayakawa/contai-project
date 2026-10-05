@@ -29,6 +29,21 @@ type Server = "session" | "no-session" | "offline";
 
 let server: Server;
 let auth: AuthContextValue;
+/** As contas que a API falsa devolve; vazio é a conta recém-criada. */
+let accounts: Record<string, unknown>[];
+
+const creditCard = {
+  id: "acc-cartao",
+  type: "credit_card",
+  name: "Cartão Nubank",
+  institution: null,
+  initial_balance_cents: 0,
+  initial_balance_date: "2026-01-01",
+  closing_day: 3,
+  due_day: 10,
+  archived: false,
+  balance_cents: 0,
+};
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -95,7 +110,7 @@ function fakeDataRoute(path: string): Response | null {
   const [route] = path.split("?");
   switch (route) {
     case "/accounts":
-      return json(200, { items: [] });
+      return json(200, { items: accounts });
     case "/categories":
       return json(200, {
         expense: [
@@ -198,6 +213,7 @@ const bottomNav = (): HTMLElement => {
 
 beforeEach(() => {
   server = "session";
+  accounts = [];
   requests = [];
   setAccessToken(null);
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
@@ -339,6 +355,42 @@ describe("navegação", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(router.state.location.pathname).toBe(paths.categories);
+  });
+
+  it('quem tem cartão de crédito vê "Cartões" depois de "Contas", na barra e na folha "Mais"', async () => {
+    accounts = [creditCard];
+    const user = userEvent.setup();
+    const router = renderApp(paths.home);
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
+
+    const links = (): (string | null)[] =>
+      within(sidebar())
+        .getAllByRole("link")
+        .map((link) => link.textContent);
+    await waitFor(() => expect(links()).toContain("Cartões"));
+    expect(links().indexOf("Cartões")).toBe(links().indexOf("Contas") + 1);
+
+    await user.click(within(bottomNav()).getByRole("button", { name: "Mais" }));
+    const sheet = screen.getByRole("dialog", { name: "Mais" });
+    expect(
+      within(sheet)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Contas", "Cartões", "Categorias", "Importações", "Configurações"]);
+
+    await user.click(within(sheet).getByRole("link", { name: "Cartões" }));
+
+    expect(await screen.findByRole("heading", { name: "Cartões", level: 1 })).toBeVisible();
+    expect(router.state.location.pathname).toBe(paths.cards);
+  });
+
+  it('sem cartão ativo, "Cartões" não entra na navegação', async () => {
+    accounts = [{ ...creditCard, archived: true }];
+    renderApp(paths.home);
+    await screen.findByRole("heading", { name: HOME_HEADING, level: 1 });
+    await waitFor(() => expect(requestsTo("/accounts?include_archived=true")).not.toHaveLength(0));
+
+    expect(within(sidebar()).queryByRole("link", { name: "Cartões" })).toBeNull();
   });
 
   it('"Lançar" e "Novo lançamento" abrem a mesma folha de novo lançamento', async () => {

@@ -240,6 +240,15 @@ do mês.
    um toque troca o valor por tudo o que se deve no cartão ("Pagar tudo o que devo: R$ X"). Sem
    fatura fechada em aberto, o valor sugerido é o total devido, com o aviso de que a fatura
    atual ainda não fechou.
+9. **Given** um cartão com uma fatura fechada ainda não paga, **When** o usuário abre a tela
+   inicial, **Then** vê no topo um aviso com o nome do cartão, o valor e o prazo ("vence em 5
+   dias"), com "Pagar fatura" e "Ver fatura"; depois do vencimento, o aviso vira alerta e diz há
+   quantos dias a fatura venceu.
+10. **Given** a tela "Cartões", **When** o usuário escolhe uma fatura, **Then** vê o estado dela
+    (paga, a pagar, vencida, aberta ou futura), o valor, o período e as datas, as compras e os
+    estornos que somam esse valor e os gastos dela por categoria.
+11. **Given** uma fatura a pagar aberta na tela "Cartões", **When** o usuário a paga pelo "Pagar
+    fatura", **Then** a tela continua nela, agora como paga, e o aviso da tela inicial some.
 
 ---
 
@@ -632,6 +641,26 @@ os 7 dias, não consegue mais entrar.
   aberto, DEVE vir com o total devido, explicando que a fatura atual ainda não fechou.
 - **FR-034**: O usuário DEVE poder editar e excluir transações; a edição ou exclusão de uma
   transferência DEVE valer para os dois lados.
+- **FR-086**: O usuário de cartão DEVE ter uma tela "Cartões", com item próprio na navegação,
+  logo depois de "Contas", visível só para quem tem cartão de crédito ativo. Para cada cartão
+  ativo, a tela DEVE mostrar as faturas, da primeira com lançamento à última com parcela (no
+  máximo 36 antes e 48 depois da atual), cada uma com o nome do mês em que vence, o período das
+  compras, as datas de fechamento e de vencimento, o valor (compras menos estornos) e o estado
+  de hoje: paga, a pagar, vencida, aberta ou futura. Os pagamentos quitam primeiro as faturas
+  mais antigas. A tela DEVE abrir na fatura fechada que está a pagar, com o que falta pagar;
+  sem nenhuma, na fatura atual. "Pagar fatura" (FR-033) DEVE estar à vista em qualquer fatura:
+  como ação principal na que está a pagar e, nas demais, dizendo o que o pagamento vai quitar (a
+  fatura fechada do cartão, o que já se deve nele, ou nada). Quando o cartão está com saldo a
+  favor, a tela DEVE dizer isso e, se o saldo inicial dele era positivo, lembrar que uma dívida
+  inicial precisa ser marcada como dívida no cadastro. De cada fatura, a tela DEVE listar as
+  compras e os estornos que somam o valor dela (o pagamento, que é transferência, fica de fora)
+  e os gastos por categoria; do cartão, o total das parcelas futuras e o valor delas por mês.
+- **FR-087**: Enquanto um cartão ativo tiver fatura fechada com valor a pagar, a tela inicial
+  DEVE mostrar no topo, ao exibir o mês atual, um aviso com o nome do cartão, o valor, o prazo
+  ("vence em 5 dias", "venceu há 3 dias") e as ações "Pagar fatura" e "Ver fatura". Depois do
+  vencimento, o aviso DEVE virar alerta, com ícone e texto próprios, e não só outra cor. O
+  aviso some quando a fatura é paga. É um aviso dentro do app: alertas por e-mail ou
+  notificação continuam fora do escopo.
 - **FR-035**: O usuário DEVE poder buscar transações combinando filtros por período, conta,
   categoria, tipo e texto.
 
@@ -723,7 +752,8 @@ os 7 dias, não consegue mais entrar.
 - **FR-057**: O painel DEVE mostrar a evolução de entradas e saídas nos últimos 6 meses e os
   maiores gastos do mês.
 - **FR-058**: Para cada cartão de crédito, o painel DEVE mostrar o valor da fatura atual e o
-  total das parcelas futuras.
+  total das parcelas futuras, com o caminho para a tela do cartão (FR-086), onde ficam as
+  parcelas por mês.
 - **FR-059**: O usuário DEVE poder escolher o mês exibido no painel; o padrão é o mês atual, e
   "mês" segue o horário de Brasília. Períodos personalizados (por exemplo, os últimos 3 meses ou
   um intervalo de datas) NÃO fazem parte do painel: são atendidos pelo assistente (FR-061).

@@ -1,23 +1,31 @@
 import { motion } from "motion/react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { CategoryChip } from "../../../components/ui/CategoryChip";
 import { CATEGORY_FILL_CLASS, isCategoryColor } from "../../../components/ui/category-colors";
 import { cn } from "../../../lib/cn";
-import { monthName, type YearMonth } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
 import { barTransition } from "../../../lib/motion";
-import { paths } from "../../../lib/paths";
-import { listSearch } from "../../transactions/filters";
-import type { DashboardCategories } from "../types";
+import type { ListLinkFilters } from "../../transactions/filters";
+import type { CategorySpending } from "../types";
 
 export interface CategoryRankingProps {
-  month: YearMonth;
-  categories: DashboardCategories;
-  /** Abre a folha de novo lançamento, quando o mês ainda não tem despesas. */
-  onLaunch: () => void;
+  title?: string;
+  /** Da categoria com mais gasto para a com menos. */
+  items: readonly CategorySpending[];
+  /**
+   * Endereço da lista com os lançamentos de uma linha: os de uma categoria ou, na linha
+   * "Outras", todas as despesas do mesmo recorte (um mês, ou uma fatura).
+   */
+  listPath: (filters: ListLinkFilters) => string;
+  /** O que aparece quando não há despesa nenhuma. */
+  empty: ReactNode;
+  /** O que o percentual mede, depois do número: "dos gastos" ou "da fatura". */
+  shareOf?: string;
+  /** Quando o estorno passa do gasto: de que período é o gasto, "do mês" ou "da fatura". */
+  period?: string;
 }
 
 interface RankingRow {
@@ -44,8 +52,10 @@ const percentFormat = new Intl.NumberFormat("pt-BR", {
  * No máximo seis linhas: com mais categorias do que isso, ficam as cinco maiores e uma linha
  * "Outras", na cor neutra, com a soma das demais.
  */
-function rankingRows(month: YearMonth, { items }: DashboardCategories): RankingRow[] {
-  const list = `${paths.transactions}`;
+function rankingRows(
+  items: readonly CategorySpending[],
+  listPath: CategoryRankingProps["listPath"],
+): RankingRow[] {
   const shown = items.length > MAX_ROWS ? items.slice(0, MAX_ROWS - 1) : items;
   const rows: RankingRow[] = shown.map((item) => ({
     key: item.category_id,
@@ -54,7 +64,7 @@ function rankingRows(month: YearMonth, { items }: DashboardCategories): RankingR
     color: item.color,
     amountCents: item.amount_cents,
     percent: item.percent,
-    to: `${list}${listSearch(month, { category: item.category_id })}`,
+    to: listPath({ category: item.category_id }),
   }));
   const rest = items.slice(shown.length);
   if (rest.length > 0) {
@@ -69,7 +79,7 @@ function rankingRows(month: YearMonth, { items }: DashboardCategories): RankingR
       percent: Math.round(rest.reduce((total, item) => total + item.percent, 0) * 10) / 10,
       // Diz que é um agrupamento: a categoria "Outros" do usuário usa a mesma cor neutra.
       grouped: rest.length,
-      to: `${list}${listSearch(month, { type: "expense" })}`,
+      to: listPath({ type: "expense" }),
     });
   }
   return rows;
@@ -77,21 +87,24 @@ function rankingRows(month: YearMonth, { items }: DashboardCategories): RankingR
 
 /**
  * Gastos por categoria (seção 7.2 do design-system.md): lista de barras ordenadas, da maior
- * para a menor, sem rosca nem pizza. Cada linha abre os lançamentos da categoria no mês.
+ * para a menor, sem rosca nem pizza. Cada linha abre os lançamentos da categoria no mesmo
+ * recorte: o mês, no painel, ou a fatura, na tela de cartões.
  */
-export function CategoryRanking({ month, categories, onLaunch }: CategoryRankingProps) {
-  const rows = rankingRows(month, categories);
+export function CategoryRanking({
+  title = "Para onde foi o dinheiro",
+  items,
+  listPath,
+  empty,
+  shareOf = "dos gastos",
+  period = "do mês",
+}: CategoryRankingProps) {
+  const rows = rankingRows(items, listPath);
   const largest = Math.max(...rows.map((row) => row.amountCents), 1);
 
   return (
-    <Card title="Para onde foi o dinheiro">
+    <Card title={title}>
       {rows.length === 0 ? (
-        <div className="grid justify-items-start gap-1">
-          <p className="text-body text-ink-muted">Nenhuma despesa em {monthName(month)}.</p>
-          <Button variant="ghost" className="-ml-5" onClick={onLaunch}>
-            Lançar despesa
-          </Button>
-        </div>
+        empty
       ) : (
         <ul className="divide-y divide-border">
           {rows.map((row) => (
@@ -127,7 +140,7 @@ export function CategoryRanking({ month, categories, onLaunch }: CategoryRanking
                         />
                       </span>
                       <span className="text-small text-ink-muted">
-                        {percentFormat.format(row.percent)}% dos gastos
+                        {percentFormat.format(row.percent)}% {shareOf}
                         {row.grouped && ` · ${row.grouped} categorias`}
                       </span>
                     </>
@@ -135,7 +148,7 @@ export function CategoryRanking({ month, categories, onLaunch }: CategoryRanking
                     // O estorno de uma compra de outro mês deixa a categoria negativa: não há
                     // barra nem percentual, só o valor que voltou.
                     <span className="text-small text-ink-muted">
-                      Estornos maiores que os gastos do mês
+                      Estornos maiores que os gastos {period}
                       {row.grouped && ` · ${row.grouped} categorias`}
                     </span>
                   )}

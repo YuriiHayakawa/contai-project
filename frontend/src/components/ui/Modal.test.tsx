@@ -28,6 +28,32 @@ function ModalHarness(props: ModalHarnessProps) {
   );
 }
 
+/** Uma janela sobre a outra, como o detalhe de um lançamento e a confirmação de excluir. */
+function StackedHarness() {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setDetailOpen(true)}>Abrir detalhe</Button>
+      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title="Lançamento">
+        <Button onClick={() => setConfirmOpen(true)}>Excluir</Button>
+      </Modal>
+      <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Excluir?">
+        <Button
+          onClick={() => {
+            setDetailOpen(false);
+            setConfirmOpen(false);
+          }}
+        >
+          Confirmar exclusão
+        </Button>
+        <Button onClick={() => setDetailOpen(false)}>Fechar só o detalhe</Button>
+        <Button onClick={() => setConfirmOpen(false)}>Voltar</Button>
+      </Modal>
+    </>
+  );
+}
+
 interface ConfirmHarnessProps {
   onConfirm: () => void;
 }
@@ -130,6 +156,37 @@ describe("Modal", () => {
     expect(document.body.style.overflow).toBe("hidden");
 
     await user.keyboard("{Escape}");
+    await closed();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("duas janelas empilhadas que fecham juntas devolvem a rolagem da página", async () => {
+    const user = userEvent.setup();
+    render(<StackedHarness />);
+
+    // O detalhe de um lançamento e, por cima dele, a confirmação de excluir.
+    await user.click(screen.getByRole("button", { name: "Abrir detalhe" }));
+    await user.click(screen.getByRole("button", { name: "Excluir" }));
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
+
+    await closed();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("fechar a janela de baixo antes da de cima também devolve a rolagem", async () => {
+    const user = userEvent.setup();
+    render(<StackedHarness />);
+    await user.click(screen.getByRole("button", { name: "Abrir detalhe" }));
+    await user.click(screen.getByRole("button", { name: "Excluir" }));
+
+    await user.click(screen.getByRole("button", { name: "Fechar só o detalhe" }));
+    // Ainda há uma janela aberta: a página continua travada.
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await user.click(screen.getByRole("button", { name: "Voltar" }));
+
     await closed();
     expect(document.body.style.overflow).toBe("");
   });

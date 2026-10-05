@@ -11,6 +11,8 @@ export interface AppShellProps {
   onSignOut?: () => void;
   /** O histórico de conversas do assistente, mostrado na barra lateral. */
   assistantHistory?: ReactNode;
+  /** Mostra o item "Cartões" na navegação: só para quem tem cartão de crédito ativo. */
+  hasCards?: boolean;
   children: ReactNode;
 }
 
@@ -31,6 +33,7 @@ export function AppShell({
   onNewTransaction,
   onSignOut,
   assistantHistory,
+  hasCards = false,
   children,
 }: AppShellProps) {
   return (
@@ -50,11 +53,12 @@ export function AppShell({
         onNewTransaction={onNewTransaction}
         onSignOut={onSignOut}
         assistantHistory={assistantHistory}
+        hasCards={hasCards}
       />
       <main id={MAIN_ID} tabIndex={-1} className="px-4 pt-5 outline-none sm:px-6 lg:px-8 lg:pt-8">
         {children}
       </main>
-      <BottomNav onNewTransaction={onNewTransaction} onSignOut={onSignOut} />
+      <BottomNav onNewTransaction={onNewTransaction} onSignOut={onSignOut} hasCards={hasCards} />
     </div>
   );
 }

@@ -110,3 +110,39 @@ async def cards(context: IsolationContext) -> None:
     assert card_of_a["name"] not in after.text
     seen_by_a = (await context.client_a.get(f"{DASHBOARD}/cards")).json()
     assert card_of_a["id"] in [item["account_id"] for item in seen_by_a["items"]]
+
+
+async def _card_of_a(context: IsolationContext) -> Json:
+    card = await create_account(
+        context.client_a, name=_unique("Cartão"), type="credit_card", closing_day=3, due_day=10
+    )
+    category = await create_category(context.client_a, name=_unique("Categoria"))
+    await create_transaction(
+        context.client_a, card, category, amount_cents=45_678, date="2026-10-01"
+    )
+    return card
+
+
+@isolation_case("GET", "/api/v1/dashboard/cards/{account_id}/invoices")
+async def card_invoices(context: IsolationContext) -> None:
+    card = await _card_of_a(context)
+    url = f"{DASHBOARD}/cards/{card['id']}/invoices"
+
+    response = await context.client_b.get(url)
+
+    assert response.status_code == 404
+    assert card["name"] not in response.text
+    assert (await context.client_a.get(url)).json()["account_id"] == card["id"]
+
+
+@isolation_case("GET", "/api/v1/dashboard/cards/{account_id}/invoices/{month}/categories")
+async def invoice_categories(context: IsolationContext) -> None:
+    card = await _card_of_a(context)
+    # O cartão fecha no dia 3: a compra de 1º de outubro está na fatura que fecha em outubro.
+    url = f"{DASHBOARD}/cards/{card['id']}/invoices/2026-10/categories"
+
+    response = await context.client_b.get(url)
+
+    assert response.status_code == 404
+    assert "45678" not in response.text
+    assert (await context.client_a.get(url)).json()["total_cents"] == 45_678
