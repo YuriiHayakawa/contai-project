@@ -138,6 +138,21 @@ class InvoicePayment(BaseModel):
     total_due_cents: int
 
 
+class CreditLimitUsage(BaseModel):
+    """Quanto do limite de um cartão está ocupado hoje, seja qual for o mês pedido (FR-088).
+
+    O limite é um teto, e não dinheiro: não entra em saldo, fatura nem no que falta pagar.
+    """
+
+    limit_cents: int
+    # O que se deve hoje mais o que já está lançado no cartão com data depois de hoje: as
+    # parcelas e as compras com data futura, menos os estornos. Um saldo a favor abate o que
+    # está por vir, e o valor nunca fica negativo.
+    used_cents: int
+    # O limite menos o usado; negativo quando o usado passou do limite.
+    available_cents: int
+
+
 class CardSummary(BaseModel):
     account_id: uuid.UUID
     name: str
@@ -146,6 +161,8 @@ class CardSummary(BaseModel):
     current_invoice: InvoiceSummary
     future_installments: FutureInstallments
     payment: InvoicePayment
+    # Null quando o cartão não tem limite informado.
+    credit_limit: CreditLimitUsage | None
 
 
 class DashboardCards(BaseModel):
@@ -187,3 +204,5 @@ class CardInvoices(BaseModel):
     # sempre com a última fechada e a atual.
     items: list[CardInvoice]
     payment: InvoicePayment
+    # O mesmo de `GET /dashboard/cards`; null quando o cartão não tem limite informado.
+    credit_limit: CreditLimitUsage | None

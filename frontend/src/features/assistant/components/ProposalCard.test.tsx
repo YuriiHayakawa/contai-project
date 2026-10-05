@@ -42,6 +42,7 @@ function account(id: string, name: string, type: Account["type"], archived = fal
     initial_balance_date: "2026-01-01",
     closing_day: type === "credit_card" ? 10 : null,
     due_day: type === "credit_card" ? 17 : null,
+    credit_limit_cents: null,
     archived,
     balance_cents: 0,
   };

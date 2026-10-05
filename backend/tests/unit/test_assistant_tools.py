@@ -30,7 +30,7 @@ from tests.assistant import (
     Finances,
     seed_finances,
 )
-from tests.finance import create_account, create_category, list_transactions
+from tests.finance import ACCOUNTS, create_account, create_category, list_transactions
 
 pytestmark = pytest.mark.usefixtures("frozen_time")
 
@@ -498,6 +498,50 @@ async def test_card_invoices_are_the_card_summary_of_the_dashboard(
         client_a, account_id=finances.card["id"], period="all"
     )
     assert result.transaction_count == 3
+
+
+async def test_card_invoices_bring_the_limit_used_and_available_of_the_card_page(
+    context: ToolContext, finances: Finances, client_a: AsyncClient
+) -> None:
+    without_limit = await _run(context, "get_card_invoices")
+    response = await client_a.patch(
+        f"{ACCOUNTS}/{finances.card['id']}", json={"credit_limit_cents": 150_000}
+    )
+    assert response.status_code == 200, response.text
+
+    result = await _run(context, "get_card_invoices")
+
+    [expected] = await ReportingService(context.session).cards(context.user_id, reference=TODAY)
+    assert expected.credit_limit is not None
+    # As três parcelas de R$ 400,00 ocupam o limite desde o lançamento.
+    assert result.data["cards"][0]["credit_limit"] == {
+        "limit": money(150_000),
+        "used": money(expected.credit_limit.used_cents),
+        "available": money(expected.credit_limit.available_cents),
+        "over_limit": None,
+    }
+    assert result.data["cards"][0]["credit_limit"]["used"]["cents"] == 120_000
+    assert result.summary.endswith("Limite disponível: R$\N{NO-BREAK SPACE}300,00.")
+    # Sem limite informado, o campo vem vazio e o resumo não fala dele.
+    assert without_limit.data["cards"][0]["credit_limit"] is None
+    assert "imite" not in without_limit.summary
+
+
+async def test_over_the_limit_the_tool_says_by_how_much(
+    context: ToolContext, finances: Finances, client_a: AsyncClient
+) -> None:
+    await client_a.patch(f"{ACCOUNTS}/{finances.card['id']}", json={"credit_limit_cents": 100_000})
+
+    result = await _run(context, "get_card_invoices")
+
+    # O modelo não subtrai: o quanto passou vem pronto, e o disponível vem zerado.
+    assert result.data["cards"][0]["credit_limit"] == {
+        "limit": money(100_000),
+        "used": money(120_000),
+        "available": money(0),
+        "over_limit": money(20_000),
+    }
+    assert result.summary.endswith("R$\N{NO-BREAK SPACE}200,00 acima do limite.")
 
 
 async def test_a_user_without_cards_gets_a_note_and_not_an_error(

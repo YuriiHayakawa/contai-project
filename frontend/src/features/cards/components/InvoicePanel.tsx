@@ -1,11 +1,9 @@
 import { CalendarClock, CircleCheck, Clock, TriangleAlert, type LucideIcon } from "lucide-react";
 
 import { Button } from "../../../components/ui/Button";
-import { TextLink } from "../../../components/ui/TextLink";
 import { cn } from "../../../lib/cn";
 import { shortDate, today } from "../../../lib/dates";
 import { formatBRL, formatCentsAsDecimal } from "../../../lib/money";
-import { paths } from "../../../lib/paths";
 import type { Account } from "../../accounts/types";
 import type { InvoicePayment } from "../../dashboard/types";
 import {
@@ -25,7 +23,7 @@ export interface InvoicePanelProps {
   previous?: CardInvoice;
   /** O que pagar no cartão hoje. */
   payment: InvoicePayment;
-  /** A conta do cartão, para explicar quando ele está com saldo a favor. */
+  /** A conta do cartão, para dizer quando ele está com saldo a favor. */
   account?: Account;
   /** Abre a transferência de uma conta para o cartão. */
   onPay: () => void;
@@ -165,7 +163,8 @@ export function InvoicePanel({ invoice, previous, payment, account, onPay }: Inv
   const cents = unpaid ? amountToPay(invoice, payment) : invoice.amount_cents;
   const value = formatCentsAsDecimal(cents);
   const long = value.length >= LONG_VALUE_LENGTH;
-  // Sem dívida e com saldo positivo, o cartão está com crédito: é isso que esconde a fatura.
+  // Sem dívida e com saldo positivo, o cartão está com crédito, por um pagamento a mais: ele
+  // abate a fatura seguinte.
   const creditCents = payment.total_due_cents === 0 ? Math.max(account?.balance_cents ?? 0, 0) : 0;
 
   return (
@@ -218,16 +217,8 @@ export function InvoicePanel({ invoice, previous, payment, account, onPay }: Inv
       </div>
       {creditCents > 0 && (
         <p className="text-small text-ink-muted">
-          O cartão está com {formatBRL(creditCents)} a seu favor
-          {account && account.initial_balance_cents > 0 ? (
-            <>
-              , e começou com {formatBRL(account.initial_balance_cents)} de saldo inicial positivo.
-              Se esse valor era uma dívida, marque isso no cadastro do cartão, em{" "}
-              <TextLink to={paths.accounts}>Contas</TextLink>.
-            </>
-          ) : (
-            "."
-          )}
+          O cartão está com {formatBRL(creditCents)} a seu favor, de pagamento a mais: esse valor
+          abate as próximas compras.
         </p>
       )}
     </div>

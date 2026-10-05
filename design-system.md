@@ -336,7 +336,8 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - O valor é sempre positivo. O sinal vem do seletor Despesa / Receita / Transferência, que fica
   junto do campo. Com "Receita", o valor fica em `--income`; nos demais, em `--ink`.
 - Internamente o valor é um inteiro em centavos; não há número de ponto flutuante.
-- `aria-label="Valor em reais"`. Erros seguem o campo de texto.
+- `aria-label="Valor em reais"`. Erros seguem o campo de texto. Um texto de ajuda de quem usa o
+  campo continua ligado a ele (`aria-describedby`) quando aparece um erro.
 
 ### 6.4 Cartão
 
@@ -513,6 +514,27 @@ O título, em `title-3`, diz "Fatura fechada" ou "Fatura vencida" e o nome do ca
 baixo traz o valor em peso 700 e o prazo. À direita, "Pagar fatura" (`primary`) e o link "Ver
 fatura"; no celular, as ações descem e o botão ocupa a largura que sobra. O aviso não entra na
 cascata da tela inicial e não usa o marca-texto, que ali é do saldo do mês.
+
+**Limite do cartão.** O limite é um teto, e não dinheiro: aparece só na tela do cartão, em um
+cartão próprio, e nunca junto de saldo ou de fatura.
+
+- O número principal é o disponível, em `money-lg`, com o rótulo "Disponível" em `label`
+  `--ink-muted`. Embaixo, a barra de uso: trilho de 10px em `--bg-sunken`, com raio
+  `--radius-full`, e o preenchimento em `--primary`, na proporção do usado; um uso pequeno ainda
+  ocupa 2% da barra. Sob ela, "Usado" à esquerda e "Limite" à direita, em `small`, com os
+  valores em peso 700, e uma frase que diz o que o usado soma.
+- A barra é um medidor (`role="meter"`), com o texto "R$ X usados de R$ Y" para leitores de
+  tela: a largura é só o desenho.
+- Acima do limite, o número dá lugar a "R$ X acima do limite", em `--warning`, com o triângulo
+  de alerta; a barra fica cheia, em `--warning`. É alerta, e não erro, e nada é bloqueado. Só o
+  valor não quebra de linha: em 320px a frase ocupa duas linhas.
+- Sem limite informado, o cartão traz uma frase e o link "Informar o limite em Contas".
+
+**Cadastro do cartão.** O campo de valor inicial se chama "Quanto você já deve neste cartão",
+começa em zero e não tem caixa de sinal: no cartão o valor é sempre uma dívida. A ajuda diz que
+o limite tem o próprio campo. "Limite do cartão" é um campo de dinheiro opcional, depois dos
+dias da fatura, com a ajuda de que é um teto e de que zero é "não acompanhar". Nas outras
+contas, "Saldo inicial" continua com a caixa "O saldo está negativo".
 
 ## 7. Gráficos
 

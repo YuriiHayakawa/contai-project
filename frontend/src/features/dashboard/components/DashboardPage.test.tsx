@@ -105,6 +105,7 @@ const cardToPay: CardSummary = {
   name: "Cartão Nubank",
   closing_day: 3,
   due_day: 10,
+  credit_limit: null,
   current_invoice: {
     period_start: addDays(today(), -10),
     period_end: addDays(today(), 19),
@@ -399,6 +400,7 @@ describe("DashboardPage", () => {
         name: "Conta Nubank",
         closing_day: null,
         due_day: null,
+        credit_limit_cents: null,
         balance_cents: 218_435,
       },
       {
@@ -408,6 +410,7 @@ describe("DashboardPage", () => {
         name: "Cartão Nubank",
         closing_day: 3,
         due_day: 10,
+        credit_limit_cents: null,
         balance_cents: -163_020,
       },
     ]);

@@ -17,6 +17,7 @@ import { useCardInvoices, useCards } from "../hooks/useCards";
 import { cardStanding, initialInvoice, invoiceKey, type CardStanding } from "../invoices";
 import type { CardInvoice } from "../types";
 import { CardInstallments } from "./CardInstallments";
+import { CardLimit } from "./CardLimit";
 import { InvoiceCategories } from "./InvoiceCategories";
 import { InvoicePanel } from "./InvoicePanel";
 import { InvoiceTabs } from "./InvoiceTabs";
@@ -106,7 +107,7 @@ function CardInvoicesView({ card, requestedInvoice, onSelectInvoice }: CardInvoi
     );
   }
 
-  const { items, payment } = invoices.data;
+  const { items, payment, credit_limit: creditLimit } = invoices.data;
   const invoice =
     items.find((item) => invoiceKey(item) === requestedInvoice) ?? initialInvoice(items);
   if (!invoice) return null;
@@ -139,6 +140,7 @@ function CardInvoicesView({ card, requestedInvoice, onSelectInvoice }: CardInvoi
       </div>
       {/* No celular, os lançamentos vêm por último: a lista não tem fim marcado. */}
       <div className="grid gap-6 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <CardLimit usage={creditLimit} />
         <InvoiceCategories cardId={card.account_id} invoice={invoice} />
         <CardInstallments card={card} />
       </div>

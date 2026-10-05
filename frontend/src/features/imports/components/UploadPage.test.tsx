@@ -43,6 +43,7 @@ const card: Account = {
   initial_balance_date: "2026-09-01",
   closing_day: 3,
   due_day: 10,
+  credit_limit_cents: null,
   archived: false,
   balance_cents: 0,
 };

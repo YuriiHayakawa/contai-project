@@ -32,6 +32,7 @@ const API_FIELDS: Record<string, keyof AccountFormValues> = {
   initial_balance_date: "balanceDate",
   closing_day: "closingDay",
   due_day: "dueDay",
+  credit_limit_cents: "limitCents",
 };
 
 const typeOptions = (Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).map((value) => ({
@@ -49,25 +50,37 @@ function initialValues(account: Account | undefined): AccountFormValues {
     balanceDate: account?.initial_balance_date ?? today(),
     closingDay: account?.closing_day?.toString() ?? "",
     dueDay: account?.due_day?.toString() ?? "",
+    limitCents: account?.credit_limit_cents ?? 0,
   };
 }
 
 function toInput(values: AccountFormValues): AccountInput {
   const isCard = values.type === "credit_card";
+  // No cartão o valor é sempre uma dívida: vai negativo, e zero continua zero.
+  const owes = isCard || values.negative;
   return {
     name: values.name,
     type: values.type,
     institution: values.institution || null,
-    initial_balance_cents: values.negative ? -values.balanceCents : values.balanceCents,
+    initial_balance_cents:
+      owes && values.balanceCents > 0 ? -values.balanceCents : values.balanceCents,
     initial_balance_date: values.balanceDate,
     closing_day: isCard ? Number(values.closingDay) : null,
     due_day: isCard ? Number(values.dueDay) : null,
+    credit_limit_cents: isCard && values.limitCents > 0 ? values.limitCents : null,
   };
 }
 
-/** Formulário de conta: nome, tipo, instituição, saldo inicial e, no cartão, os dias da fatura. */
+/**
+ * Formulário de conta: nome, tipo, instituição e saldo inicial. No cartão, o valor inicial é
+ * quanto já se deve nele, e entram os dias da fatura e o limite, que é um teto e não entra no
+ * saldo (FR-019, FR-088).
+ */
 export function AccountForm({ id, account, onSubmit, onDirtyChange }: AccountFormProps) {
   const balanceId = useId();
+  const balanceHelpId = useId();
+  const limitId = useId();
+  const limitHelpId = useId();
   const [formError, setFormError] = useState<string | null>(null);
   const {
     register: field,
@@ -127,7 +140,7 @@ export function AccountForm({ id, account, onSubmit, onDirtyChange }: AccountFor
 
       <div className="grid gap-1.5">
         <label htmlFor={balanceId} className="text-label text-ink">
-          Saldo inicial
+          {isCard ? "Quanto você já deve neste cartão" : "Saldo inicial"}
         </label>
         <Controller
           control={control}
@@ -136,7 +149,10 @@ export function AccountForm({ id, account, onSubmit, onDirtyChange }: AccountFor
             <MoneyInput
               id={balanceId}
               ref={balance.ref}
-              aria-label="Saldo inicial em reais"
+              aria-label={
+                isCard ? "Quanto você já deve neste cartão, em reais" : "Saldo inicial em reais"
+              }
+              aria-describedby={isCard ? balanceHelpId : undefined}
               value={balance.value}
               onChange={balance.onChange}
               onBlur={balance.onBlur}
@@ -144,9 +160,15 @@ export function AccountForm({ id, account, onSubmit, onDirtyChange }: AccountFor
             />
           )}
         />
-        <Checkbox {...field("negative")}>
-          {isCard ? "Este valor é uma dívida no cartão" : "O saldo está negativo"}
-        </Checkbox>
+        {isCard ? (
+          // No cartão o valor é sempre uma dívida: não há caixa para marcar.
+          <p id={balanceHelpId} className="text-small text-ink-muted">
+            Deixe em zero se a fatura está em dia. O limite do cartão não entra aqui: ele tem o
+            próprio campo, mais abaixo.
+          </p>
+        ) : (
+          <Checkbox {...field("negative")}>O saldo está negativo</Checkbox>
+        )}
       </div>
 
       <TextField
@@ -178,6 +200,34 @@ export function AccountForm({ id, account, onSubmit, onDirtyChange }: AccountFor
           <p className="col-span-2 text-small text-ink-muted">
             Compras a partir do dia do fechamento já vão para a fatura seguinte; o vencimento é o
             dia de pagar. Ex.: fecha dia 3 e vence dia 10.
+          </p>
+        </div>
+      )}
+
+      {isCard && (
+        <div className="grid gap-1.5">
+          <label htmlFor={limitId} className="text-label text-ink">
+            Limite do cartão <span className="font-normal text-ink-muted">(opcional)</span>
+          </label>
+          <Controller
+            control={control}
+            name="limitCents"
+            render={({ field: limit }) => (
+              <MoneyInput
+                id={limitId}
+                ref={limit.ref}
+                aria-label="Limite do cartão em reais"
+                aria-describedby={limitHelpId}
+                value={limit.value}
+                onChange={limit.onChange}
+                onBlur={limit.onBlur}
+                error={errors.limitCents?.message}
+              />
+            )}
+          />
+          <p id={limitHelpId} className="text-small text-ink-muted">
+            É o teto do cartão, e não dinheiro seu: serve para mostrar quanto ainda dá para gastar.
+            Deixe em zero para não acompanhar.
           </p>
         </div>
       )}
