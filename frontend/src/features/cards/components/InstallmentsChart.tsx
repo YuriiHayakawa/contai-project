@@ -12,7 +12,7 @@ import {
 
 import { monthLabel, monthName } from "../../../lib/dates";
 import { formatBRL, formatCompactBRL } from "../../../lib/money";
-import type { MonthAmount } from "../types";
+import type { MonthAmount } from "../../dashboard/types";
 
 export interface InstallmentsChartProps {
   /** Parcelas futuras por mês de vencimento, do mais próximo ao mais distante. */

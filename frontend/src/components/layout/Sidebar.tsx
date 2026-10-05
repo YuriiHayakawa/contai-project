@@ -16,6 +16,8 @@ export interface SidebarProps {
   onSignOut?: () => void;
   /** O histórico de conversas, que a seta do item "Assistente" abre embaixo dele. */
   assistantHistory?: ReactNode;
+  /** Mostra o item "Cartões": só para quem tem cartão de crédito ativo. */
+  hasCards?: boolean;
 }
 
 interface SideLinkProps {
@@ -131,7 +133,13 @@ function ExpandableLink({ item, label, children }: ExpandableLinkProps) {
 }
 
 /** Barra lateral (a partir de `lg`): fixa à esquerda, com 248px, sobre o próprio fundo. */
-export function Sidebar({ userName, onNewTransaction, onSignOut, assistantHistory }: SidebarProps) {
+export function Sidebar({
+  userName,
+  onNewTransaction,
+  onSignOut,
+  assistantHistory,
+  hasCards = false,
+}: SidebarProps) {
   return (
     <nav
       aria-label="Principal"
@@ -160,7 +168,7 @@ export function Sidebar({ userName, onNewTransaction, onSignOut, assistantHistor
           "overflow-y-auto px-1",
         )}
       >
-        {sidebarItems.map((item) => (
+        {sidebarItems({ hasCards }).map((item) => (
           // Sem a largura mínima zerada, um título longo do histórico alargaria a barra inteira.
           <li key={item.to} className="min-w-0">
             {item.to === paths.assistant && assistantHistory ? (

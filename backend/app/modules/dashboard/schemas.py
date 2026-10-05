@@ -5,6 +5,7 @@ Todo valor é um inteiro em centavos. Um mês é escrito como `AAAA-MM`.
 
 import datetime as dt
 import uuid
+from enum import StrEnum
 
 from pydantic import BaseModel
 
@@ -150,3 +151,39 @@ class CardSummary(BaseModel):
 class DashboardCards(BaseModel):
     # Cartões ativos, em ordem alfabética.
     items: list[CardSummary]
+
+
+class InvoiceStatus(StrEnum):
+    """Em que ponto a fatura está hoje."""
+
+    # Fechada e sem nada a pagar.
+    PAID = "paid"
+    # Fechada, com valor a pagar e dentro do prazo.
+    DUE = "due"
+    # Fechada, com valor a pagar e vencida.
+    OVERDUE = "overdue"
+    # A atual: ainda recebe compras.
+    OPEN = "open"
+    # Ainda não começou: só tem as parcelas e as compras já lançadas com data futura.
+    FUTURE = "future"
+
+
+class CardInvoice(InvoiceSummary):
+    status: InvoiceStatus
+    # O que falta pagar desta fatura, com os pagamentos quitando primeiro as mais antigas.
+    # Zero fora de `due` e `overdue`; na última fatura fechada, o total a pagar hoje está em
+    # `payment.closed_invoice`, que soma o que ficou das anteriores.
+    remaining_cents: int
+
+
+class CardInvoices(BaseModel):
+    """As faturas de um cartão, para a tela dele."""
+
+    account_id: uuid.UUID
+    name: str
+    closing_day: int
+    due_day: int
+    # Da mais antiga para a mais nova: da primeira com lançamento até a última com parcela,
+    # sempre com a última fechada e a atual.
+    items: list[CardInvoice]
+    payment: InvoicePayment

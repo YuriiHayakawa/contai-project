@@ -3,6 +3,7 @@ export const paths = {
   home: "/",
   transactions: "/lancamentos",
   accounts: "/contas",
+  cards: "/cartoes",
   categories: "/categorias",
   imports: "/importacoes",
   importNew: "/importacoes/nova",
@@ -22,6 +23,20 @@ export const paths = {
   forgotPassword: "/esqueci-a-senha",
   privacy: "/privacidade",
 } as const;
+
+/** Parâmetros do endereço da tela de cartões: o cartão e a fatura abertos nela. */
+export const CARD_PARAM = "cartao";
+export const INVOICE_PARAM = "fatura";
+
+/**
+ * Endereço da tela de um cartão. Sem `invoice`, ela abre na fatura a pagar ou, sem nenhuma, na
+ * atual; com ele (o mês em que a fatura fecha, `AAAA-MM`), já abre nela.
+ */
+export function cardPath(cardId: string, invoice?: string): string {
+  const params = new URLSearchParams({ [CARD_PARAM]: cardId });
+  if (invoice) params.set(INVOICE_PARAM, invoice);
+  return `${paths.cards}?${params.toString()}`;
+}
 
 /** Endereço do andamento de uma importação, que leva ao mapeamento ou à revisão. */
 export function importPath(importId: string): string {

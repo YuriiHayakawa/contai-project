@@ -119,6 +119,8 @@ export interface TransactionFilters {
   /** Inclui as subcategorias da categoria. */
   category_id?: string;
   type?: TransactionType;
+  /** Só despesas e receitas: as compras e os estornos de uma fatura, sem os pagamentos. */
+  without_transfers?: boolean;
   /** Texto procurado na descrição e na observação. */
   q?: string;
   /** As parcelas de uma compra. */

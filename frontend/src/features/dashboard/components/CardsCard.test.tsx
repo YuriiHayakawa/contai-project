@@ -1,17 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 
 import type { CardSummary } from "../types";
 import { CardsCard } from "./CardsCard";
 
-// O gráfico de verdade usa o Recharts; aqui basta saber o que o cartão entrega a ele.
-vi.mock("./InstallmentsChart", () => ({
-  InstallmentsChart: ({ months }: { months: { month: string }[] }) => (
-    <p>gráfico: {months.map((item) => item.month).join(", ")}</p>
-  ),
-}));
-
-const card: CardSummary = {
+const nubank: CardSummary = {
   account_id: "acc-cartao",
   name: "Cartão Nubank",
   closing_day: 3,
@@ -36,66 +29,50 @@ const card: CardSummary = {
   },
 };
 
+const inter: CardSummary = {
+  ...nubank,
+  account_id: "acc-inter",
+  name: "Cartão Inter",
+  future_installments: { total_cents: 0, months: [] },
+};
+
+function renderCard(cards: CardSummary[]) {
+  render(
+    <MemoryRouter>
+      <CardsCard cards={cards} />
+    </MemoryRouter>,
+  );
+}
+
 describe("CardsCard", () => {
-  it("mostra a fatura atual com fechamento e vencimento, e as parcelas futuras", async () => {
-    render(<CardsCard card={card} onPay={vi.fn()} />);
+  it("mostra a fatura atual, com o fechamento, e o total das parcelas futuras", () => {
+    renderCard([nubank]);
 
-    expect(screen.getByRole("heading", { name: "Cartão Nubank" })).toBeInTheDocument();
-    expect(screen.getByText("Fatura atual").nextElementSibling).toHaveTextContent("R$ 440,90");
-    expect(screen.getByText("Fecha em 3 de out. · vence em 10 de out.")).toBeInTheDocument();
-    expect(screen.getByText("Parcelas futuras").nextElementSibling).toHaveTextContent("R$ 800,00");
-    expect(screen.getByText("Até a fatura de fevereiro de 2027")).toBeInTheDocument();
-    expect(await screen.findByText("gráfico: 2026-11, 2027-02")).toBeInTheDocument();
+    const row = screen.getByRole("link", { name: /Cartão Nubank/ });
+    expect(row).toHaveTextContent("Fatura atual · fecha em 3 de out.");
+    expect(row).toHaveTextContent("Parcelas futuras: R$ 800,00");
+    expect(row).toHaveTextContent("R$ 440,90");
   });
 
-  it("sem parcelas pela frente, diz isso e não desenha o gráfico", () => {
-    render(
-      <CardsCard
-        card={{ ...card, future_installments: { total_cents: 0, months: [] } }}
-        onPay={vi.fn()}
-      />,
+  it("cada cartão leva à tela dele, e o cabeçalho, à tela de cartões", () => {
+    renderCard([inter, nubank]);
+
+    expect(screen.getByRole("link", { name: /Cartão Inter/ })).toHaveAttribute(
+      "href",
+      "/cartoes?cartao=acc-inter",
     );
-
-    expect(screen.getByText("Nenhuma compra parcelada pela frente")).toBeInTheDocument();
-    expect(screen.queryByText(/^gráfico/)).not.toBeInTheDocument();
-  });
-
-  it('"Pagar fatura" abre a transferência para o cartão com a última fatura fechada', async () => {
-    const user = userEvent.setup();
-    const onPay = vi.fn();
-    render(<CardsCard card={card} onPay={onPay} />);
-
-    await user.click(screen.getByRole("button", { name: "Pagar fatura" }));
-
-    expect(onPay).toHaveBeenCalledWith({
-      type: "transfer",
-      toAccountId: "acc-cartao",
-      amountCents: 30_000,
-      description: "Pagamento da fatura Cartão Nubank",
-      invoicePayment: {
-        closedInvoice: { dueDate: "2026-09-10", amountCents: 30_000 },
-        totalDueCents: 124_380,
-      },
-    });
-  });
-
-  it('sem fatura fechada em aberto, "Pagar fatura" sugere tudo o que se deve', async () => {
-    const user = userEvent.setup();
-    const onPay = vi.fn();
-    render(
-      <CardsCard
-        card={{ ...card, payment: { closed_invoice: null, total_due_cents: 44_090 } }}
-        onPay={onPay}
-      />,
+    expect(screen.getByRole("link", { name: /Cartão Nubank/ })).toHaveAttribute(
+      "href",
+      "/cartoes?cartao=acc-cartao",
     );
+    expect(screen.getByRole("link", { name: "Ver cartões" })).toHaveAttribute("href", "/cartoes");
+  });
 
-    await user.click(screen.getByRole("button", { name: "Pagar fatura" }));
+  it("sem parcelas pela frente, diz isso", () => {
+    renderCard([inter]);
 
-    expect(onPay).toHaveBeenCalledWith(
-      expect.objectContaining({
-        amountCents: 44_090,
-        invoicePayment: { closedInvoice: null, totalDueCents: 44_090 },
-      }),
+    expect(screen.getByRole("link", { name: /Cartão Inter/ })).toHaveTextContent(
+      "Sem parcelas pela frente",
     );
   });
 });

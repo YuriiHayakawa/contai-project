@@ -14,6 +14,7 @@ import { RouteErrorPage } from "./components/layout/ErrorPage";
 import { PageHeader } from "./components/layout/PageHeader";
 import { PageSkeleton } from "./components/layout/PageSkeleton";
 import { EmptyState } from "./components/ui/EmptyState";
+import { useAccounts } from "./features/accounts/hooks/useAccounts";
 import { SidebarHistory } from "./features/assistant/components/SidebarHistory";
 import { useAuth } from "./features/auth/hooks/useAuth";
 import { useLogout } from "./features/auth/hooks/useLogout";
@@ -65,6 +66,11 @@ const TransactionsPage = lazy(() =>
 const AccountsPage = lazy(() =>
   import("./features/accounts/components/AccountsPage").then((module) => ({
     default: module.AccountsPage,
+  })),
+);
+const CardsPage = lazy(() =>
+  import("./features/cards/components/CardsPage").then((module) => ({
+    default: module.CardsPage,
   })),
 );
 const CategoriesPage = lazy(() =>
@@ -161,6 +167,11 @@ function AppFrame() {
   const { user } = useAuth();
   const logout = useLogout();
   const openNewTransaction = useNewTransaction();
+  const accounts = useAccounts();
+  // "Cartões" só entra na navegação de quem tem cartão: para os outros seria uma tela vazia.
+  const hasCards = (accounts.data ?? []).some(
+    (account) => account.type === "credit_card" && !account.archived,
+  );
 
   return (
     <AppShell
@@ -168,6 +179,7 @@ function AppFrame() {
       onNewTransaction={() => openNewTransaction()}
       onSignOut={() => logout.mutate()}
       assistantHistory={<SidebarHistory />}
+      hasCards={hasCards}
     >
       {/* A casca fica na tela; só o miolo espera o código da tela chegar. */}
       <Suspense fallback={<PageSkeleton />}>
@@ -270,6 +282,7 @@ export const routes: RouteObject[] = [
               { path: paths.home, element: <DashboardPage /> },
               { path: paths.transactions, element: <TransactionsPage /> },
               { path: paths.accounts, element: <AccountsPage /> },
+              { path: paths.cards, element: <CardsPage /> },
               { path: paths.categories, element: <CategoriesPage /> },
               { path: paths.imports, element: <ImportHistoryPage /> },
               { path: paths.importNew, element: <UploadPage /> },

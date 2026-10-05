@@ -67,6 +67,9 @@ async def list_transactions(
         uuid.UUID | None, Query(description="Inclui as subcategorias da categoria")
     ] = None,
     type: Annotated[TransactionType | None, Query()] = None,
+    without_transfers: Annotated[
+        bool, Query(description="Só despesas e receitas, como nas compras de uma fatura")
+    ] = False,
     q: Annotated[
         str | None,
         Query(max_length=100, description="Texto procurado na descrição e na observação"),
@@ -86,6 +89,7 @@ async def list_transactions(
         account_id=account_id,
         category_id=category_id,
         transaction_type=type,
+        without_transfers=without_transfers,
         text=q,
         installment_group_id=installment_group_id,
         transfer_group_id=transfer_group_id,

@@ -359,6 +359,8 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - **A partir de `md` é um diálogo** centralizado, com 480px de largura (560px para formulários) e
   raio `--radius-xl`.
 - Fundo `--surface-raised`, sombra `--elev-3`, véu `--scrim`.
+- A rolagem da página fica travada enquanto houver alguma janela aberta e volta quando a
+  última fecha, mesmo com janelas empilhadas (o detalhe e a confirmação de excluir).
 - `role="dialog"`, `aria-modal="true"`, título ligado por `aria-labelledby`, foco preso dentro, e
   o foco volta ao elemento de origem ao fechar. Fecha por botão, `Esc` e toque no véu, exceto
   quando há dados digitados e não salvos.
@@ -440,7 +442,8 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Demais itens: ícone de 24px e rótulo sempre visível em `micro`. Inativo em `--ink-muted`;
   ativo com ícone e rótulo em `--primary` e uma pílula `--primary-soft` atrás do ícone, mais
   `aria-current="page"`.
-- "Mais" abre uma folha com Contas, Categorias, Importações e Configurações.
+- "Mais" abre uma folha com Contas, Cartões, Categorias, Importações e Configurações.
+  "Cartões" só aparece para quem tem cartão de crédito ativo.
 - A barra some enquanto o teclado virtual está aberto.
 
 **Barra lateral (a partir de `lg`)**
@@ -448,8 +451,9 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Fixa à esquerda, 248px, sobre o próprio `--bg`, com linha direita de 1px `--border`.
 - No topo, a marca "Contaí" em Besley 800 `--primary` e o botão `primary` "Novo lançamento".
 - Itens com 44px de altura, ícone de 20px e rótulo em `label`: Início, Lançamentos, Contas,
-  Categorias, Importações, Assistente. Ativo: fundo `--primary-soft`, texto `--primary` e uma
-  barra de 3px `--primary` à esquerda.
+  Cartões, Categorias, Importações, Assistente. Ativo: fundo `--primary-soft`, texto
+  `--primary` e uma barra de 3px `--primary` à esquerda. "Cartões" só aparece para quem tem
+  cartão de crédito ativo: para os outros seria uma tela vazia.
 - O item "Assistente" tem uma seta à direita, que abre embaixo dele o histórico de conversas:
   uma lista recuada, com uma linha de 1px `--border` à esquerda, e o título de cada conversa em
   `small`, cortado com reticências. A conversa aberta fica em `--primary`, peso 700. Com o
@@ -470,6 +474,45 @@ próximo aparecem a partir de 480px de largura.
 - `lucide-react`, traço de 2px, em 20px (dentro de texto e botões) ou 24px (navegação).
 - Ícone sozinho só em ações universais (fechar, voltar, mostrar senha), sempre com `aria-label`.
   Nos demais casos, ícone acompanha texto.
+
+### 6.11 Fatura de cartão
+
+A fatura tem o nome do mês em que vence ("Fatura de outubro"), como no banco, com o ano quando
+não é o de hoje.
+
+**Estado.** Vem sempre escrito, com ícone; a cor só reforça.
+
+| Estado | Selo (`micro`, raio `--radius-sm`) | Texto |
+|--------|------------------------------------|-------|
+| Paga | `--income` sobre `--income-soft`, ícone de confirmação | "Paga"; sem compras, "Sem compras", em `--ink-muted` |
+| A pagar | `--primary` sobre `--primary-soft`, relógio | "Fechada, vence em 5 dias" |
+| Vencida | `--warning` sobre `--warning-soft`, triângulo de alerta | "Venceu há 3 dias" |
+| Aberta | `--ink-muted` sobre `--bg-sunken`, calendário | "Aberta, fecha em 23 dias" |
+| Futura | `--ink-muted` sobre `--bg-sunken`, calendário | "Futura" |
+
+Fatura vencida é alerta, e não erro: usa `--warning`, nunca `--danger`.
+
+**Abas de fatura.** Uma linha com a seta "Fatura anterior", as abas e a seta "Próxima fatura",
+sobre uma pauta de 1px `--border`. Cada aba tem 56px de altura, o mês em `label` e o estado em
+`micro`; a escolhida leva o mês em `--primary`, peso 700, e uma barra de 3px `--primary`
+embaixo, mais `aria-current`. A escolhida fica no meio, com as vizinhas dos dois lados: três
+abas no celular, com o mês abreviado ("Out", "Jan/27"), e cinco a partir de `sm`. Na ponta, a
+seta fica desativada.
+
+**Fatura escolhida.** No mesmo cartão das abas: o nome em `title-2`, o selo, um rótulo em
+`label` `--ink-muted` que diz o que o número é ("Falta pagar", "Total da fatura", "Até agora",
+"Já lançado") e o número em `money-hero`, com o marca-texto da tela. Embaixo, em `small`, o
+período das compras e as datas. "Pagar fatura" está sempre no fim do cartão: é o botão
+`primary` enquanto a fatura da tela está a pagar ou vencida e, nas demais, `secondary`, com uma
+frase em `small` ao lado que diz o que o pagamento vai quitar.
+
+**Aviso de fatura a pagar.** No topo da tela inicial, um bloco por cartão, com raio
+`--radius-lg` e sem contorno: fundo `--primary-soft` e o ícone do cartão em um círculo de 44px
+`--primary`; vencida, fundo `--warning-soft` e o triângulo de alerta em um círculo `--warning`.
+O título, em `title-3`, diz "Fatura fechada" ou "Fatura vencida" e o nome do cartão; a linha de
+baixo traz o valor em peso 700 e o prazo. À direita, "Pagar fatura" (`primary`) e o link "Ver
+fatura"; no celular, as ações descem e o botão ocupa a largura que sobra. O aviso não entra na
+cascata da tela inicial e não usa o marca-texto, que ali é do saldo do mês.
 
 ## 7. Gráficos
 
@@ -526,7 +569,8 @@ maior para a menor, com no máximo 6 linhas (as 5 maiores e "Outras", em `--cat-
 ### 7.4 Parcelas futuras
 
 Série única por mês em `--chart-single`, sem legenda: o título do cartão já diz o que é. Valor
-direto só na maior barra; as demais ficam no tooltip e na tabela.
+direto só na maior barra; as demais ficam no tooltip e na tabela. Fica na tela do cartão; no
+painel, cada cartão mostra só o total.
 
 ## 8. Chat do assistente
 

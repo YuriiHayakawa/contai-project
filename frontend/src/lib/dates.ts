@@ -63,6 +63,12 @@ export function addDays(iso: ISODate, days: number): ISODate {
   return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
 }
 
+/** Quantos dias vão de uma data a outra; negativo quando a segunda vem antes. */
+export function daysBetween(from: ISODate, to: ISODate): number {
+  const DAY_MS = 86_400_000;
+  return Math.round((calendarDate(to).getTime() - calendarDate(from).getTime()) / DAY_MS);
+}
+
 /**
  * Rótulo do dia nas listas: "Hoje", "Ontem" ou "seg., 28 de set."; em outro ano, o ano entra
  * no fim ("seg., 28 de set. de 2025").

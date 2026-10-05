@@ -5,7 +5,15 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 
 import { ToastProvider } from "../../../components/ui/Toast";
 import { ApiError } from "../../../lib/api-client";
-import { addMonths, monthLabel, monthRange, yearMonthOf } from "../../../lib/dates";
+import {
+  addDays,
+  addMonths,
+  monthLabel,
+  monthRange,
+  shortDate,
+  today,
+  yearMonthOf,
+} from "../../../lib/dates";
 import * as accountsService from "../../accounts/services/accountsService";
 import { AuthProvider } from "../../auth/hooks/useAuth";
 import * as authService from "../../auth/services/authService";
@@ -14,7 +22,7 @@ import { NewTransactionProvider } from "../../transactions/hooks/useNewTransacti
 import * as transactionsService from "../../transactions/services/transactionsService";
 import type { Transaction } from "../../transactions/types";
 import * as dashboardService from "../services/dashboardService";
-import type { CategorySpending, DashboardSummary, MonthTotals } from "../types";
+import type { CardSummary, CategorySpending, DashboardSummary, MonthTotals } from "../types";
 import { DashboardPage } from "./DashboardPage";
 import type { TrendChartProps } from "./TrendChart";
 
@@ -88,6 +96,31 @@ const rent: Transaction = {
   installment_count: null,
   source: "manual",
   created_at: `${CURRENT}-05T12:00:00Z`,
+};
+
+// Um cartão com a fatura fechada a pagar, que vence daqui a cinco dias.
+const DUE_DATE = addDays(today(), 5);
+const cardToPay: CardSummary = {
+  account_id: "acc-2",
+  name: "Cartão Nubank",
+  closing_day: 3,
+  due_day: 10,
+  current_invoice: {
+    period_start: addDays(today(), -10),
+    period_end: addDays(today(), 19),
+    closing_date: addDays(today(), 20),
+    due_date: addDays(today(), 27),
+    amount_cents: 38_640,
+  },
+  future_installments: { total_cents: 70_000, months: [{ month: CURRENT, amount_cents: 70_000 }] },
+  payment: {
+    closed_invoice: {
+      closing_date: addDays(today(), -2),
+      due_date: DUE_DATE,
+      amount_cents: 124_380,
+    },
+    total_due_cents: 163_020,
+  },
 };
 
 function answerEveryMonth(): void {
@@ -347,6 +380,84 @@ describe("DashboardPage", () => {
     await user.click(screen.getByRole("button", { name: "Lançar despesa" }));
 
     expect(await screen.findByRole("dialog", { name: "Novo lançamento" })).toBeInTheDocument();
+  });
+
+  it("fatura fechada a pagar: o aviso no topo diz o valor e o prazo e abre o pagamento", async () => {
+    getCards.mockResolvedValue({ items: [cardToPay] });
+    // A transferência precisa de uma conta de onde sair e do cartão em que entra.
+    const base = {
+      institution: null,
+      initial_balance_cents: 0,
+      initial_balance_date: `${CURRENT}-01`,
+      archived: false,
+    };
+    vi.mocked(accountsService.listAccounts).mockResolvedValue([
+      {
+        ...base,
+        id: "acc-1",
+        type: "checking",
+        name: "Conta Nubank",
+        closing_day: null,
+        due_day: null,
+        balance_cents: 218_435,
+      },
+      {
+        ...base,
+        id: "acc-2",
+        type: "credit_card",
+        name: "Cartão Nubank",
+        closing_day: 3,
+        due_day: 10,
+        balance_cents: -163_020,
+      },
+    ]);
+    const user = renderPage();
+    await title(CURRENT);
+
+    const notice = screen.getByRole("region", { name: "Faturas a pagar" });
+    expect(notice).toHaveTextContent("Fatura fechada: Cartão Nubank");
+    expect(notice).toHaveTextContent(`R$ 1.243,80 · vence em 5 dias, em ${shortDate(DUE_DATE)}`);
+    expect(within(notice).getByRole("link", { name: "Ver fatura: Cartão Nubank" })).toHaveAttribute(
+      "href",
+      `/cartoes?cartao=acc-2&fatura=${yearMonthOf(addDays(today(), -2))}`,
+    );
+
+    await user.click(within(notice).getByRole("button", { name: "Pagar fatura" }));
+
+    expect(await screen.findByRole("dialog", { name: "Nova transferência" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Valor em reais" })).toHaveValue("1.243,80");
+  });
+
+  it("o aviso de fatura é de hoje: some ao olhar um mês que passou", async () => {
+    getCards.mockResolvedValue({ items: [cardToPay] });
+    renderPage(`/?mes=${PREVIOUS}`);
+    await title(PREVIOUS);
+
+    expect(screen.queryByRole("region", { name: "Faturas a pagar" })).toBeNull();
+  });
+
+  it("sem fatura a pagar, não há aviso; os cartões aparecem resumidos e levam à tela deles", async () => {
+    getCards.mockResolvedValue({
+      items: [{ ...cardToPay, payment: { closed_invoice: null, total_due_cents: 38_640 } }],
+    });
+    renderPage();
+    await title(CURRENT);
+
+    expect(screen.queryByRole("region", { name: "Faturas a pagar" })).toBeNull();
+    const cards = screen.getByRole("heading", { name: "Cartões" }).closest("section");
+    expect(cards).toHaveTextContent("Fatura atual · fecha em");
+    expect(cards).toHaveTextContent("Parcelas futuras: R$ 700,00");
+    expect(cards).toHaveTextContent("R$ 386,40");
+    expect(
+      within(cards as HTMLElement).getByRole("link", { name: /Cartão Nubank/ }),
+    ).toHaveAttribute("href", "/cartoes?cartao=acc-2");
+  });
+
+  it("sem cartão, o painel não mostra o bloco de cartões", async () => {
+    renderPage();
+    await title(CURRENT);
+
+    expect(screen.queryByRole("heading", { name: "Cartões" })).toBeNull();
   });
 
   it("falha ao carregar: diz o que fazer e tenta de novo", async () => {

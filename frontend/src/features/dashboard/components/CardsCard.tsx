@@ -1,80 +1,72 @@
-import { Suspense, lazy } from "react";
+import { CreditCard } from "lucide-react";
+import { Link } from "react-router";
 
-import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
-import { Skeleton } from "../../../components/ui/Skeleton";
-import { monthName, shortDate } from "../../../lib/dates";
+import { TextLink } from "../../../components/ui/TextLink";
+import { cn } from "../../../lib/cn";
+import { shortDate } from "../../../lib/dates";
 import { formatBRL } from "../../../lib/money";
-import type { TransactionPreset } from "../../transactions/types";
-import { invoicePaymentPreset } from "../../transactions/presets";
+import { cardPath, paths } from "../../../lib/paths";
 import type { CardSummary } from "../types";
 
-// O gráfico traz o Recharts, que fica no arquivo próprio dele.
-const InstallmentsChart = lazy(() =>
-  import("./InstallmentsChart").then((module) => ({ default: module.InstallmentsChart })),
-);
-
 export interface CardsCardProps {
-  card: CardSummary;
-  /** Abre a folha de transferência para pagar a fatura. */
-  onPay: (preset: TransactionPreset) => void;
+  /** Cartões ativos, em ordem alfabética. */
+  cards: readonly CardSummary[];
 }
 
 /**
- * Um cartão de crédito no painel (FR-058): a fatura atual, com o fechamento e o vencimento, e
- * as parcelas futuras, por mês e no total. "Pagar fatura" abre a transferência da conta para o
- * cartão, que não conta como gasto, com o valor da última fatura fechada que ainda não foi paga.
+ * Os cartões de crédito no painel (FR-058): de cada um, a fatura atual, com o fechamento, e o
+ * total das parcelas futuras. A linha leva à tela do cartão, onde ficam as faturas, os
+ * lançamentos de cada uma e o "Pagar fatura".
  */
-export function CardsCard({ card, onPay }: CardsCardProps) {
-  const { current_invoice: invoice, future_installments: future } = card;
-  const lastMonth = future.months.at(-1)?.month;
-
+export function CardsCard({ cards }: CardsCardProps) {
   return (
     <Card
-      title={card.name}
+      title="Cartões"
       action={
-        <Button
-          variant="ghost"
-          className="-mr-3"
-          onClick={() =>
-            onPay(
-              invoicePaymentPreset({
-                id: card.account_id,
-                name: card.name,
-                payment: card.payment,
-              }),
-            )
-          }
-        >
-          Pagar fatura
-        </Button>
+        <TextLink to={paths.cards} standalone className="text-small">
+          Ver cartões
+        </TextLink>
       }
     >
-      <dl className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-        <div className="grid gap-0.5 pb-3 sm:pr-4 sm:pb-0">
-          <dt className="text-label text-ink-muted">Fatura atual</dt>
-          <dd className="money text-money-lg text-ink">{formatBRL(invoice.amount_cents)}</dd>
-          <dd className="text-small text-ink-muted">
-            Fecha em {shortDate(invoice.closing_date)} · vence em {shortDate(invoice.due_date)}
-          </dd>
-        </div>
-        <div className="grid gap-0.5 pt-3 sm:pt-0 sm:pl-4">
-          <dt className="text-label text-ink-muted">Parcelas futuras</dt>
-          <dd className="money text-money-lg text-ink">{formatBRL(future.total_cents)}</dd>
-          <dd className="text-small text-ink-muted">
-            {lastMonth
-              ? `Até a fatura de ${monthName(lastMonth)} de ${lastMonth.slice(0, 4)}`
-              : "Nenhuma compra parcelada pela frente"}
-          </dd>
-        </div>
-      </dl>
-      {future.months.length > 0 && (
-        <div className="mt-4 border-t border-border pt-3">
-          <Suspense fallback={<Skeleton className="h-36 w-full" />}>
-            <InstallmentsChart months={future.months} cardName={card.name} />
-          </Suspense>
-        </div>
-      )}
+      <ul className="divide-y divide-border">
+        {cards.map((card) => {
+          const { current_invoice: invoice, future_installments: future } = card;
+          return (
+            <li key={card.account_id}>
+              <Link
+                to={cardPath(card.account_id)}
+                className={cn(
+                  "-mx-2 grid grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3",
+                  "rounded-md px-2 py-2.5 transition-colors duration-fast ease-out",
+                  "hover:bg-bg-sunken",
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex size-9 items-center justify-center rounded-full bg-bg-sunken text-ink-muted"
+                >
+                  <CreditCard className="size-4.5" />
+                </span>
+                <span className="grid min-w-0">
+                  <span className="truncate text-body font-bold text-ink">{card.name}</span>
+                  <span className="truncate text-small text-ink-muted">
+                    Fatura atual · fecha em {shortDate(invoice.closing_date)}
+                  </span>
+                  <span className="truncate text-small text-ink-muted">
+                    {future.total_cents > 0
+                      ? `Parcelas futuras: ${formatBRL(future.total_cents)}`
+                      : "Sem parcelas pela frente"}
+                  </span>
+                </span>
+                <span className="money text-money-md text-ink">
+                  {formatBRL(invoice.amount_cents)}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }

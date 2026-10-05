@@ -250,7 +250,12 @@ class ReportRepository:
         return totals
 
     async def expenses_by_category(
-        self, user_id: uuid.UUID, *, start: dt.date, end: dt.date
+        self,
+        user_id: uuid.UUID,
+        *,
+        start: dt.date,
+        end: dt.date,
+        filters: ReportFilters = NO_FILTERS,
     ) -> dict[uuid.UUID, int]:
         """Gasto de cada categoria, sem juntar subcategoria com a principal: as despesas menos
         os estornos.
@@ -267,6 +272,7 @@ class ReportRepository:
                 Transaction.date <= end,
                 Category.kind == CategoryKind.EXPENSE,
                 Transaction.type.in_(_ENTRY_TYPES),
+                *filters.conditions(),
             )
             .group_by(Transaction.category_id)
         )
@@ -316,6 +322,24 @@ class ReportRepository:
             .group_by(Transaction.type)
         )
         return {TransactionType(kind): int(amount) for kind, amount in result.all()}
+
+    async def account_entries_by_day(
+        self, user_id: uuid.UUID, account_id: uuid.UUID, *, start: dt.date, end: dt.date
+    ) -> list[tuple[dt.date, TransactionType, int]]:
+        """Soma de receitas e de despesas de uma conta em cada dia do período, inclusive. É o
+        que monta as faturas de um cartão: cada dia cai em uma fatura só."""
+        result = await self._session.execute(
+            select(Transaction.date, Transaction.type, _TOTAL)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.account_id == account_id,
+                Transaction.date >= start,
+                Transaction.date <= end,
+                Transaction.type.in_(_ENTRY_TYPES),
+            )
+            .group_by(Transaction.date, Transaction.type)
+        )
+        return [(day, TransactionType(kind), int(amount)) for day, kind, amount in result.all()]
 
     async def installments_from(
         self, user_id: uuid.UUID, account_id: uuid.UUID, *, start: dt.date

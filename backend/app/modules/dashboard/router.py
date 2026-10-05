@@ -4,14 +4,16 @@ Todas mostram um mês inteiro, escolhido com `month=AAAA-MM`; sem ele, vale o m�
 de Brasília. O painel não aceita intervalo de datas (FR-059).
 """
 
+import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.dashboard.schemas import (
+    CardInvoices,
     DashboardCards,
     DashboardCategories,
     DashboardSummary,
@@ -122,3 +124,33 @@ async def get_cards(
 ) -> DashboardCards:
     reference = card_reference_date(resolve_month(month))
     return DashboardCards(items=await service.cards(current.id, reference=reference))
+
+
+@router.get(
+    "/cards/{account_id}/invoices",
+    summary="Faturas de um cartão, com o estado de cada uma",
+    description=(
+        "Da mais antiga para a mais nova: paga, a pagar, vencida, aberta ou futura. Os "
+        "pagamentos quitam primeiro as faturas mais antigas."
+    ),
+)
+async def get_card_invoices(
+    account_id: uuid.UUID, current: CurrentUserDep, service: ReportingServiceDep
+) -> CardInvoices:
+    return await service.card_invoices(current.id, account_id)
+
+
+@router.get(
+    "/cards/{account_id}/invoices/{month}/categories",
+    summary="Gastos por categoria de uma fatura",
+    description="Só as compras do cartão no período da fatura, como no gráfico do painel.",
+)
+async def get_invoice_categories(
+    account_id: uuid.UUID,
+    month: Annotated[str, Path(description="Mês em que a fatura fecha, como `2026-10`.")],
+    current: CurrentUserDep,
+    service: ReportingServiceDep,
+) -> DashboardCategories:
+    first_day = resolve_month(month)
+    breakdown = await service.invoice_categories(current.id, account_id, closing_month=first_day)
+    return DashboardCategories(month=month_label(first_day), **breakdown.model_dump())

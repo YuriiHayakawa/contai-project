@@ -14,8 +14,11 @@ from app.modules.transactions.invoices import (
     closing_date,
     current_invoice,
     due_date_after,
+    invoice_closing_in,
     invoice_for,
     is_after_invoice,
+    next_invoice,
+    previous_invoice,
 )
 
 
@@ -139,3 +142,42 @@ def test_days_outside_1_to_31_are_refused(day: int) -> None:
         closing_date(2026, 10, day)
     with pytest.raises(ValueError):
         due_date_after(date(2026, 10, 3), day)
+
+
+@pytest.mark.parametrize(("closing_day", "due_day"), [(3, 10), (28, 5), (31, 8), (1, 8), (30, 31)])
+def test_each_month_has_one_invoice_that_closes_in_it(closing_day: int, due_day: int) -> None:
+    for month in range(1, 13):
+        invoice = invoice_closing_in(2026, month, closing_day=closing_day, due_day=due_day)
+
+        assert invoice.closing_date == closing_date(2026, month, closing_day)
+        assert invoice == invoice_for(invoice.period_end, closing_day=closing_day, due_day=due_day)
+
+
+def test_the_invoice_that_closes_on_the_first_day_holds_the_whole_previous_month() -> None:
+    invoice = invoice_closing_in(2026, 3, closing_day=1, due_day=8)
+
+    assert invoice == Invoice(
+        period_start=date(2026, 2, 1),
+        period_end=date(2026, 2, 28),
+        closing_date=date(2026, 3, 1),
+        due_date=date(2026, 3, 8),
+    )
+
+
+def test_the_invoice_can_be_due_in_the_month_after_it_closes() -> None:
+    # Fecha no dia 28 e vence no dia 5: a que fecha em setembro vence em outubro.
+    invoice = invoice_closing_in(2026, 9, closing_day=28, due_day=5)
+
+    assert (invoice.closing_date, invoice.due_date) == (date(2026, 9, 28), date(2026, 10, 5))
+
+
+def test_next_and_previous_invoices_are_neighbours_without_a_gap() -> None:
+    days = {"closing_day": 31, "due_day": 8}
+    january = invoice_closing_in(2026, 1, **days)
+
+    february = next_invoice(january, **days)
+
+    assert february.period_start == january.closing_date
+    # Fevereiro não tem dia 31: a fatura fecha no dia 28.
+    assert february.closing_date == date(2026, 2, 28)
+    assert previous_invoice(february, **days) == january
