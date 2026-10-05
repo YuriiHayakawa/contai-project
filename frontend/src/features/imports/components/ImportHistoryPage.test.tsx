@@ -94,6 +94,7 @@ beforeEach(() => {
       initial_balance_date: "2026-09-01",
       closing_day: null,
       due_day: null,
+      credit_limit_cents: null,
       archived: false,
       balance_cents: 0,
     },

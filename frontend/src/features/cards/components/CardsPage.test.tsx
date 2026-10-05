@@ -96,6 +96,7 @@ const nubank: CardSummary = {
   name: "Cartão Nubank",
   closing_day: 28,
   due_day: 10,
+  credit_limit: null,
   current_invoice: { ...invoice(NOVEMBER, "open", 38_640) },
   future_installments: {
     total_cents: 70_000,
@@ -112,6 +113,7 @@ const nubankInvoices: CardInvoices = {
   name: "Cartão Nubank",
   closing_day: 28,
   due_day: 10,
+  credit_limit: null,
   items: [
     invoice(SEPTEMBER, "paid", 103_170),
     invoice(OCTOBER, "due", 124_380, 124_380),
@@ -130,6 +132,7 @@ const itau: CardSummary = {
   name: "Itaú Visa",
   closing_day: 15,
   due_day: 22,
+  credit_limit: null,
   current_invoice: {
     ...invoice(["2026-09-15", "2026-10-14", "2026-10-15", "2026-10-22"], "open", 51_230),
   },
@@ -142,6 +145,7 @@ const itauInvoices: CardInvoices = {
   name: "Itaú Visa",
   closing_day: 15,
   due_day: 22,
+  credit_limit: null,
   items: [
     invoice(["2026-08-15", "2026-09-14", "2026-09-15", "2026-09-22"], "paid", 20_000),
     invoice(["2026-09-15", "2026-10-14", "2026-10-15", "2026-10-22"], "open", 51_230),
@@ -160,6 +164,7 @@ function account(id: string, name: string, type: Account["type"]): Account {
     initial_balance_date: "2026-01-01",
     closing_day: isCard ? 28 : null,
     due_day: isCard ? 10 : null,
+    credit_limit_cents: null,
     archived: false,
     balance_cents: isCard ? -163_020 : 500_000,
   };
@@ -438,38 +443,98 @@ describe("CardsPage", () => {
     ).toBeVisible();
   });
 
-  it("cartão com saldo a favor: o botão continua lá, e a tela explica por que não há o que pagar", async () => {
-    // O saldo inicial de R$ 500,00 entrou como crédito, e não como dívida: com uma compra de
-    // R$ 110,00, o cartão ainda tem R$ 390,00 a favor.
+  it("cartão com saldo a favor, de pagamento a mais: o botão continua lá e a tela diz o valor", async () => {
     const inFavor = { closed_invoice: null, total_due_cents: 0 };
     getCards.mockResolvedValue({ items: [{ ...nubank, payment: inFavor }] });
     getCardInvoices.mockResolvedValue({
       ...nubankInvoices,
-      items: [invoice(OCTOBER, "paid", 0), invoice(NOVEMBER, "open", 11_000)],
+      items: [invoice(OCTOBER, "paid", 11_000), invoice(NOVEMBER, "open", 0)],
       payment: inFavor,
     });
     vi.mocked(accountsService.listAccounts).mockResolvedValue([
       account("acc-conta", "Conta Principal", "checking"),
-      {
-        ...account("acc-nubank", "Cartão Nubank", "credit_card"),
-        initial_balance_cents: 50_000,
-        balance_cents: 39_000,
-      },
+      { ...account("acc-nubank", "Cartão Nubank", "credit_card"), balance_cents: 4_000 },
     ]);
     const user = renderPage();
     await heading("Fatura de novembro");
 
     expect(screen.getByText("Pelo saldo do cartão, você não deve nada nele hoje.")).toBeVisible();
-    const hint = await screen.findByText(/O cartão está com R\$ 390,00 a seu favor/);
-    expect(hint).toHaveTextContent(
-      "começou com R$ 500,00 de saldo inicial positivo. Se esse valor era uma dívida, marque isso no cadastro do cartão, em Contas.",
-    );
-    expect(within(hint).getByRole("link", { name: "Contas" })).toHaveAttribute("href", "/contas");
+    expect(
+      await screen.findByText(
+        "O cartão está com R$ 40,00 a seu favor, de pagamento a mais: esse valor abate as próximas compras.",
+      ),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Pagar fatura" }));
 
     expect(await screen.findByRole("dialog", { name: "Nova transferência" })).toBeInTheDocument();
     expect(screen.getByLabelText("Entra em", { selector: "select" })).toHaveValue("acc-nubank");
+  });
+
+  it("com limite informado, mostra o disponível, o usado e o limite, que não mudam a fatura", async () => {
+    // Limite de R$ 500,00 e uma compra de R$ 110,00, com a fatura ainda aberta.
+    const owes = { closed_invoice: null, total_due_cents: 11_000 };
+    const usage = { limit_cents: 50_000, used_cents: 11_000, available_cents: 39_000 };
+    getCards.mockResolvedValue({ items: [{ ...nubank, payment: owes, credit_limit: usage }] });
+    getCardInvoices.mockResolvedValue({
+      ...nubankInvoices,
+      items: [invoice(OCTOBER, "paid", 0), invoice(NOVEMBER, "open", 11_000)],
+      payment: owes,
+      credit_limit: usage,
+    });
+    const user = renderPage();
+    await heading("Fatura de novembro");
+
+    const limit = screen.getByRole("heading", { name: "Limite do cartão" }).closest("section");
+    expect(limit).toHaveTextContent("DisponívelR$ 390,00");
+    expect(limit).toHaveTextContent("UsadoR$ 110,00");
+    expect(limit).toHaveTextContent("LimiteR$ 500,00");
+    expect(screen.getByRole("meter", { name: "Uso do limite" })).toHaveAttribute(
+      "aria-valuetext",
+      "R$\u00a0110,00 usados de R$\u00a0500,00",
+    );
+    // O limite é um teto, e não dinheiro: a fatura continua em R$ 110,00, e dá para pagá-la
+    // antes do fechamento.
+    expect(hero("Até agora")).toHaveTextContent("R$110,00");
+    expect(
+      screen.getByText(
+        "Esta fatura ainda não fechou: o pagamento adianta o que você já deve no cartão, R$ 110,00.",
+      ),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Pagar fatura" }));
+
+    expect(await screen.findByRole("dialog", { name: "Nova transferência" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Valor em reais" })).toHaveValue("110,00");
+  });
+
+  it("acima do limite: diz quanto passou, com texto, e nada fica bloqueado", async () => {
+    const usage = { limit_cents: 50_000, used_cents: 60_000, available_cents: -10_000 };
+    getCardInvoices.mockResolvedValue({ ...nubankInvoices, credit_limit: usage });
+    renderPage();
+    await heading("Fatura de outubro");
+
+    const limit = screen.getByRole("heading", { name: "Limite do cartão" }).closest("section");
+    expect(limit).toHaveTextContent("R$ 100,00 acima do limite");
+    expect(limit).not.toHaveTextContent("Disponível");
+    expect(screen.getByRole("meter", { name: "Uso do limite" })).toHaveAttribute(
+      "aria-valuetext",
+      "R$\u00a0600,00 usados de R$\u00a0500,00",
+    );
+    expect(screen.getByRole("button", { name: "Pagar fatura" })).toBeVisible();
+  });
+
+  it("sem limite informado, não mostra usado nem disponível e leva a Contas para informá-lo", async () => {
+    renderPage();
+    await heading("Fatura de outubro");
+
+    const limit = screen.getByRole("heading", { name: "Limite do cartão" }).closest("section");
+    expect(limit).toHaveTextContent("Informe o limite deste cartão");
+    expect(screen.queryByRole("meter")).toBeNull();
+    expect(screen.getByRole("link", { name: "Informar o limite em Contas" })).toHaveAttribute(
+      "href",
+      "/contas",
+    );
   });
 
   it("fatura vencida: o selo vira alerta e diz há quanto tempo venceu", async () => {

@@ -22,6 +22,7 @@ function account(id: string, name: string, overrides: Partial<Account> = {}): Ac
     initial_balance_date: "2026-01-01",
     closing_day: null,
     due_day: null,
+    credit_limit_cents: null,
     archived: false,
     balance_cents: 0,
     ...overrides,

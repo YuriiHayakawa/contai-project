@@ -13,6 +13,11 @@ from app.modules.accounts.schemas import AccountCreate, AccountRead, AccountUpda
 
 CARD_DAY_REQUIRED = "Informe este dia: ele é obrigatório para cartão de crédito."
 CARD_DAY_NOT_ALLOWED = "Este dia só existe em cartão de crédito. Deixe em branco."
+CARD_STARTS_IN_DEBT = (
+    "Um cartão não começa com saldo a favor. Informe quanto você já deve nele, ou zero."
+)
+LIMIT_NOT_POSITIVE = "Informe um limite maior que zero, ou deixe em branco."
+LIMIT_NOT_ALLOWED = "O limite só existe em cartão de crédito. Deixe em branco."
 NAME_TAKEN = "Você já tem uma conta ativa com esse nome. Escolha outro nome."
 TYPE_LOCKED = (
     "O tipo não pode mudar depois que a conta tem lançamentos. Crie outra conta com o tipo certo."
@@ -23,15 +28,32 @@ HAS_TRANSACTIONS = (
 )
 
 
-def _check_card_days(
-    account_type: AccountType, closing_day: int | None, due_day: int | None
+def _check_card_fields(
+    account_type: AccountType,
+    *,
+    closing_day: int | None,
+    due_day: int | None,
+    initial_balance_cents: int,
+    credit_limit_cents: int | None,
 ) -> None:
-    """Fechamento e vencimento: obrigatórios para cartão, inexistentes nos demais tipos."""
+    """O que só existe em cartão, e o que nele é diferente.
+
+    Fechamento e vencimento são obrigatórios para cartão e inexistentes nos demais tipos. O
+    limite é opcional, só de cartão e maior que zero. E o valor inicial de um cartão é a dívida
+    que ele já tinha: um valor positivo seria dinheiro a favor, que é o que um limite digitado
+    no lugar errado virava (FR-019, FR-088).
+    """
     days = {"closing_day": closing_day, "due_day": due_day}
     if account_type == AccountType.CREDIT_CARD:
         fields = {name: CARD_DAY_REQUIRED for name, day in days.items() if day is None}
+        if initial_balance_cents > 0:
+            fields["initial_balance_cents"] = CARD_STARTS_IN_DEBT
+        if credit_limit_cents is not None and credit_limit_cents <= 0:
+            fields["credit_limit_cents"] = LIMIT_NOT_POSITIVE
     else:
         fields = {name: CARD_DAY_NOT_ALLOWED for name, day in days.items() if day is not None}
+        if credit_limit_cents is not None:
+            fields["credit_limit_cents"] = LIMIT_NOT_ALLOWED
     if fields:
         raise ValidationFailed(details={"fields": fields})
 
@@ -75,7 +97,13 @@ class AccountService:
     # ---------- cadastro e edição
 
     async def create(self, user_id: uuid.UUID, data: AccountCreate) -> AccountRead:
-        _check_card_days(data.type, data.closing_day, data.due_day)
+        _check_card_fields(
+            data.type,
+            closing_day=data.closing_day,
+            due_day=data.due_day,
+            initial_balance_cents=data.initial_balance_cents,
+            credit_limit_cents=data.credit_limit_cents,
+        )
         await self._ensure_name_is_free(user_id, data.name)
         account = await self._accounts.create(
             user_id,
@@ -87,6 +115,7 @@ class AccountService:
             initial_balance_date=data.initial_balance_date or clock.today(),
             closing_day=data.closing_day,
             due_day=data.due_day,
+            credit_limit_cents=data.credit_limit_cents,
         )
         return await self._read(account)
 
@@ -102,11 +131,26 @@ class AccountService:
 
         closing_day = data.closing_day if "closing_day" in sent else account.closing_day
         due_day = data.due_day if "due_day" in sent else account.due_day
+        credit_limit = (
+            data.credit_limit_cents if "credit_limit_cents" in sent else account.credit_limit_cents
+        )
         if new_type != AccountType.CREDIT_CARD and new_type != account.type:
-            # Ao deixar de ser cartão, os dias de fechamento e vencimento saem junto.
+            # Ao deixar de ser cartão, os dias de fechamento e vencimento e o limite saem junto.
             closing_day = data.closing_day if "closing_day" in sent else None
             due_day = data.due_day if "due_day" in sent else None
-        _check_card_days(new_type, closing_day, due_day)
+            credit_limit = data.credit_limit_cents if "credit_limit_cents" in sent else None
+        initial_balance = (
+            data.initial_balance_cents
+            if data.initial_balance_cents is not None
+            else account.initial_balance_cents
+        )
+        _check_card_fields(
+            new_type,
+            closing_day=closing_day,
+            due_day=due_day,
+            initial_balance_cents=initial_balance,
+            credit_limit_cents=credit_limit,
+        )
 
         if data.name is not None and data.name != account.name:
             # Uma conta arquivada pode ter o nome de uma ativa; a conferência vem ao desarquivar.
@@ -116,6 +160,7 @@ class AccountService:
         account.type = new_type
         account.closing_day = closing_day
         account.due_day = due_day
+        account.credit_limit_cents = credit_limit
         if "institution" in sent:
             account.institution = data.institution or None
         if data.initial_balance_cents is not None:

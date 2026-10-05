@@ -29,6 +29,7 @@ from app.modules.dashboard.schemas import (
     CategoryBreakdown,
     CategorySpending,
     ClosedInvoiceDue,
+    CreditLimitUsage,
     FutureInstallments,
     InvoicePayment,
     InvoiceStatus,
@@ -436,9 +437,36 @@ class ReportingService:
             total_due_cents=max(debt, 0),
         )
 
+    async def credit_limit(self, user_id: uuid.UUID, card: AccountRead) -> CreditLimitUsage | None:
+        """Quanto do limite do cartão está ocupado hoje (FR-088); `None` sem limite informado.
+
+        O usado é o que se deve hoje mais o que já está lançado no cartão para depois de hoje.
+        Assim uma compra parcelada ocupa o limite pelo valor inteiro desde o lançamento, e a
+        parcela da fatura atual que ainda não chegou também conta, embora ainda não pese no
+        saldo. Um saldo a favor abate o que está por vir, e o usado nunca fica negativo.
+        """
+        if card.credit_limit_cents is None:
+            return None
+        tomorrow = clock.today() + dt.timedelta(days=1)
+        by_type = await self._reports.account_totals_by_type(
+            user_id,
+            card.id,
+            # O que vem antes da data do saldo inicial nunca vai pesar no saldo.
+            start=max(tomorrow, card.initial_balance_date),
+            end=dt.date.max,
+        )
+        upcoming = by_type.get(TransactionType.EXPENSE, 0) - by_type.get(TransactionType.INCOME, 0)
+        used = max(upcoming - card.balance_cents, 0)
+        return CreditLimitUsage(
+            limit_cents=card.credit_limit_cents,
+            used_cents=used,
+            available_cents=card.credit_limit_cents - used,
+        )
+
     async def cards(self, user_id: uuid.UUID, *, reference: dt.date) -> list[CardSummary]:
         """Por cartão ativo: a fatura que contém `reference` e as parcelas das faturas
-        seguintes, por mês de vencimento e no total (FR-058), e o que pagar nele hoje."""
+        seguintes, por mês de vencimento e no total (FR-058), o que pagar nele hoje e quanto
+        do limite está ocupado."""
         summaries: list[CardSummary] = []
         for card in await self._accounts.list(user_id):
             if card.type != AccountType.CREDIT_CARD:
@@ -479,6 +507,7 @@ class ReportingService:
                         ],
                     ),
                     payment=await self.invoice_payment(user_id, card),
+                    credit_limit=await self.credit_limit(user_id, card),
                 )
             )
         return summaries
@@ -566,6 +595,7 @@ class ReportingService:
                 for invoice in invoices
             ],
             payment=payment,
+            credit_limit=await self.credit_limit(user_id, card),
         )
 
     async def invoice_categories(

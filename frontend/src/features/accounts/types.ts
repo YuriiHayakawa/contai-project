@@ -8,13 +8,15 @@ export interface Account {
   type: AccountType;
   name: string;
   institution: string | null;
-  /** Com sinal: a dívida inicial de um cartão é negativa. */
+  /** Com sinal. Em cartão é a dívida que ele já tinha: negativa ou zero, nunca positiva. */
   initial_balance_cents: number;
   /** Só os lançamentos a partir desta data entram no saldo. */
   initial_balance_date: ISODate;
   /** Dias de fechamento e de vencimento: só existem em cartão de crédito. */
   closing_day: number | null;
   due_day: number | null;
+  /** Limite do cartão: um teto, e não dinheiro. `null` nos outros tipos e sem limite informado. */
+  credit_limit_cents: number | null;
   archived: boolean;
   /** Saldo inicial mais os lançamentos entre a data de referência e hoje. */
   balance_cents: number;
@@ -29,6 +31,8 @@ export interface AccountInput {
   initial_balance_date: ISODate;
   closing_day: number | null;
   due_day: number | null;
+  /** Só em cartão, e maior que zero; `null` deixa o cartão sem limite. */
+  credit_limit_cents: number | null;
 }
 
 export interface AccountList {

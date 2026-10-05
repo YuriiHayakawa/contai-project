@@ -37,6 +37,7 @@ export function MoneyInput({
   id,
   className,
   "aria-label": ariaLabel = "Valor em reais",
+  "aria-describedby": describedBy,
   ...rest
 }: MoneyInputProps) {
   const generatedId = useId();
@@ -82,7 +83,8 @@ export function MoneyInput({
           autoComplete="off"
           aria-label={ariaLabel}
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? errorId : undefined}
+          // A ajuda de quem usa o campo continua valendo quando aparece um erro.
+          aria-describedby={cn(error && errorId, describedBy) || undefined}
           value={formatCentsAsDecimal(value)}
           onChange={handleChange}
           onPaste={handlePaste}

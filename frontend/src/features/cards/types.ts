@@ -1,6 +1,6 @@
 // Tipos das rotas de faturas de um cartão (contracts/rest-api.md). Os nomes dos campos são os
 // da API.
-import type { InvoicePayment, InvoiceSummary } from "../dashboard/types";
+import type { CreditLimitUsage, InvoicePayment, InvoiceSummary } from "../dashboard/types";
 
 /**
  * Em que ponto a fatura está hoje:
@@ -30,4 +30,6 @@ export interface CardInvoices {
   /** Da mais antiga para a mais nova, sempre com a última fechada e a atual. */
   items: CardInvoice[];
   payment: InvoicePayment;
+  /** O uso do limite, igual ao do resumo de cartões; `null` sem limite informado. */
+  credit_limit: CreditLimitUsage | null;
 }

@@ -1,9 +1,10 @@
-"""Contas: cadastro, edição, arquivamento e exclusão (FR-019 a FR-022)."""
+"""Contas: cadastro, edição, arquivamento e exclusão (FR-019 a FR-022), e o limite do cartão
+(FR-088)."""
 
 from datetime import UTC, datetime
 
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 
 from app.core import clock
 from tests.finance import ACCOUNTS, create_account, create_category, create_transaction
@@ -35,6 +36,7 @@ async def test_create_account_with_only_name_and_type(
         "initial_balance_date": "2026-10-01",
         "closing_day": None,
         "due_day": None,
+        "credit_limit_cents": None,
         "archived": False,
         "balance_cents": 0,
     }
@@ -353,3 +355,115 @@ async def test_account_with_transactions_can_only_be_archived(
     # Sem a transação, a exclusão passa.
     await client_a.delete(f"/api/v1/transactions/{transaction['id']}")
     assert (await client_a.delete(f"{ACCOUNTS}/{account['id']}")).status_code == 204
+
+
+# ---------- limite do cartão e dívida inicial
+
+
+def _fields(response: Response) -> dict[str, str]:
+    assert response.status_code == 422, response.text
+    fields: dict[str, str] = response.json()["error"]["details"]["fields"]
+    return fields
+
+
+CARD = {"name": "Inter crédito", "type": "credit_card", "closing_day": 7, "due_day": 14}
+
+
+async def test_a_credit_card_may_have_a_limit_that_never_enters_the_balance(
+    client_a: AsyncClient, frozen_time: datetime
+) -> None:
+    card = await create_account(client_a, **CARD, credit_limit_cents=50_000)
+
+    assert card["credit_limit_cents"] == 50_000
+    # O limite é um teto, e não dinheiro: o cartão começa zerado.
+    assert (card["initial_balance_cents"], card["balance_cents"]) == (0, 0)
+    listed = (await client_a.get(ACCOUNTS)).json()["items"]
+    assert [item["credit_limit_cents"] for item in listed] == [50_000]
+
+
+async def test_the_limit_is_optional_and_can_change_or_be_cleared(
+    client_a: AsyncClient, frozen_time: datetime
+) -> None:
+    card = await create_account(client_a, **CARD)
+    url = f"{ACCOUNTS}/{card['id']}"
+
+    informed = await client_a.patch(url, json={"credit_limit_cents": 50_000})
+    renamed = await client_a.patch(url, json={"name": "Inter"})
+    raised = await client_a.patch(url, json={"credit_limit_cents": 80_000})
+    cleared = await client_a.patch(url, json={"credit_limit_cents": None})
+
+    assert card["credit_limit_cents"] is None
+    assert informed.json()["credit_limit_cents"] == 50_000
+    # Só os campos enviados mudam: renomear não mexe no limite.
+    assert renamed.json()["credit_limit_cents"] == 50_000
+    assert raised.json()["credit_limit_cents"] == 80_000
+    assert (cleared.status_code, cleared.json()["credit_limit_cents"]) == (200, None)
+
+
+@pytest.mark.parametrize("limit", [0, -50_000])
+async def test_the_limit_is_greater_than_zero(client_a: AsyncClient, limit: int) -> None:
+    created = await client_a.post(ACCOUNTS, json={**CARD, "credit_limit_cents": limit})
+
+    assert "maior que zero" in _fields(created)["credit_limit_cents"]
+
+    card = await create_account(client_a, **CARD)
+    edited = await client_a.patch(f"{ACCOUNTS}/{card['id']}", json={"credit_limit_cents": limit})
+
+    assert "maior que zero" in _fields(edited)["credit_limit_cents"]
+
+
+async def test_the_limit_only_exists_on_credit_cards(client_a: AsyncClient) -> None:
+    created = await client_a.post(
+        ACCOUNTS, json={"name": "Conta", "type": "checking", "credit_limit_cents": 50_000}
+    )
+
+    assert "cartão de crédito" in _fields(created)["credit_limit_cents"]
+
+    account = await create_account(client_a)
+    edited = await client_a.patch(
+        f"{ACCOUNTS}/{account['id']}", json={"credit_limit_cents": 50_000}
+    )
+
+    assert set(_fields(edited)) == {"credit_limit_cents"}
+
+
+async def test_a_credit_card_never_starts_with_money_in_favour(
+    client_a: AsyncClient, frozen_time: datetime
+) -> None:
+    # R$ 500,00 positivos em um cartão eram o limite digitado no lugar do saldo.
+    created = await client_a.post(ACCOUNTS, json={**CARD, "initial_balance_cents": 50_000})
+
+    assert "saldo a favor" in _fields(created)["initial_balance_cents"]
+
+    card = await create_account(client_a, **CARD, initial_balance_cents=-30_000)
+    edited = await client_a.patch(
+        f"{ACCOUNTS}/{card['id']}", json={"initial_balance_cents": 50_000}
+    )
+
+    assert set(_fields(edited)) == {"initial_balance_cents"}
+    assert card["balance_cents"] == -30_000
+
+
+async def test_an_account_with_a_positive_balance_cannot_become_a_credit_card(
+    client_a: AsyncClient, frozen_time: datetime
+) -> None:
+    account = await create_account(client_a, initial_balance_cents=100_000)
+    url = f"{ACCOUNTS}/{account['id']}"
+    days = {"type": "credit_card", "closing_day": 5, "due_day": 12}
+
+    refused = await client_a.patch(url, json=days)
+    accepted = await client_a.patch(url, json={**days, "initial_balance_cents": 0})
+
+    assert set(_fields(refused)) == {"initial_balance_cents"}
+    assert (accepted.status_code, accepted.json()["type"]) == (200, "credit_card")
+
+
+async def test_leaving_the_credit_card_type_drops_the_limit(
+    client_a: AsyncClient, frozen_time: datetime
+) -> None:
+    card = await create_account(client_a, **CARD, credit_limit_cents=50_000)
+
+    changed = await client_a.patch(f"{ACCOUNTS}/{card['id']}", json={"type": "checking"})
+
+    assert changed.status_code == 200, changed.text
+    assert (changed.json()["type"], changed.json()["credit_limit_cents"]) == ("checking", None)

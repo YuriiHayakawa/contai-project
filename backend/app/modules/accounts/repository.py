@@ -37,6 +37,7 @@ class AccountRepository:
         initial_balance_date: dt.date,
         closing_day: int | None,
         due_day: int | None,
+        credit_limit_cents: int | None = None,
     ) -> Account:
         account = Account(
             user_id=user_id,
@@ -47,6 +48,7 @@ class AccountRepository:
             initial_balance_date=initial_balance_date,
             closing_day=closing_day,
             due_day=due_day,
+            credit_limit_cents=credit_limit_cents,
         )
         self._session.add(account)
         await self._session.flush()

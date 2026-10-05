@@ -31,6 +31,7 @@ function account(id: string, name: string, overrides: Partial<Account> = {}): Ac
     initial_balance_date: "2026-01-01",
     closing_day: null,
     due_day: null,
+    credit_limit_cents: null,
     archived: false,
     balance_cents: 0,
     ...overrides,
@@ -49,6 +50,7 @@ const summary: CardSummary = {
   name: "Cartão Nubank",
   closing_day: 3,
   due_day: 10,
+  credit_limit: null,
   current_invoice: {
     period_start: "2026-09-03",
     period_end: "2026-10-02",

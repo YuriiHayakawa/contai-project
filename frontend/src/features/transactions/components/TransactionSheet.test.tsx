@@ -33,6 +33,7 @@ const conta: Account = {
   initial_balance_date: "2026-01-01",
   closing_day: null,
   due_day: null,
+  credit_limit_cents: null,
   archived: false,
   balance_cents: 100000,
 };

@@ -13,9 +13,15 @@ export const accountSchema = z
       .max(60, "Use um nome com até 60 caracteres."),
     type: z.enum(["checking", "credit_card", "cash", "savings", "investment"]),
     institution: z.string().trim().max(60, "Use até 60 caracteres."),
-    /** Sempre positivo; o sinal vem de `negative`. */
+    /**
+     * Sempre positivo. Em cartão é quanto já se deve nele; nas outras contas, o saldo inicial,
+     * com o sinal em `negative`.
+     */
     balanceCents: z.number().int().min(0),
+    /** Só fora de cartão: no cartão o valor é sempre uma dívida. */
     negative: z.boolean(),
+    /** Só em cartão; zero é "sem limite informado". */
+    limitCents: z.number().int().min(0),
     balanceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Escolha a data deste saldo."),
     /** Só em cartão de crédito; nos outros tipos ficam vazios e não são enviados. */
     closingDay: z.string().trim(),

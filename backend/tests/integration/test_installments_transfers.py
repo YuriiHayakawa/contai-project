@@ -703,6 +703,8 @@ async def test_cards_summary_shows_the_current_invoice_and_future_installments(
                     "closed_invoice": None,
                     "total_due_cents": 40_000 + 4_590 - 500 + 999 - 30_000,
                 },
+                # O cartão não tem limite informado.
+                "credit_limit": None,
             }
         ]
     }

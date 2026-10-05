@@ -96,6 +96,21 @@ export interface InvoicePayment {
   total_due_cents: number;
 }
 
+/**
+ * Quanto do limite de um cartão está ocupado hoje, seja qual for o mês exibido. O limite é um
+ * teto, e não dinheiro: não entra em saldo, fatura nem no que falta pagar.
+ */
+export interface CreditLimitUsage {
+  limit_cents: number;
+  /**
+   * O que se deve hoje mais o que já está lançado no cartão com data depois de hoje, como as
+   * parcelas. Um saldo a favor abate o que está por vir; nunca é negativo.
+   */
+  used_cents: number;
+  /** O limite menos o usado; negativo quando o usado passou do limite. */
+  available_cents: number;
+}
+
 export interface CardSummary {
   account_id: string;
   name: string;
@@ -108,6 +123,8 @@ export interface CardSummary {
     months: MonthAmount[];
   };
   payment: InvoicePayment;
+  /** `null` quando o cartão não tem limite informado. */
+  credit_limit: CreditLimitUsage | null;
 }
 
 export interface DashboardCards {

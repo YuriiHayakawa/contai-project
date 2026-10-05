@@ -11,6 +11,7 @@ function card(name: string, payment: CardSummary["payment"]): CardSummary {
     name,
     closing_day: 28,
     due_day: 10,
+    credit_limit: null,
     current_invoice: {
       period_start: "2026-09-28",
       period_end: "2026-10-27",

@@ -35,6 +35,7 @@ function account(id: string, name: string, type: Account["type"] = "checking"): 
     initial_balance_date: "2026-09-01",
     closing_day: type === "credit_card" ? 10 : null,
     due_day: type === "credit_card" ? 17 : null,
+    credit_limit_cents: null,
     archived: false,
     balance_cents: 0,
   };
