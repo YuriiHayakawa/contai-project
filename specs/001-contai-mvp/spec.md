@@ -95,6 +95,26 @@ código, o termo é "transação" (`transaction`). Os dois nomes se referem à m
   que não existe e para pedidos realmente ambíguos (definido na conferência do assistente com
   o provedor real).
 
+### Session 2026-10-05
+
+- Q: O valor informado no cadastro de um cartão é o limite ou o saldo dele? → A: São duas
+  coisas. O limite ganha um campo próprio, opcional, e nunca conta como dinheiro. O valor
+  inicial de um cartão passa a ser só a dívida que ele já tinha: o campo se chama "Quanto você
+  já deve neste cartão", começa em zero e recebe o valor positivo da dívida. Nas outras contas
+  continua "Saldo inicial".
+- Q: Parcelas futuras consomem o limite? → A: Sim. Disponível = limite − o que se deve hoje −
+  o que já está lançado no cartão para depois de hoje (parcelas e compras com data futura).
+- Q: Passar do limite bloqueia algum lançamento? → A: Não. A tela só mostra "R$ X acima do
+  limite".
+- Q: A fatura pode ser paga antes de fechar? → A: Sim. "Pagar fatura" fica sempre disponível e,
+  sem fatura fechada a pagar, sugere o que se deve no cartão hoje.
+- Q: Um saldo a favor de verdade (pagamento a mais) continua abatendo a fatura seguinte? → A:
+  Sim, a regra não muda.
+- Q: O que acontece com um cartão já cadastrado com valor inicial positivo? → A: O valor era o
+  limite: passa para o limite do cartão, e a dívida inicial fica em zero.
+- Q: O assistente responde sobre o limite? → A: Sim, com os mesmos limite, usado e disponível
+  da tela do cartão.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Criar conta e entrar com segurança (Priority: P1)
@@ -249,6 +269,19 @@ do mês.
     estornos que somam esse valor e os gastos dela por categoria.
 11. **Given** uma fatura a pagar aberta na tela "Cartões", **When** o usuário a paga pelo "Pagar
     fatura", **Then** a tela continua nela, agora como paga, e o aviso da tela inicial some.
+12. **Given** um cartão com limite de R$ 500,00, sem dívida, **When** o usuário lança nele uma
+    compra de R$ 110,00, **Then** a fatura atual mostra R$ 110,00, a tela do cartão mostra
+    usado R$ 110,00 e disponível R$ 390,00, e o saldo da conta do cartão é de −R$ 110,00: o
+    limite não entra em nenhuma dessas contas.
+13. **Given** esse mesmo cartão, com a fatura ainda aberta, **When** o usuário toca em "Pagar
+    fatura", **Then** o valor sugerido é R$ 110,00, o que ele deve hoje; depois de pagar, o
+    disponível volta a R$ 500,00.
+14. **Given** um cartão com limite de R$ 500,00, **When** o usuário lança uma compra de
+    R$ 600,00 em 6 parcelas, **Then** o lançamento é aceito, o usado passa a R$ 600,00 e a tela
+    mostra "R$ 100,00 acima do limite".
+15. **Given** o cadastro de um cartão, **When** o usuário informa R$ 300,00 em "Quanto você já
+    deve neste cartão", **Then** o cartão começa devendo R$ 300,00, que aparecem como fatura
+    fechada a pagar.
 
 ---
 
@@ -483,6 +516,14 @@ os 7 dias, não consegue mais entrar.
 - **Dia de fechamento ou de vencimento 29, 30 ou 31** em mês mais curto: vale o último dia do
   mês.
 - **Compra no próprio dia de fechamento**: entra na fatura seguinte.
+- **Cartão sem limite informado**: tudo funciona igual; a tela do cartão só não mostra usado
+  nem disponível, e oferece o caminho para informar o limite.
+- **Gasto acima do limite do cartão**: nenhum lançamento é recusado. A tela mostra quanto
+  passou do limite; quem recusa compra é o banco, e o Contaí registra o que aconteceu.
+- **Parcela ou compra do cartão com data depois de hoje**: ainda não pesa no saldo do cartão,
+  mas já ocupa o limite, mesmo quando cai na fatura atual.
+- **Cartão com saldo a favor** (pagamento a mais): o valor abate a fatura seguinte e o que
+  está por vir no uso do limite; o usado nunca fica negativo.
 - **Parcela em dia que não existe no mês** (compra em 31 de janeiro): a parcela cai no último
   dia do mês (28 ou 29 de fevereiro), e as seguintes voltam ao dia 31 quando ele existe.
 - **Parcelas com divisão não exata**: os centavos de diferença vão para a primeira parcela, e a
@@ -596,9 +637,12 @@ os 7 dias, não consegue mais entrar.
 - **FR-019**: O usuário DEVE poder cadastrar contas com nome, tipo (conta corrente, cartão de
   crédito, dinheiro/carteira, poupança ou investimento), instituição e saldo inicial. O saldo
   inicial DEVE ter uma data de referência, preenchida por padrão com o dia do cadastro da conta
-  e editável pelo usuário.
+  e editável pelo usuário. Em cartão de crédito, o saldo inicial é a dívida que o cartão já
+  tinha: o campo se chama "Quanto você já deve neste cartão", começa em zero e recebe o valor
+  da dívida, sem sinal. Um cartão NÃO PODE começar com saldo a favor. Nos demais tipos, o campo
+  continua "Saldo inicial" e pode ser negativo.
 - **FR-020**: Para cartões de crédito, o usuário DEVE poder informar o dia de fechamento e o dia
-  de vencimento da fatura.
+  de vencimento da fatura e, se quiser, o limite do cartão (FR-088).
 - **FR-021**: O usuário DEVE poder editar, arquivar e desarquivar contas; uma conta arquivada
   NÃO DEVE aparecer como opção para novos lançamentos, e seu histórico DEVE ser preservado.
 - **FR-022**: Contas com transações NÃO DEVEM poder ser excluídas, apenas arquivadas; contas sem
@@ -638,7 +682,9 @@ os 7 dias, não consegue mais entrar.
   DEVEM contar como receita nem como despesa em nenhum relatório ou resposta. O pagamento da
   fatura DEVE vir com o valor da última fatura fechada que ainda não foi paga e o vencimento
   dela, com o total devido no cartão como alternativa de um toque; sem fatura fechada em
-  aberto, DEVE vir com o total devido, explicando que a fatura atual ainda não fechou.
+  aberto, DEVE vir com o total devido, explicando que a fatura atual ainda não fechou. O
+  usuário DEVE poder pagar a qualquer momento, inclusive antes do fechamento; o limite do
+  cartão (FR-088) NÃO DEVE mudar o valor sugerido.
 - **FR-034**: O usuário DEVE poder editar e excluir transações; a edição ou exclusão de uma
   transferência DEVE valer para os dois lados.
 - **FR-086**: O usuário de cartão DEVE ter uma tela "Cartões", com item próprio na navegação,
@@ -651,16 +697,29 @@ os 7 dias, não consegue mais entrar.
   sem nenhuma, na fatura atual. "Pagar fatura" (FR-033) DEVE estar à vista em qualquer fatura:
   como ação principal na que está a pagar e, nas demais, dizendo o que o pagamento vai quitar (a
   fatura fechada do cartão, o que já se deve nele, ou nada). Quando o cartão está com saldo a
-  favor, a tela DEVE dizer isso e, se o saldo inicial dele era positivo, lembrar que uma dívida
-  inicial precisa ser marcada como dívida no cadastro. De cada fatura, a tela DEVE listar as
+  favor, por um pagamento a mais, a tela DEVE dizer isso. De cada fatura, a tela DEVE listar as
   compras e os estornos que somam o valor dela (o pagamento, que é transferência, fica de fora)
-  e os gastos por categoria; do cartão, o total das parcelas futuras e o valor delas por mês.
+  e os gastos por categoria; do cartão, o uso do limite (FR-088), o total das parcelas futuras
+  e o valor delas por mês.
 - **FR-087**: Enquanto um cartão ativo tiver fatura fechada com valor a pagar, a tela inicial
   DEVE mostrar no topo, ao exibir o mês atual, um aviso com o nome do cartão, o valor, o prazo
   ("vence em 5 dias", "venceu há 3 dias") e as ações "Pagar fatura" e "Ver fatura". Depois do
   vencimento, o aviso DEVE virar alerta, com ícone e texto próprios, e não só outra cor. O
   aviso some quando a fatura é paga. É um aviso dentro do app: alertas por e-mail ou
   notificação continuam fora do escopo.
+- **FR-088**: O usuário DEVE poder informar o limite de cada cartão de crédito. O limite é
+  opcional e pode ser mudado ou apagado a qualquer momento. Ele é um teto, e não dinheiro: NÃO
+  DEVE entrar no saldo da conta, no valor de nenhuma fatura, no que falta pagar, no painel nem
+  em nenhum relatório. Com o limite informado, a tela do cartão DEVE mostrar o limite, o usado
+  e o disponível. O usado é o que se deve no cartão hoje mais tudo o que já está lançado nele
+  com data depois de hoje (parcelas e compras com data futura, menos os estornos); um saldo a
+  favor abate esse valor, e o usado nunca fica negativo. O disponível é o limite menos o usado.
+  Assim, uma compra parcelada ocupa o limite pelo valor inteiro no dia em que é lançada, e cada
+  pagamento libera o que foi pago. Passar do limite NÃO DEVE bloquear nem avisar na hora do
+  lançamento: a tela do cartão DEVE mostrar "R$ X acima do limite", com ícone e texto, e não
+  só com cor. Sem limite informado, a tela NÃO mostra usado nem disponível e oferece o caminho
+  para informá-lo. O assistente DEVE responder quanto há de limite, de usado e de disponível
+  com os mesmos valores da tela (FR-062).
 - **FR-035**: O usuário DEVE poder buscar transações combinando filtros por período, conta,
   categoria, tipo e texto.
 
@@ -817,7 +876,8 @@ os 7 dias, não consegue mais entrar.
   navegador e a última atividade.
 - **Conta financeira**: onde o dinheiro está. Tem nome, tipo, instituição, saldo inicial com sua
   data de referência e situação (ativa ou arquivada); cartões têm também dia de fechamento e de
-  vencimento.
+  vencimento e, se o usuário informar, o limite. No cartão, o saldo inicial é a dívida que ele
+  já tinha, e o limite não faz parte do saldo.
 - **Categoria**: classificação de despesas ou receitas, em até dois níveis (categoria e
   subcategoria), com ícone, cor e situação (ativa ou arquivada).
 - **Transação**: uma despesa ou receita em uma conta, com valor, data, descrição, categoria e
