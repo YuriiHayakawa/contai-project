@@ -142,10 +142,11 @@ Sempre 10 por usuário; gerar novos apaga os anteriores (FR-011).
 | `type` | enum | `checking`, `credit_card`, `cash`, `savings`, `investment` (FR-019) |
 | `name` | texto | 1 a 60 caracteres; único entre as contas ativas do usuário |
 | `institution` | texto | opcional |
-| `initial_balance_cents` | BIGINT | com sinal; a dívida inicial de um cartão é negativa |
+| `initial_balance_cents` | BIGINT | com sinal; em cartão é a dívida que ele já tinha, negativa ou zero, nunca positiva (FR-019) |
 | `initial_balance_date` | DATE | data de referência; padrão, o dia do cadastro (FR-019) |
 | `closing_day` | inteiro | 1 a 31; obrigatório para cartão, nulo nos demais (FR-020) |
 | `due_day` | inteiro | 1 a 31; obrigatório para cartão, nulo nos demais |
+| `credit_limit_cents` | BIGINT | limite do cartão; opcional, maior que zero; só em cartão, nulo nos demais (FR-088) |
 | `archived_at` | timestamptz | arquivada não recebe lançamentos novos (FR-021) |
 
 **Regras**: só pode ser apagada se não tiver transações (FR-022). O tipo não pode mudar depois
@@ -153,7 +154,20 @@ que a conta tem transações.
 
 **Saldo (derivado, FR-023)**:
 `initial_balance_cents + receitas − despesas + transferências in − transferências out`, somando
-as transações com `initial_balance_date <= date <= hoje`.
+as transações com `initial_balance_date <= date <= hoje`. O limite do cartão não entra.
+
+**Uso do limite (derivado, FR-088)**: só em cartão com `credit_limit_cents`. Nada é guardado.
+
+- `usado = max(0, −saldo de hoje + despesas − receitas do cartão com date > hoje)`: o que se
+  deve hoje mais o que já está lançado para depois de hoje. Um saldo a favor abate o que está
+  por vir.
+- `disponível = credit_limit_cents − usado`; negativo quando o usado passou do limite.
+
+**Restrições novas** (migração `0007_card_credit_limit`): `credit_limit_cents` só em
+`credit_card` e maior que zero; em `credit_card`, `initial_balance_cents <= 0`. Antes de criar
+as restrições, a migração acerta os cartões antigos: o que tinha `initial_balance_cents`
+positivo passa esse valor para `credit_limit_cents` e fica com `initial_balance_cents = 0`,
+porque o valor tinha sido informado como o limite.
 
 ### categories
 

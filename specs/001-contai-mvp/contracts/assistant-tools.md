@@ -47,7 +47,7 @@ os números do assistente iguais aos do painel quando há lançamentos de data f
 | `get_top_expenses` | `period`, `limit` (1 a 20), `category_ids`, `account_ids` | maiores despesas, em ordem | "Quais foram meus 5 maiores gastos em agosto?" |
 | `search_transactions` | `period`, `text`, `type`, `category_ids`, `account_ids`, `limit` (1 a 50) | transações e a soma do conjunto; cada transferência uma vez, com `from_account` e `to_account`, e `transfers` com a quantidade e o total | "Mostre minhas compras na farmácia em setembro" |
 | `get_account_balances` | `account_ids` | saldo de cada conta ativa | "Quanto tenho na poupança?" |
-| `get_card_invoices` | `account_ids` | por cartão: fatura atual e parcelas futuras por mês e no total | "Quanto ainda tenho de parcelas no cartão?" |
+| `get_card_invoices` | `account_ids` | por cartão: fatura atual, parcelas futuras por mês e no total, o que falta pagar da última fatura fechada, o total devido hoje e `credit_limit` (limite, usado e disponível, ou `null` sem limite informado), com os mesmos valores da tela do cartão (FR-088) | "Quanto ainda tenho de parcelas no cartão?", "Quanto ainda tenho de limite?" |
 | `propose_transaction` | `type`, `amount` (texto, por exemplo `"45"` ou `"45,90"`), `date_reference` (`today`, `yesterday` ou data explícita), `description`, `account_hint`, `category_hint` | proposta com conta e categoria resolvidas pelo backend, ou a lista do que falta | "gastei 45 no ifood ontem no cartão" |
 
 **Total sem alguma coisa**: o modelo não subtrai. Para "se tirar esse saque, quanto gastei?"
