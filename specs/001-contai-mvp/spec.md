@@ -82,6 +82,38 @@ código, o termo é "transação" (`transaction`). Os dois nomes se referem à m
   ao usuário (definido na revisão da análise).
 - Q: O que conta como "descrição semelhante" para o aprendizado de categorias? → A: A mesma
   descrição normalizada, por correspondência exata (definido na revisão da análise).
+- Q: Como o estorno de uma compra entra nos totais? → A: É uma receita lançada na categoria de
+  despesa da compra. Ele abate as saídas e o gasto dessa categoria, e não conta como entrada:
+  comprar e devolver um livro dá R$ 0 em Educação. Se o estorno cai em um mês diferente do da
+  compra, a categoria fica negativa naquele mês (definido na implementação da importação).
+- Q: O que acontece com as correções da revisão se o usuário sair da página? → A: Ficam
+  guardadas. Cada alteração (marcar, desmarcar, categoria, tipo, valor, descrição e data) é
+  salva na hora, e a revisão pode ser retomada até expirar. Nenhuma transação é criada antes
+  da confirmação (definido na revisão da tela de importação).
+- Q: O que o assistente faz quando a pergunta não diz o período? → A: Assume o mês atual e diz
+  isso na resposta, sem pedir esclarecimento. O esclarecimento fica para categoria ou conta
+  que não existe e para pedidos realmente ambíguos (definido na conferência do assistente com
+  o provedor real).
+
+### Session 2026-10-05
+
+- Q: O valor informado no cadastro de um cartão é o limite ou o saldo dele? → A: São duas
+  coisas. O limite ganha um campo próprio, opcional, e nunca conta como dinheiro. O valor
+  inicial de um cartão passa a ser só a dívida que ele já tinha: o campo se chama "Quanto você
+  já deve neste cartão", começa em zero e recebe o valor positivo da dívida. Nas outras contas
+  continua "Saldo inicial".
+- Q: Parcelas futuras consomem o limite? → A: Sim. Disponível = limite − o que se deve hoje −
+  o que já está lançado no cartão para depois de hoje (parcelas e compras com data futura).
+- Q: Passar do limite bloqueia algum lançamento? → A: Não. A tela só mostra "R$ X acima do
+  limite".
+- Q: A fatura pode ser paga antes de fechar? → A: Sim. "Pagar fatura" fica sempre disponível e,
+  sem fatura fechada a pagar, sugere o que se deve no cartão hoje.
+- Q: Um saldo a favor de verdade (pagamento a mais) continua abatendo a fatura seguinte? → A:
+  Sim, a regra não muda.
+- Q: O que acontece com um cartão já cadastrado com valor inicial positivo? → A: O valor era o
+  limite: passa para o limite do cartão, e a dívida inicial fica em zero.
+- Q: O assistente responde sobre o limite? → A: Sim, com os mesmos limite, usado e disponível
+  da tela do cartão.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -118,6 +150,8 @@ entra de novo, sem ajuda. Entrega um acesso seguro e individual ao app.
    tentativa, **Then** o acesso fica bloqueado temporariamente, mesmo com a senha correta.
 8. **Given** um usuário que esqueceu a senha, **When** pede a redefinição, **Then** vê a mesma
    mensagem exista ou não o e-mail e, se existir, recebe um link de uso único que expira.
+   **When** uma conta com e-mail ainda não confirmado conclui a redefinição pelo link,
+   **Then** o e-mail passa a estar confirmado e ela já pode entrar com a senha nova.
 9. **Given** um usuário conectado, **When** escolhe sair, **Then** a sessão daquele dispositivo é
    encerrada e as telas internas deixam de ser acessíveis.
 
@@ -216,10 +250,38 @@ do mês.
 5. **Given** uma fatura de cartão, **When** o usuário registra o pagamento a partir da conta
    corrente, **Then** o pagamento é uma transferência e não conta como nova despesa.
 6. **Given** uma parcela de uma compra parcelada, **When** o usuário a edita ou exclui,
-   **Then** escolhe se a mudança vale só para aquela parcela ou para todas as parcelas da compra.
+   **Then** escolhe se a mudança vale só para aquela parcela ou para ela e as parcelas seguintes
+   da compra; as parcelas anteriores não mudam.
 7. **Given** uma compra no cartão feita em 28 de setembro, cuja fatura vence em novembro,
    **When** o usuário vê o painel de setembro, **Then** a compra conta nas saídas de setembro, e
    não nas de outubro ou novembro.
+8. **Given** um cartão com uma fatura fechada ainda não paga, **When** o usuário toca em "Pagar
+   fatura", **Then** o valor sugerido é o que falta pagar dessa fatura, com o vencimento dela, e
+   um toque troca o valor por tudo o que se deve no cartão ("Pagar tudo o que devo: R$ X"). Sem
+   fatura fechada em aberto, o valor sugerido é o total devido, com o aviso de que a fatura
+   atual ainda não fechou.
+9. **Given** um cartão com uma fatura fechada ainda não paga, **When** o usuário abre a tela
+   inicial, **Then** vê no topo um aviso com o nome do cartão, o valor e o prazo ("vence em 5
+   dias"), com "Pagar fatura" e "Ver fatura"; depois do vencimento, o aviso vira alerta e diz há
+   quantos dias a fatura venceu.
+10. **Given** a tela "Cartões", **When** o usuário escolhe uma fatura, **Then** vê o estado dela
+    (paga, a pagar, vencida, aberta ou futura), o valor, o período e as datas, as compras e os
+    estornos que somam esse valor e os gastos dela por categoria.
+11. **Given** uma fatura a pagar aberta na tela "Cartões", **When** o usuário a paga pelo "Pagar
+    fatura", **Then** a tela continua nela, agora como paga, e o aviso da tela inicial some.
+12. **Given** um cartão com limite de R$ 500,00, sem dívida, **When** o usuário lança nele uma
+    compra de R$ 110,00, **Then** a fatura atual mostra R$ 110,00, a tela do cartão mostra
+    usado R$ 110,00 e disponível R$ 390,00, e o saldo da conta do cartão é de −R$ 110,00: o
+    limite não entra em nenhuma dessas contas.
+13. **Given** esse mesmo cartão, com a fatura ainda aberta, **When** o usuário toca em "Pagar
+    fatura", **Then** o valor sugerido é R$ 110,00, o que ele deve hoje; depois de pagar, o
+    disponível volta a R$ 500,00.
+14. **Given** um cartão com limite de R$ 500,00, **When** o usuário lança uma compra de
+    R$ 600,00 em 6 parcelas, **Then** o lançamento é aceito, o usado passa a R$ 600,00 e a tela
+    mostra "R$ 100,00 acima do limite".
+15. **Given** o cadastro de um cartão, **When** o usuário informa R$ 300,00 em "Quanto você já
+    deve neste cartão", **Then** o cartão começa devendo R$ 300,00, que aparecem como fatura
+    fechada a pagar.
 
 ---
 
@@ -275,7 +337,10 @@ encontrar sugestões de perguntas quando o chat está vazio.
 tradicionais não respondem. Depende de haver transações registradas.
 
 **Independent Test**: com dados conhecidos, o usuário faz as seis perguntas de exemplo e compara
-cada número com o painel e com a lista de transações.
+cada número com o painel e com a lista de transações. As seis perguntas são: "Quanto gastei com
+comida esse mês?", "Quanto recebi este ano?", "Em que gastei mais que no mês passado?",
+"Quais foram meus 5 maiores gastos em agosto?", "Quanto tenho na poupança?" e "Quanto ainda
+tenho de parcelas no cartão?".
 
 **Acceptance Scenarios**:
 
@@ -286,8 +351,11 @@ cada número com o painel e com a lista de transações.
    que compõem esse valor.
 3. **Given** uma pergunta já respondida, **When** o usuário pergunta "e no mês anterior?",
    **Then** o assistente mantém o mesmo assunto e responde para o mês anterior.
-4. **Given** uma pergunta ambígua (por exemplo, "quanto gastei?" sem período), **When** o
-   usuário a envia, **Then** o assistente pede o esclarecimento que falta em vez de supor.
+4. **Given** uma pergunta que cita uma categoria ou uma conta que não existe (por exemplo,
+   "quanto gastei com viagens?", sem essa categoria), ou um pedido realmente ambíguo, **When**
+   o usuário a envia, **Then** o assistente pede o esclarecimento que falta em vez de supor.
+   **Given** uma pergunta sem período (por exemplo, "quanto gastei?"), **When** o usuário a
+   envia, **Then** o assistente responde para o mês atual e deixa isso claro na resposta.
 5. **Given** uma pergunta fora do tema de finanças do usuário, **When** o usuário a envia,
    **Then** recebe uma recusa educada, com exemplos do que pode perguntar.
 6. **Given** uma pergunta sobre um período sem dados, **When** o usuário a envia, **Then** o
@@ -341,7 +409,8 @@ o total.
 ### User Story 8 - Lançar um gasto escrevendo uma frase (Priority: P3)
 
 O usuário escreve algo como "gastei 45 no ifood ontem no cartão" e recebe a transação preenchida
-para confirmar ou ajustar.
+para confirmar ou ajustar. Com todos os campos obrigatórios preenchidos, ele pode salvar a
+proposta como está, direto do cartão; se preferir, ou se faltar algum campo, ajusta no formulário.
 
 **Why this priority**: torna o lançamento ainda mais rápido, mas é um atalho para algo que a
 história 2 já permite.
@@ -354,11 +423,15 @@ ajusta uma e confirma; as transações aparecem na lista.
 1. **Given** um usuário com um cartão cadastrado, **When** escreve "gastei 45 no ifood ontem no
    cartão", **Then** recebe uma proposta de despesa de R$ 45,00, com a data de ontem, no cartão
    e com categoria sugerida, e nada é salvo ainda.
-2. **Given** uma proposta, **When** o usuário ajusta um campo e confirma, **Then** a transação é
-   salva com os valores ajustados; **When** ele cancela, **Then** nada é salvo.
+2. **Given** uma proposta com todos os campos obrigatórios preenchidos, **When** o usuário
+   escolhe "Salvar", **Then** a transação é salva como foi proposta, sem passar pelo formulário;
+   **When** escolhe "Ajustar", **Then** o formulário abre preenchido, e a transação é salva com
+   os valores ajustados quando ele confirma; **When** ele cancela ou descarta, **Then** nada é
+   salvo.
 3. **Given** uma frase sem informação suficiente (por exemplo, sem valor, ou "no cartão" quando
    há dois cartões), **When** o usuário a envia, **Then** o assistente pergunta o que falta ou
-   deixa o campo para o usuário escolher.
+   deixa o campo para o usuário escolher; com um campo em aberto, a proposta só pode ser
+   ajustada no formulário, e não salva direto.
 4. **Given** o fluxo completo, **When** o usuário lança um gasto por texto, **Then** conclui em
    menos de 10 segundos, incluindo a confirmação.
 
@@ -440,7 +513,19 @@ os 7 dias, não consegue mais entrar.
   os códigos, pede a desativação das duas etapas pelo e-mail e aguarda 72 horas.
 - **Pedido de desativação das duas etapas feito por outra pessoa**: o dono da conta recebe os
   avisos por e-mail e cancela o pedido dentro das 72 horas; as duas etapas continuam ativas.
-- **Dia de fechamento 29, 30 ou 31** em mês mais curto: vale o último dia do mês.
+- **Dia de fechamento ou de vencimento 29, 30 ou 31** em mês mais curto: vale o último dia do
+  mês.
+- **Compra no próprio dia de fechamento**: entra na fatura seguinte.
+- **Cartão sem limite informado**: tudo funciona igual; a tela do cartão só não mostra usado
+  nem disponível, e oferece o caminho para informar o limite.
+- **Gasto acima do limite do cartão**: nenhum lançamento é recusado. A tela mostra quanto
+  passou do limite; quem recusa compra é o banco, e o Contaí registra o que aconteceu.
+- **Parcela ou compra do cartão com data depois de hoje**: ainda não pesa no saldo do cartão,
+  mas já ocupa o limite, mesmo quando cai na fatura atual.
+- **Cartão com saldo a favor** (pagamento a mais): o valor abate a fatura seguinte e o que
+  está por vir no uso do limite; o usado nunca fica negativo.
+- **Parcela em dia que não existe no mês** (compra em 31 de janeiro): a parcela cai no último
+  dia do mês (28 ou 29 de fevereiro), e as seguintes voltam ao dia 31 quando ele existe.
 - **Parcelas com divisão não exata**: os centavos de diferença vão para a primeira parcela, e a
   soma das parcelas é sempre igual ao total.
 - **Transação com data futura** (parcelas): aparece no mês a que pertence e nas parcelas
@@ -465,9 +550,10 @@ os 7 dias, não consegue mais entrar.
   importação são removidas mesmo assim, após o aviso de confirmação.
 - **Falha no meio do processamento de uma importação**: nada é salvo parcialmente, e o usuário
   pode tentar de novo.
-- **Importação revisada pela metade e abandonada**: a tela de revisão mostra até quando ela fica
-  disponível; depois de 7 dias sem confirmação, ela expira, nada é salvo, e o histórico a mostra
-  como expirada, com a orientação de enviar o arquivo de novo.
+- **Importação revisada pela metade e abandonada**: as correções já feitas ficam guardadas, e a
+  tela de revisão mostra até quando ela fica disponível; depois de 7 dias sem confirmação, ela
+  expira, nenhuma transação é salva, e o histórico a mostra como expirada, com a orientação de
+  enviar o arquivo de novo.
 - **CSV ou planilha enviado sem concluir o mapeamento de colunas**: o arquivo fica guardado por
   24 horas; depois disso é apagado, e a importação aparece no histórico como expirada.
 - **Limite de uso de IA atingido durante uma importação de PDF**: o usuário é informado de
@@ -507,11 +593,16 @@ os 7 dias, não consegue mais entrar.
   dispositivo.
 - **FR-008**: As mensagens de login, cadastro e recuperação de senha NÃO DEVEM revelar se um
   e-mail está cadastrado.
-- **FR-009**: O sistema DEVE bloquear por 15 minutos a entrada em uma conta após 5 tentativas
-  erradas seguidas e DEVE limitar a frequência de cadastros, de pedidos de recuperação de senha,
-  de envios de arquivo e de uso da IA.
+- **FR-009**: O sistema DEVE bloquear por 15 minutos a entrada com um e-mail após 5 tentativas
+  erradas seguidas com ele. A contagem DEVE ser feita pelo e-mail informado, normalizado (sem
+  espaços nas pontas e em minúsculas), exista ou não uma conta com esse e-mail, e a resposta
+  DEVE ser a mesma nos dois casos, para o bloqueio não revelar quais e-mails estão cadastrados
+  (FR-008). O sistema DEVE também limitar a frequência de cadastros, de pedidos de recuperação
+  de senha, de envios de arquivo e de uso da IA.
 - **FR-010**: O sistema DEVE permitir a recuperação de senha por um link de uso único enviado ao
   e-mail, válido por 1 hora; ao redefinir a senha, todas as sessões DEVEM ser encerradas.
+  Concluir a redefinição pelo link DEVE também confirmar o e-mail da conta, se ele ainda não
+  estava confirmado, porque o link prova a posse da caixa de e-mail.
 - **FR-011**: O usuário DEVE poder ativar a verificação em duas etapas com um app autenticador,
   confirmando um código antes da ativação, e receber 10 códigos de recuperação de uso único, que
   podem ser gerados novamente.
@@ -546,9 +637,12 @@ os 7 dias, não consegue mais entrar.
 - **FR-019**: O usuário DEVE poder cadastrar contas com nome, tipo (conta corrente, cartão de
   crédito, dinheiro/carteira, poupança ou investimento), instituição e saldo inicial. O saldo
   inicial DEVE ter uma data de referência, preenchida por padrão com o dia do cadastro da conta
-  e editável pelo usuário.
+  e editável pelo usuário. Em cartão de crédito, o saldo inicial é a dívida que o cartão já
+  tinha: o campo se chama "Quanto você já deve neste cartão", começa em zero e recebe o valor
+  da dívida, sem sinal. Um cartão NÃO PODE começar com saldo a favor. Nos demais tipos, o campo
+  continua "Saldo inicial" e pode ser negativo.
 - **FR-020**: Para cartões de crédito, o usuário DEVE poder informar o dia de fechamento e o dia
-  de vencimento da fatura.
+  de vencimento da fatura e, se quiser, o limite do cartão (FR-088).
 - **FR-021**: O usuário DEVE poder editar, arquivar e desarquivar contas; uma conta arquivada
   NÃO DEVE aparecer como opção para novos lançamentos, e seu histórico DEVE ser preservado.
 - **FR-022**: Contas com transações NÃO DEVEM poder ser excluídas, apenas arquivadas; contas sem
@@ -581,12 +675,51 @@ os 7 dias, não consegue mais entrar.
   DEVE contar como despesa no mês da data da compra (cada parcela no mês da sua própria data), e
   não no mês de vencimento da fatura.
 - **FR-032**: Ao editar ou excluir uma parcela, o usuário DEVE escolher se a mudança vale só
-  para aquela parcela ou para todas as parcelas da compra.
+  para aquela parcela ou para ela e as parcelas seguintes da compra. As parcelas anteriores
+  nunca mudam, porque podem estar em faturas já fechadas ou pagas.
 - **FR-033**: O usuário DEVE poder registrar transferências entre suas contas, inclusive o
   pagamento da fatura do cartão; transferências DEVEM alterar os saldos das duas contas e NÃO
-  DEVEM contar como receita nem como despesa em nenhum relatório ou resposta.
+  DEVEM contar como receita nem como despesa em nenhum relatório ou resposta. O pagamento da
+  fatura DEVE vir com o valor da última fatura fechada que ainda não foi paga e o vencimento
+  dela, com o total devido no cartão como alternativa de um toque; sem fatura fechada em
+  aberto, DEVE vir com o total devido, explicando que a fatura atual ainda não fechou. O
+  usuário DEVE poder pagar a qualquer momento, inclusive antes do fechamento; o limite do
+  cartão (FR-088) NÃO DEVE mudar o valor sugerido.
 - **FR-034**: O usuário DEVE poder editar e excluir transações; a edição ou exclusão de uma
   transferência DEVE valer para os dois lados.
+- **FR-086**: O usuário de cartão DEVE ter uma tela "Cartões", com item próprio na navegação,
+  logo depois de "Contas", visível só para quem tem cartão de crédito ativo. Para cada cartão
+  ativo, a tela DEVE mostrar as faturas, da primeira com lançamento à última com parcela (no
+  máximo 36 antes e 48 depois da atual), cada uma com o nome do mês em que vence, o período das
+  compras, as datas de fechamento e de vencimento, o valor (compras menos estornos) e o estado
+  de hoje: paga, a pagar, vencida, aberta ou futura. Os pagamentos quitam primeiro as faturas
+  mais antigas. A tela DEVE abrir na fatura fechada que está a pagar, com o que falta pagar;
+  sem nenhuma, na fatura atual. "Pagar fatura" (FR-033) DEVE estar à vista em qualquer fatura:
+  como ação principal na que está a pagar e, nas demais, dizendo o que o pagamento vai quitar (a
+  fatura fechada do cartão, o que já se deve nele, ou nada). Quando o cartão está com saldo a
+  favor, por um pagamento a mais, a tela DEVE dizer isso. De cada fatura, a tela DEVE listar as
+  compras e os estornos que somam o valor dela (o pagamento, que é transferência, fica de fora)
+  e os gastos por categoria; do cartão, o uso do limite (FR-088), o total das parcelas futuras
+  e o valor delas por mês.
+- **FR-087**: Enquanto um cartão ativo tiver fatura fechada com valor a pagar, a tela inicial
+  DEVE mostrar no topo, ao exibir o mês atual, um aviso com o nome do cartão, o valor, o prazo
+  ("vence em 5 dias", "venceu há 3 dias") e as ações "Pagar fatura" e "Ver fatura". Depois do
+  vencimento, o aviso DEVE virar alerta, com ícone e texto próprios, e não só outra cor. O
+  aviso some quando a fatura é paga. É um aviso dentro do app: alertas por e-mail ou
+  notificação continuam fora do escopo.
+- **FR-088**: O usuário DEVE poder informar o limite de cada cartão de crédito. O limite é
+  opcional e pode ser mudado ou apagado a qualquer momento. Ele é um teto, e não dinheiro: NÃO
+  DEVE entrar no saldo da conta, no valor de nenhuma fatura, no que falta pagar, no painel nem
+  em nenhum relatório. Com o limite informado, a tela do cartão DEVE mostrar o limite, o usado
+  e o disponível. O usado é o que se deve no cartão hoje mais tudo o que já está lançado nele
+  com data depois de hoje (parcelas e compras com data futura, menos os estornos); um saldo a
+  favor abate esse valor, e o usado nunca fica negativo. O disponível é o limite menos o usado.
+  Assim, uma compra parcelada ocupa o limite pelo valor inteiro no dia em que é lançada, e cada
+  pagamento libera o que foi pago. Passar do limite NÃO DEVE bloquear nem avisar na hora do
+  lançamento: a tela do cartão DEVE mostrar "R$ X acima do limite", com ícone e texto, e não
+  só com cor. Sem limite informado, a tela NÃO mostra usado nem disponível e oferece o caminho
+  para informá-lo. O assistente DEVE responder quanto há de limite, de usado e de disponível
+  com os mesmos valores da tela (FR-062).
 - **FR-035**: O usuário DEVE poder buscar transações combinando filtros por período, conta,
   categoria, tipo e texto.
 
@@ -604,7 +737,8 @@ os 7 dias, não consegue mais entrar.
 - **FR-040**: OFX, CSV e planilhas DEVEM ser lidos sem IA; apenas as descrições das transações
   PODEM ser usadas para sugerir categorias.
 - **FR-041**: O sistema DEVE extrair, com IA, as transações de PDFs de extrato bancário e de
-  fatura de cartão.
+  fatura de cartão. Cada documento DEVE ser processado em uma única chamada ao serviço de IA,
+  com o arquivo inteiro, e NÃO em uma chamada por página.
 - **FR-042**: O sistema DEVE gerar uma transação proposta a partir da foto ou do PDF de um
   comprovante, recibo ou nota fiscal.
 - **FR-043**: Quando o documento tiver um total, o sistema DEVE compará-lo com a soma das
@@ -638,7 +772,9 @@ os 7 dias, não consegue mais entrar.
   "pag fatura", "pgto fatura", "pagto cartao", "fatura cartao"). Se o usuário tiver mais de um
   cartão, o sistema DEVE sugerir aquele cuja fatura em aberto tem o valor mais próximo do valor
   da linha. O usuário DEVE poder confirmar a sugestão, trocar o cartão ou tratá-la como despesa
-  comum.
+  comum. Sem cartão cadastrado, a linha DEVE continuar sugerida como despesa, com um aviso na
+  revisão: quem também lança as compras do cartão deve cadastrar o cartão e marcar a linha como
+  pagamento de fatura, para não contar o gasto duas vezes.
 - **FR-082**: Quando o arquivo importado informar o saldo da conta no banco (por exemplo, em um
   OFX), o sistema DEVE compará-lo com o saldo calculado da conta na mesma data e avisar o
   usuário se houver divergência, mostrando os dois valores; o aviso NÃO DEVE impedir a
@@ -647,6 +783,12 @@ os 7 dias, não consegue mais entrar.
   e um arquivo à espera do mapeamento de colunas DEVE ser apagado depois de 24 horas. Nos dois
   casos nada é salvo, o prazo DEVE aparecer na tela enquanto a importação está pendente, e o
   histórico DEVE mostrá-la como expirada, com a orientação de enviar o arquivo de novo.
+- **FR-085**: As correções feitas na revisão de uma importação (marcar e desmarcar linhas,
+  categoria, tipo, valor, descrição e data) DEVEM ser guardadas a cada alteração, para a
+  revisão poder ser retomada depois de sair da página ou recarregá-la, até ela expirar. Guardar
+  uma correção NÃO DEVE criar transações nem ensinar categorias: isso só acontece na
+  confirmação. Se uma alteração não puder ser guardada, o usuário DEVE ser avisado, e a linha
+  DEVE voltar a mostrar o que está guardado.
 
 **Painel**
 
@@ -654,10 +796,23 @@ os 7 dias, não consegue mais entrar.
   o saldo de cada conta.
 - **FR-056**: O painel DEVE mostrar os gastos por categoria no mês exibido e, ao selecionar uma
   categoria, as transações que a compõem.
+- **FR-084**: O usuário DEVE poder lançar o estorno de uma compra como uma receita na categoria
+  de despesa da compra. O estorno DEVE abater as saídas do mês e o gasto dessa categoria, e NÃO
+  DEVE contar nas entradas; o saldo da conta e a fatura do cartão continuam contando o dinheiro
+  que voltou. Quando o estorno cai em um mês diferente do da compra, a categoria DEVE aparecer
+  com o valor negativo naquele mês, sem percentual, e a soma das categorias DEVE continuar igual
+  ao total de saídas. Na importação, uma entrada DEVE vir sugerida como estorno, na categoria
+  da compra, quando a descrição normalizada dela tem regra para uma categoria de despesa,
+  ignorados os prefixos comuns de estorno ("estorno", "est", "reembolso", "devolucao",
+  "cancelamento"), reconhecidos só como palavra inteira no começo da descrição: "estacionamento"
+  não é um estorno. Uma despesa NÃO PODE ser lançada em categoria de receita. Quando os estornos
+  do mês passam do que foi gasto, o painel DEVE mostrar as saídas sem sinal de menos, como um
+  valor "a seu favor, de estornos"; o cálculo não muda.
 - **FR-057**: O painel DEVE mostrar a evolução de entradas e saídas nos últimos 6 meses e os
   maiores gastos do mês.
 - **FR-058**: Para cada cartão de crédito, o painel DEVE mostrar o valor da fatura atual e o
-  total das parcelas futuras.
+  total das parcelas futuras, com o caminho para a tela do cartão (FR-086), onde ficam as
+  parcelas por mês.
 - **FR-059**: O usuário DEVE poder escolher o mês exibido no painel; o padrão é o mês atual, e
   "mês" segue o horário de Brasília. Períodos personalizados (por exemplo, os últimos 3 meses ou
   um intervalo de datas) NÃO fazem parte do painel: são atendidos pelo assistente (FR-061).
@@ -672,7 +827,11 @@ os 7 dias, não consegue mais entrar.
 - **FR-063**: Junto de cada resposta numérica, o assistente DEVE mostrar as transações que
   compõem o valor.
 - **FR-064**: O assistente DEVE entender perguntas de continuação dentro da mesma conversa.
-- **FR-065**: Perguntas ambíguas DEVEM gerar um pedido de esclarecimento; perguntas fora do tema
+- **FR-065**: Uma pergunta sem período DEVE ser respondida para o mês atual, com a resposta
+  dizendo de que mês é o valor; a falta de período NÃO DEVE gerar pedido de esclarecimento.
+  Perguntas que citam categoria ou conta inexistente, e pedidos realmente ambíguos, DEVEM gerar
+  um pedido de esclarecimento. O assistente DEVE falar diretamente com o usuário ("as suas
+  finanças"), nunca dele em terceira pessoa. Perguntas fora do tema
   de finanças do usuário DEVEM receber uma recusa educada.
 - **FR-066**: O usuário DEVE poder descrever um lançamento em texto livre e receber a transação
   preenchida para confirmar ou ajustar.
@@ -686,6 +845,10 @@ os 7 dias, não consegue mais entrar.
   restante do app DEVE continuar funcionando.
 - **FR-072**: Se o serviço de IA estiver sobrecarregado ou indisponível, o usuário DEVE receber
   uma mensagem amigável, e o processamento DEVE ser tentado novamente de forma automática.
+  Quando houver um modelo reserva configurado, a nova tentativa DEVE ser feita nele, tanto por
+  indisponibilidade quanto por cota esgotada. Quando a cota diária do serviço de IA acabar,
+  inclusive a do modelo reserva, a mensagem DEVE dizer que o limite do dia foi atingido e que
+  o recurso volta a funcionar no dia seguinte.
 - **FR-073**: O sistema DEVE enviar ao serviço de IA apenas o necessário para cada tarefa, e
   nunca senhas, dados de acesso ou o histórico completo do usuário.
 
@@ -713,7 +876,8 @@ os 7 dias, não consegue mais entrar.
   navegador e a última atividade.
 - **Conta financeira**: onde o dinheiro está. Tem nome, tipo, instituição, saldo inicial com sua
   data de referência e situação (ativa ou arquivada); cartões têm também dia de fechamento e de
-  vencimento.
+  vencimento e, se o usuário informar, o limite. No cartão, o saldo inicial é a dívida que ele
+  já tinha, e o limite não faz parte do saldo.
 - **Categoria**: classificação de despesas ou receitas, em até dois níveis (categoria e
   subcategoria), com ícone, cor e situação (ativa ou arquivada).
 - **Transação**: uma despesa ou receita em uma conta, com valor, data, descrição, categoria e

@@ -31,6 +31,7 @@ users ─┬─ sessions
        └─ jobs (user_id opcional)
 
 worker_heartbeats (sem usuário)
+login_attempts (sem usuário: contadas por e-mail informado)
 ```
 
 ## Identidade e acesso
@@ -50,8 +51,6 @@ worker_heartbeats (sem usuário)
 | `totp_secret_encrypted` | texto | cifrado; nulo sem duas etapas |
 | `totp_enabled_at` | timestamptz | nulo enquanto as duas etapas não estão ativas |
 | `totp_last_used_step` | inteiro | impede reuso do mesmo código |
-| `failed_login_count` | inteiro | zera no login correto |
-| `locked_until` | timestamptz | agora + 15 min ao chegar a 5 erros (FR-009) |
 | `privacy_policy_version` | texto | versão aceita no cadastro (FR-001) |
 | `privacy_policy_accepted_at` | timestamptz | obrigatório |
 | `ai_documents_consent_at` | timestamptz | aceite do aviso antes do primeiro PDF ou imagem (FR-044) |
@@ -91,6 +90,22 @@ Uma linha por dispositivo conectado; é também a família de rotação do refre
 
 Emitir um token novo do mesmo tipo invalida os anteriores do usuário.
 
+### login_attempts
+
+Erros seguidos de login por e-mail informado. A linha existe também para e-mails sem conta:
+contar igual nos dois casos é o que impede o bloqueio de revelar quais e-mails estão
+cadastrados (FR-008). Por isso a tabela não tem `user_id`.
+
+| Campo | Tipo | Regras |
+|-------|------|--------|
+| `email_hash` | texto | PK; SHA-256 do e-mail normalizado (o endereço em si não é guardado) |
+| `failed_count` | inteiro | erros seguidos; volta a zero ao bloquear |
+| `locked_until` | timestamptz | agora + 15 min ao chegar a 5 erros (FR-009) |
+| `last_failed_at` | timestamptz | instante do último erro |
+
+A linha é apagada no login correto e na redefinição de senha. O worker apaga, a cada hora, as
+linhas sem erro há mais de 24 horas e sem bloqueio em curso.
+
 ### recovery_codes
 
 | Campo | Tipo | Regras |
@@ -127,10 +142,11 @@ Sempre 10 por usuário; gerar novos apaga os anteriores (FR-011).
 | `type` | enum | `checking`, `credit_card`, `cash`, `savings`, `investment` (FR-019) |
 | `name` | texto | 1 a 60 caracteres; único entre as contas ativas do usuário |
 | `institution` | texto | opcional |
-| `initial_balance_cents` | BIGINT | com sinal; a dívida inicial de um cartão é negativa |
+| `initial_balance_cents` | BIGINT | com sinal; em cartão é a dívida que ele já tinha, negativa ou zero, nunca positiva (FR-019) |
 | `initial_balance_date` | DATE | data de referência; padrão, o dia do cadastro (FR-019) |
 | `closing_day` | inteiro | 1 a 31; obrigatório para cartão, nulo nos demais (FR-020) |
 | `due_day` | inteiro | 1 a 31; obrigatório para cartão, nulo nos demais |
+| `credit_limit_cents` | BIGINT | limite do cartão; opcional, maior que zero; só em cartão, nulo nos demais (FR-088) |
 | `archived_at` | timestamptz | arquivada não recebe lançamentos novos (FR-021) |
 
 **Regras**: só pode ser apagada se não tiver transações (FR-022). O tipo não pode mudar depois
@@ -138,7 +154,20 @@ que a conta tem transações.
 
 **Saldo (derivado, FR-023)**:
 `initial_balance_cents + receitas − despesas + transferências in − transferências out`, somando
-as transações com `initial_balance_date <= date <= hoje`.
+as transações com `initial_balance_date <= date <= hoje`. O limite do cartão não entra.
+
+**Uso do limite (derivado, FR-088)**: só em cartão com `credit_limit_cents`. Nada é guardado.
+
+- `usado = max(0, −saldo de hoje + despesas − receitas do cartão com date > hoje)`: o que se
+  deve hoje mais o que já está lançado para depois de hoje. Um saldo a favor abate o que está
+  por vir.
+- `disponível = credit_limit_cents − usado`; negativo quando o usado passou do limite.
+
+**Restrições novas** (migração `0007_card_credit_limit`): `credit_limit_cents` só em
+`credit_card` e maior que zero; em `credit_card`, `initial_balance_cents <= 0`. Antes de criar
+as restrições, a migração acerta os cartões antigos: o que tinha `initial_balance_cents`
+positivo passa esse valor para `credit_limit_cents` e fica com `initial_balance_cents = 0`,
+porque o valor tinha sido informado como o limite.
 
 ### categories
 
@@ -171,7 +200,7 @@ Arquivar uma categoria mãe arquiva as filhas.
 | `description` | texto | 1 a 200 caracteres |
 | `description_normalized` | texto | para regras de categoria e duplicatas |
 | `notes` | texto | opcional (FR-027) |
-| `category_id` | UUID | FK; obrigatório para despesa e receita, nulo para transferência; `kind` compatível com `type` |
+| `category_id` | UUID | FK; obrigatório para despesa e receita, nulo para transferência. A despesa usa categoria de despesa; a receita, de receita ou, quando é o estorno de uma compra, de despesa (FR-084) |
 | `transfer_group_id` | UUID | liga as duas linhas de uma transferência |
 | `installment_group_id` | UUID | liga as parcelas de uma compra |
 | `installment_number` | inteiro | de 1 a `installment_count` |
@@ -191,8 +220,9 @@ Arquivar uma categoria mãe arquiva as filhas.
   uma `out` e uma `in`, em contas diferentes do mesmo usuário; criar, editar e apagar valem para
   as duas (FR-033, FR-034). Nunca entra em totais de receita ou despesa.
 - Compra parcelada: só em conta `credit_card`; `total // n` por parcela, com o resto de centavos
-  na primeira; a parcela k tem a data da compra deslocada em k − 1 meses. Edição e exclusão
-  aceitam o escopo "só esta" ou "todas" (FR-032).
+  na primeira; a parcela k tem a data da compra deslocada em k − 1 meses, no último dia do
+  mês quando o dia não existe nele. Edição e exclusão aceitam o escopo "só esta" ou "esta e as
+  seguintes"; as anteriores nunca mudam (FR-032).
 - A conta e a categoria de uma transação nova precisam estar ativas.
 - Fatura (derivada): ver a seção 17 de [research.md](./research.md).
 
@@ -204,22 +234,23 @@ Arquivar uma categoria mãe arquiva as filhas.
 |-------|------|--------|
 | `id` | UUID | PK |
 | `user_id` | UUID | FK |
-| `account_id` | UUID | FK; conta de destino (FR-036) |
+| `account_id` | UUID | FK, `ON DELETE CASCADE`; conta de destino (FR-036). Só uma conta sem transações pode ser excluída, e o histórico de importações dela vai junto |
 | `kind` | enum | `statement` (extrato ou fatura), `receipt` (comprovante) |
 | `format` | enum | `ofx`, `csv`, `xlsx`, `pdf`, `image` |
 | `original_filename` | texto | só para o histórico; nunca vai para logs |
 | `file_hash` | texto | SHA-256 do arquivo; avisa reimportação |
 | `stored_filename` | texto | nome gerado no volume privado; nulo depois de apagado (FR-053) |
 | `status` | enum | `queued`, `processing`, `awaiting_mapping`, `awaiting_review`, `completed`, `undone`, `failed` |
-| `error_code` | texto | motivo da falha, em código (por exemplo, `unreadable`, `no_transactions`, `mapping_expired`) |
+| `error_code` | texto | motivo da falha, em código: `unreadable`, `no_transactions`, `multiple_accounts`, `too_many_rows`, `file_missing`, `processing_error`, `mapping_expired`, `review_expired` e, em PDF e imagem, `document_unreadable`, `ai_unavailable`, `ai_quota_exhausted`. Em `awaiting_mapping`, `mapping_mismatch` diz que o modelo enviado não leu o arquivo. Em `queued` e `processing`, `ai_busy` diz que o serviço de IA está ocupado e que a leitura será tentada de novo |
 | `template_id` | UUID | FK para `import_templates`; modelo aplicado |
 | `mapping_preview` | JSONB | cabeçalho e primeiras linhas para a tela de mapeamento; apagado depois |
 | `document_total_cents` | BIGINT | total impresso no documento, quando houver (FR-043) |
-| `extracted_total_cents` | BIGINT | soma das linhas extraídas |
+| `extracted_total_cents` | BIGINT | soma das linhas extraídas (saídas menos entradas, sem sinal), gravada só quando o documento traz um total |
 | `bank_balance_cents` | BIGINT | saldo informado pelo arquivo, quando houver (FR-082) |
 | `bank_balance_date` | DATE | data do saldo informado |
 | `item_count` | inteiro | linhas propostas |
-| `imported_count` | inteiro | transações criadas na confirmação |
+| `imported_count` | inteiro | linhas salvas na confirmação; uma linha salva como transferência conta uma vez, embora crie as duas transações dela |
+| `waiting_since` | timestamptz | desde quando espera o usuário (mapeamento ou revisão); base do prazo do FR-083 |
 | `completed_at`, `undone_at` | timestamptz | |
 
 **Transições**:
@@ -229,6 +260,7 @@ queued → processing → awaiting_review → completed → undone
               │              ↑
               ├→ awaiting_mapping (CSV/planilha sem modelo) → queued (após o mapeamento)
               └→ failed
+queued → awaiting_mapping (mapping_mismatch: o modelo enviado não leu o arquivo)
 awaiting_mapping → failed (mapping_expired, após 24 h)
 awaiting_review → failed (review_expired, após 7 dias sem confirmação)
 ```
@@ -239,7 +271,10 @@ A divergência de total é `document_total_cents != extracted_total_cents`. A di
 
 ### import_items
 
-Transações propostas, existentes só entre o processamento e a confirmação.
+Transações propostas, existentes só entre o processamento e a confirmação. Guardam também o
+que o usuário já decidiu na revisão, para ela poder ser retomada (FR-085): `type`,
+`amount_cents`, `date` e `description` recebem as correções, e a marcação, a categoria e a
+outra conta escolhidas ficam em colunas próprias, ao lado da sugestão.
 
 | Campo | Tipo | Regras |
 |-------|------|--------|
@@ -248,19 +283,23 @@ Transações propostas, existentes só entre o processamento e a confirmação.
 | `user_id` | UUID | FK |
 | `row_index` | inteiro | ordem no documento |
 | `type` | enum | `expense`, `income`, `transfer` |
-| `transfer_direction` | enum | preenchido quando sugerido como transferência |
+| `transfer_direction` | enum | preenchido quando a linha é uma transferência, sugerida ou marcada na revisão: `out` para o que sai da conta |
 | `amount_cents` | BIGINT | maior que zero |
 | `date` | DATE | |
 | `description` | texto | |
-| `description_normalized` | texto | |
+| `description_normalized` | texto | da descrição como veio do arquivo; não muda com a correção |
+| `notes` | texto | observação opcional escrita na revisão, de até 1.000 caracteres; vai para a transação na confirmação |
 | `suggested_category_id` | UUID | FK (FR-047) |
-| `category_source` | enum | `user_rule`, `ai`, `fallback` |
+| `category_source` | enum | `user_rule`, `ai`, `fallback`; nulo em transferência |
 | `suggested_counter_account_id` | UUID | cartão ou conta sugerida em pagamento de fatura (FR-081) |
 | `external_id` | texto | |
 | `fingerprint` | texto | |
 | `duplicate_status` | enum | `none`, `exact`, `probable` (FR-049) |
 | `duplicate_of_id` | UUID | transação existente que motivou o aviso |
 | `selected_by_default` | booleano | falso para `exact` e `probable` |
+| `selected` | booleano | se a linha está marcada na revisão; começa igual a `selected_by_default` |
+| `category_id` | UUID | FK, `ON DELETE SET NULL`; a categoria escolhida; começa igual a `suggested_category_id` |
+| `counter_account_id` | UUID | FK, `ON DELETE SET NULL`; a outra conta da transferência; começa igual a `suggested_counter_account_id` |
 
 ### import_templates
 
@@ -269,7 +308,7 @@ Transações propostas, existentes só entre o processamento e a confirmação.
 | `id` | UUID | PK |
 | `user_id` | UUID | FK |
 | `header_signature` | texto | hash dos nomes de colunas normalizados; único por usuário |
-| `mapping` | JSONB | colunas de data, descrição e valor (ou entrada e saída), formato de data, separador decimal, convenção de sinal, linhas a pular |
+| `mapping` | JSONB | colunas de data, descrição e valor (ou entrada e saída), pela posição; formato de data (`dmy`, `mdy`, `ymd`), separador decimal e convenção de sinal. As linhas de título antes do cabeçalho são puladas sozinhas, e por isso não fazem parte do modelo |
 | `last_used_at` | timestamptz | |
 
 ### categorization_rules
@@ -293,7 +332,8 @@ arquivada são ignoradas.
 |-------|------|--------|
 | `id` | UUID | PK |
 | `user_id` | UUID | FK |
-| `title` | texto | começo da primeira pergunta, truncado |
+| `title` | texto | começo da primeira pergunta, truncado em 80 caracteres; vazio enquanto não há pergunta |
+| `created_at`, `updated_at` | instante | `updated_at` é o da última pergunta: ordena o histórico |
 
 ### chat_messages
 
@@ -302,12 +342,15 @@ arquivada são ignoradas.
 | `id` | UUID | PK |
 | `conversation_id` | UUID | FK, `ON DELETE CASCADE` |
 | `user_id` | UUID | FK |
+| `position` | inteiro | ordem na conversa, a partir de zero; única por conversa. A pergunta e a resposta nascem na mesma transação de banco, com o mesmo instante |
 | `role` | enum | `user`, `assistant` |
 | `kind` | enum | `text`, `answer`, `clarification`, `refusal`, `transaction_proposal`, `error` |
 | `content` | texto | texto exibido |
-| `transaction_ids` | JSONB | ids das transações que compõem a resposta, vindos das ferramentas (FR-063) |
+| `highlight` | texto | valor principal da resposta, como está escrito nela; nulo quando não há |
+| `transaction_ids` | JSONB | ids das transações que compõem a resposta, até 50, vindos das ferramentas (FR-063) |
+| `transactions_total_count` | inteiro | quantas transações compõem a resposta ao todo |
 | `tool_calls` | JSONB | nome e parâmetros das ferramentas chamadas, para dar contexto às continuações (FR-064); sem resultados |
-| `proposal` | JSONB | transação proposta no lançamento por texto (FR-066) |
+| `proposal` | JSONB | transação proposta no lançamento por texto (FR-066): `type`, `amount_cents`, `date`, `description`, `account_id`, `category_id`, `category_source`, `status` (`pending`, `saved`, `discarded`) e `transaction_id` |
 
 ### ai_usage
 

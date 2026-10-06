@@ -8,6 +8,7 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "asyncpg>=0.31.0",
     "cryptography>=50.0.2",
+    "defusedxml>=0.7.1",
     "fastapi>=0.142.2",
     "filetype>=1.2.0",
     "google-genai>=2.26.0",
@@ -58,6 +59,15 @@ select = [
     "S",     # segurança (bandit)
     "RUF",   # regras do próprio Ruff
 ]
+ignore = [
+    # As exceções de domínio e do provedor de IA têm o nome da situação (NotFound, RateLimited,
+    # LLMUnavailable), que é o nome usado nos contratos; o sufixo "Error" não acrescenta nada.
+    "N818",
+]
+
+[tool.ruff.lint.isort]
+# A pasta "alembic/" das migrações tem o mesmo nome do pacote instalado.
+known-third-party = ["alembic"]
 
 [tool.ruff.lint.per-file-ignores]
 # Testes usam assert e senhas fictícias por natureza.
@@ -78,10 +88,13 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 
 [tool.coverage.run]
 source = ["app/modules"]
 branch = true
+# O SQLAlchemy assíncrono roda em greenlets; sem isto a cobertura perde as linhas após um await.
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 show_missing = true
