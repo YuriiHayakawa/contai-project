@@ -1,0 +1,15 @@
+Assunto: Você já tem uma conta no Contaí
+
+Olá, $name!
+
+Alguém tentou criar uma conta no Contaí com este e-mail, mas você já tem uma conta com ele.
+Nada mudou na sua conta.
+
+Se foi você:
+- para entrar, use seu e-mail e sua senha na tela de entrada;
+- se esqueceu a senha, escolha "Esqueci minha senha" na tela de entrada.
+
+Se não foi você, não precisa fazer nada. Sua senha continua a mesma e ninguém entrou na
+sua conta.
+
+Contaí

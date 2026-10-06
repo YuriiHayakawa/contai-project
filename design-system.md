@@ -336,7 +336,8 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - O valor é sempre positivo. O sinal vem do seletor Despesa / Receita / Transferência, que fica
   junto do campo. Com "Receita", o valor fica em `--income`; nos demais, em `--ink`.
 - Internamente o valor é um inteiro em centavos; não há número de ponto flutuante.
-- `aria-label="Valor em reais"`. Erros seguem o campo de texto.
+- `aria-label="Valor em reais"`. Erros seguem o campo de texto. Um texto de ajuda de quem usa o
+  campo continua ligado a ele (`aria-describedby`) quando aparece um erro.
 
 ### 6.4 Cartão
 
@@ -346,6 +347,11 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Cartão clicável: a área inteira é o alvo; hover com fundo `--bg-sunken`.
 - Não aninhar cartões. Dentro de um cartão, a separação é por linha de pauta.
 - Cartão de destaque: fundo `--primary-soft` e sem contorno; no máximo um por tela.
+- Lista que se abre dentro do cartão (categorias): a linha da categoria principal mostra o selo,
+  o nome em peso 700, quantas subcategorias ela tem em `small` `--ink-muted` e uma seta de 20px
+  `--ink-subtle`, que vira ao abrir. As subcategorias entram embaixo, recuadas, com altura e
+  opacidade (seção 9.2). Editar é sempre o lápis de 20px `--ink-muted`, na mesma coluna em todas
+  as linhas: um botão à parte nas linhas que se abrem, e o sinal da linha inteira nas demais.
 
 ### 6.5 Modal
 
@@ -354,6 +360,8 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - **A partir de `md` é um diálogo** centralizado, com 480px de largura (560px para formulários) e
   raio `--radius-xl`.
 - Fundo `--surface-raised`, sombra `--elev-3`, véu `--scrim`.
+- A rolagem da página fica travada enquanto houver alguma janela aberta e volta quando a
+  última fecha, mesmo com janelas empilhadas (o detalhe e a confirmação de excluir).
 - `role="dialog"`, `aria-modal="true"`, título ligado por `aria-labelledby`, foco preso dentro, e
   o foco volta ao elemento de origem ao fechar. Fecha por botão, `Esc` e toque no véu, exceto
   quando há dados digitados e não salvos.
@@ -377,7 +385,18 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
   - metadados em `small` `--ink-muted`, em uma linha com reticências: categoria · conta, e
     "3/10" em compra parcelada;
   - valor à direita em `money-md`: despesa em `--ink` com `−`; receita em `--income` com `+`;
-    transferência em `--ink-muted` com ícone de setas, sem sinal.
+    transferência em `--ink-muted` com ícone de setas, com o sinal da conta da linha (`−` na que
+    sai, `+` na que entra) e "saiu de" ou "entrou em" nos metadados.
+- **Transferência com os dois lados na lista**: vira uma linha só, desenhada como um trajeto de
+  mapa. Embaixo da descrição, duas paradas ligadas por um pontilhado de 2px
+  `--ink-subtle`: "Saiu de Investimento" e "Entrou em Conta Principal", em `small`
+  `--ink-muted`, com o nome da conta no mesmo tom. Cada parada é um círculo de 22px com o
+  ícone do tipo de conta (12px): a origem vazada (`--surface`, contorno `--border-strong`) e o
+  destino em `--primary` sobre `--primary-soft`. O valor aparece uma vez, à direita e no meio
+  da linha, como nos outros lançamentos, em `money-md` `--ink-muted` e sem sinal: quem diz o
+  sentido são as paradas. Abaixo de `sm`, o valor fica ao lado da descrição e as paradas usam a
+  largura toda, para os nomes das contas não serem cortados. O verde fica para receita:
+  transferência não é gasto nem ganho.
 - A linha inteira é um botão que abre o detalhe. Não há ação por deslizar.
 - Carregando: 5 linhas de esqueleto. Vazio: estado vazio. Erro: mensagem com "Tentar de novo".
 - Lista longa: carregar mais ao rolar, sempre com um botão "Carregar mais" como alternativa.
@@ -387,7 +406,11 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
   44px de altura e texto em `label`.
 - **Modo de revisão** (importação): caixa de seleção de 24px com alvo de 44px à esquerda; linhas
   desmarcadas usam `--ink-muted` e o texto "Não será importada"; possível duplicata leva o selo
-  "Possível duplicata" em `--warning` sobre `--warning-soft`, com ícone.
+  "Possível duplicata" em `--warning` sobre `--warning-soft`, com ícone. O resto da linha abre a
+  folha "Editar lançamento", e isso fica à vista: um lápis de 16px com "Editar" em `label`
+  `--primary`, ao lado do valor a partir de `sm` e embaixo dele no celular. A folha tem os
+  campos de um lançamento feito à mão (tipo, valor, descrição, categoria, data e observação), e
+  a observação, quando existe, aparece na linha em `small` `--ink-muted`.
 
 ### 6.7 Estado vazio
 
@@ -420,7 +443,8 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Demais itens: ícone de 24px e rótulo sempre visível em `micro`. Inativo em `--ink-muted`;
   ativo com ícone e rótulo em `--primary` e uma pílula `--primary-soft` atrás do ícone, mais
   `aria-current="page"`.
-- "Mais" abre uma folha com Contas, Categorias, Importações e Configurações.
+- "Mais" abre uma folha com Contas, Cartões, Categorias, Importações e Configurações.
+  "Cartões" só aparece para quem tem cartão de crédito ativo.
 - A barra some enquanto o teclado virtual está aberto.
 
 **Barra lateral (a partir de `lg`)**
@@ -428,9 +452,18 @@ foco visível, pressionado, desativado e, quando faz sentido, carregando.
 - Fixa à esquerda, 248px, sobre o próprio `--bg`, com linha direita de 1px `--border`.
 - No topo, a marca "Contaí" em Besley 800 `--primary` e o botão `primary` "Novo lançamento".
 - Itens com 44px de altura, ícone de 20px e rótulo em `label`: Início, Lançamentos, Contas,
-  Categorias, Importações, Assistente. Ativo: fundo `--primary-soft`, texto `--primary` e uma
-  barra de 3px `--primary` à esquerda.
-- Na base, o nome do usuário, com acesso a Configurações e Sair.
+  Cartões, Categorias, Importações, Assistente. Ativo: fundo `--primary-soft`, texto
+  `--primary` e uma barra de 3px `--primary` à esquerda. "Cartões" só aparece para quem tem
+  cartão de crédito ativo: para os outros seria uma tela vazia.
+- O item "Assistente" tem uma seta à direita, que abre embaixo dele o histórico de conversas:
+  uma lista recuada, com uma linha de 1px `--border` à esquerda, e o título de cada conversa em
+  `small`, cortado com reticências. A conversa aberta fica em `--primary`, peso 700. Com o
+  ponteiro em cima ou com o foco, a linha mostra o botão de apagar; em tela de toque, ele fica
+  sempre à vista. Apagar todas de uma vez fica só na folha do celular. O item continua levando
+  ao assistente: só a seta abre e fecha, e a escolha fica guardada no aparelho.
+- Na base, o nome do usuário, com acesso a Configurações e Sair. A marca e o botão em cima e
+  este bloco embaixo ficam sempre à vista: quando os itens e o histórico não cabem, só o miolo
+  rola.
 
 **Cabeçalho da página**: título em `title-1` à esquerda e, no máximo, uma ação à direita. No
 celular ele rola com o conteúdo; não há barra superior fixa, exceto no chat. No painel, o título
@@ -443,6 +476,66 @@ próximo aparecem a partir de 480px de largura.
 - Ícone sozinho só em ações universais (fechar, voltar, mostrar senha), sempre com `aria-label`.
   Nos demais casos, ícone acompanha texto.
 
+### 6.11 Fatura de cartão
+
+A fatura tem o nome do mês em que vence ("Fatura de outubro"), como no banco, com o ano quando
+não é o de hoje.
+
+**Estado.** Vem sempre escrito, com ícone; a cor só reforça.
+
+| Estado | Selo (`micro`, raio `--radius-sm`) | Texto |
+|--------|------------------------------------|-------|
+| Paga | `--income` sobre `--income-soft`, ícone de confirmação | "Paga"; sem compras, "Sem compras", em `--ink-muted` |
+| A pagar | `--primary` sobre `--primary-soft`, relógio | "Fechada, vence em 5 dias" |
+| Vencida | `--warning` sobre `--warning-soft`, triângulo de alerta | "Venceu há 3 dias" |
+| Aberta | `--ink-muted` sobre `--bg-sunken`, calendário | "Aberta, fecha em 23 dias" |
+| Futura | `--ink-muted` sobre `--bg-sunken`, calendário | "Futura" |
+
+Fatura vencida é alerta, e não erro: usa `--warning`, nunca `--danger`.
+
+**Abas de fatura.** Uma linha com a seta "Fatura anterior", as abas e a seta "Próxima fatura",
+sobre uma pauta de 1px `--border`. Cada aba tem 56px de altura, o mês em `label` e o estado em
+`micro`; a escolhida leva o mês em `--primary`, peso 700, e uma barra de 3px `--primary`
+embaixo, mais `aria-current`. A escolhida fica no meio, com as vizinhas dos dois lados: três
+abas no celular, com o mês abreviado ("Out", "Jan/27"), e cinco a partir de `sm`. Na ponta, a
+seta fica desativada.
+
+**Fatura escolhida.** No mesmo cartão das abas: o nome em `title-2`, o selo, um rótulo em
+`label` `--ink-muted` que diz o que o número é ("Falta pagar", "Total da fatura", "Até agora",
+"Já lançado") e o número em `money-hero`, com o marca-texto da tela. Embaixo, em `small`, o
+período das compras e as datas. "Pagar fatura" está sempre no fim do cartão: é o botão
+`primary` enquanto a fatura da tela está a pagar ou vencida e, nas demais, `secondary`, com uma
+frase em `small` ao lado que diz o que o pagamento vai quitar.
+
+**Aviso de fatura a pagar.** No topo da tela inicial, um bloco por cartão, com raio
+`--radius-lg` e sem contorno: fundo `--primary-soft` e o ícone do cartão em um círculo de 44px
+`--primary`; vencida, fundo `--warning-soft` e o triângulo de alerta em um círculo `--warning`.
+O título, em `title-3`, diz "Fatura fechada" ou "Fatura vencida" e o nome do cartão; a linha de
+baixo traz o valor em peso 700 e o prazo. À direita, "Pagar fatura" (`primary`) e o link "Ver
+fatura"; no celular, as ações descem e o botão ocupa a largura que sobra. O aviso não entra na
+cascata da tela inicial e não usa o marca-texto, que ali é do saldo do mês.
+
+**Limite do cartão.** O limite é um teto, e não dinheiro: aparece só na tela do cartão, em um
+cartão próprio, e nunca junto de saldo ou de fatura.
+
+- O número principal é o disponível, em `money-lg`, com o rótulo "Disponível" em `label`
+  `--ink-muted`. Embaixo, a barra de uso: trilho de 10px em `--bg-sunken`, com raio
+  `--radius-full`, e o preenchimento em `--primary`, na proporção do usado; um uso pequeno ainda
+  ocupa 2% da barra. Sob ela, "Usado" à esquerda e "Limite" à direita, em `small`, com os
+  valores em peso 700, e uma frase que diz o que o usado soma.
+- A barra é um medidor (`role="meter"`), com o texto "R$ X usados de R$ Y" para leitores de
+  tela: a largura é só o desenho.
+- Acima do limite, o número dá lugar a "R$ X acima do limite", em `--warning`, com o triângulo
+  de alerta; a barra fica cheia, em `--warning`. É alerta, e não erro, e nada é bloqueado. Só o
+  valor não quebra de linha: em 320px a frase ocupa duas linhas.
+- Sem limite informado, o cartão traz uma frase e o link "Informar o limite em Contas".
+
+**Cadastro do cartão.** O campo de valor inicial se chama "Quanto você já deve neste cartão",
+começa em zero e não tem caixa de sinal: no cartão o valor é sempre uma dívida. A ajuda diz que
+o limite tem o próprio campo. "Limite do cartão" é um campo de dinheiro opcional, depois dos
+dias da fatura, com a ajuda de que é um teto e de que zero é "não acompanhar". Nas outras
+contas, "Saldo inicial" continua com a caixa "O saldo está negativo".
+
 ## 7. Gráficos
 
 Feitos com Recharts, sempre dentro de um cartão (`--surface`).
@@ -451,6 +544,10 @@ Feitos com Recharts, sempre dentro de um cartão (`--surface`).
 
 - **A forma vem antes da cor.** Um número sozinho é um número, não um gráfico: o resumo do mês
   é `money-hero` com marca-texto, mais entradas e saídas em `money-lg`.
+- **Saídas negativas não levam sinal de menos.** Em um mês com mais estornos do que gastos, as
+  saídas aparecem pelo valor, seguido de "a seu favor, de estornos" em `small` `--ink-muted`:
+  no resumo do mês, no resumo em texto, na dica e na tabela da evolução. No gráfico, esse mês
+  fica sem barra de saídas. O cálculo não muda.
 - **Texto usa tokens de texto.** Rótulos, valores, eixos e legendas ficam em `--ink`,
   `--ink-muted` ou `--ink-subtle`. A cor fica só na marca.
 - **Marcas finas**: barras com no máximo 24px de espessura, ponta arredondada em 4px e base
@@ -476,6 +573,9 @@ maior para a menor, com no máximo 6 linhas (as 5 maiores e "Outras", em `--cat-
   valor em `money-md` à direita e, embaixo, uma barra de 8px na cor da categoria sobre um trilho
   `--bg-sunken`, proporcional à maior categoria.
 - A linha inteira é um botão que abre as transações da categoria no período.
+- Categoria negativa (o estorno de uma compra de outro mês): fica no fim da lista, com o valor
+  em `money-md` com `−`, sem barra e sem percentual; no lugar deles, o texto "Estornos maiores
+  que os gastos do mês" em `small` `--ink-muted`.
 - Funciona em 320px, cada valor é lido direto, e preenchimentos de categorias diferentes nunca
   se encostam (seção 2.3).
 
@@ -491,15 +591,18 @@ maior para a menor, com no máximo 6 linhas (as 5 maiores e "Outras", em `--cat-
 ### 7.4 Parcelas futuras
 
 Série única por mês em `--chart-single`, sem legenda: o título do cartão já diz o que é. Valor
-direto só na maior barra; as demais ficam no tooltip e na tabela.
+direto só na maior barra; as demais ficam no tooltip e na tabela. Fica na tela do cartão; no
+painel, cada cartão mostra só o total.
 
 ## 8. Chat do assistente
 
 O assistente não tem visual de "IA": nada de gradiente, brilho ou avatar de robô. A conversa
 parece anotações na caderneta.
 
-- **Estrutura**: cabeçalho fixo com o título "Assistente" e o acesso ao histórico; lista de
-  mensagens; campo de escrita fixo na base, acima da barra inferior. A largura da conversa é de
+- **Estrutura**: cabeçalho fixo com o título "Assistente", o botão de nova conversa e, até
+  `lg`, o acesso ao histórico, que abre em uma folha; a partir de `lg`, o histórico fica na
+  barra lateral, embaixo do item "Assistente" (seção 6.9). Depois, a lista de
+  mensagens e o campo de escrita fixo na base, acima da barra inferior. A largura da conversa é de
   no máximo 720px. A faixa do campo de escrita tem fundo `--bg` próprio, para as mensagens
   rolarem por baixo dela, e 20px de folga embaixo, para o botão de lançar não cobrir o campo.
 - **Mensagem do usuário**: balão à direita, fundo `--primary`, texto `--on-primary`, raio de
@@ -510,12 +613,18 @@ parece anotações na caderneta.
   mensagem. Os demais valores usam a classe `money`, sem destaque.
 - **De onde veio o número**: logo abaixo da resposta, um bloco com o título "De onde veio esse
   número" e até 5 transações em linhas compactas, com pauta e margem, seguido de "Ver todas as
-  23", que abre a lista filtrada. Vem aberto.
+  23", que abre a lista filtrada. Vem aberto. Cada linha tem a descrição e o valor e, embaixo,
+  em `micro` `--ink-muted`, o que identifica o lançamento: a categoria e a conta ou, em uma
+  transferência, a conta de origem, uma seta e a conta de destino. A transferência ocupa uma
+  linha só e vai sem sinal.
 - **Pedido de esclarecimento**: o texto da pergunta e, abaixo, opções de resposta rápida.
 - **Recusa**: uma frase educada e sugestões do que perguntar.
 - **Lançamento sugerido**: cartão com valor em `money-lg`, data, conta e categoria, e os botões
-  "Conferir e salvar" (`primary`, abre o formulário preenchido) e "Descartar" (`ghost`). Nada é
-  salvo antes da confirmação; depois de salvo, o cartão mostra "Lançamento salvo" com o link.
+  "Salvar" (`primary`, grava o lançamento como está), "Ajustar" (`secondary`, abre o formulário
+  preenchido) e "Descartar" (`ghost`). Com a conta ou a categoria em aberto não há "Salvar", e
+  "Ajustar" passa a ser o `primary`. No celular os botões ficam empilhados, na largura toda.
+  Nada é salvo antes de "Salvar" ou da confirmação no formulário; depois de salvo, o cartão
+  mostra "Lançamento salvo" com o link.
 - **Aguardando**: o texto "Consultando seus lançamentos…" com três pontos pulsando.
 - **Chat vazio**: título em `title-2` ("Pergunte sobre o seu dinheiro") e de 4 a 6 sugestões de
   pergunta.

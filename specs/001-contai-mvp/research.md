@@ -82,8 +82,11 @@ no início da implementação.
 ## 5. Bloqueio de login e rate limiting
 
 - **Decision**:
-  - O bloqueio após 5 tentativas erradas fica no banco, por conta (`failed_login_count`,
-    `locked_until` em `users`), e conta erros de senha e de código de duas etapas.
+  - O bloqueio após 5 tentativas erradas fica no banco, na tabela `login_attempts`, contado
+    pelo e-mail informado (guardado só como SHA-256), exista ou não uma conta com ele; conta
+    erros de senha e de código de duas etapas. Um e-mail sem conta recebe as mesmas
+    respostas, no mesmo tempo, de uma conta com a senha errada: contar só nas contas faria o
+    `423` revelar quais e-mails estão cadastrados, o que o FR-008 proíbe.
   - `slowapi` em memória limita a frequência por IP nos endpoints públicos e por usuário nos
     autenticados. Valores iniciais, todos configuráveis: login 10/min por IP; cadastro 5/h por
     IP; pedidos de e-mail (reenvio, recuperação) 5/h por IP; upload 20/h por usuário; mensagens
@@ -148,6 +151,10 @@ no início da implementação.
     valor.
   - O acesso às tabelas `jobs` e `worker_heartbeats` fica só em `worker/repository.py`; os jobs
     chamam serviços dos módulos e nunca consultam o banco direto.
+  - Quando a fila desiste de um job (erro definitivo ou tentativas esgotadas), o worker avisa
+    o módulo dono dele, se ele registrou esse aviso. É assim que uma importação cujo
+    processamento não terminou vai para `failed` com `processing_error`, em vez de ficar presa
+    em `queued` ou `processing`.
 - **Rationale**: é a fila exigida pela constituição (Princípio III), sem broker externo.
 - **Alternatives considered**: `LISTEN/NOTIFY` para acordar o worker (complexidade sem
   necessidade; a espera de 1 a 2 segundos é imperceptível); bibliotecas de fila sobre PostgreSQL
@@ -174,7 +181,12 @@ no início da implementação.
   transação de banco. O arquivo é apagado quando a importação chega a `awaiting_review` ou
   `failed`; em `awaiting_mapping` ele é mantido até o usuário mapear, por no máximo 24 horas. Uma
   importação em `awaiting_review` expira depois de 7 dias sem confirmação (FR-083). Os
-  `import_items` são apagados na confirmação. O frontend acompanha o estado consultando
+  `import_items` são apagados na confirmação. A tarefa periódica de limpeza roda a cada 10
+  minutos: expira as importações vencidas, apaga o arquivo de quem já não precisa dele e os
+  arquivos com mais de uma hora que nenhuma importação guarda. Na confirmação, a decisão de
+  todas as linhas vem junto, e uma linha recusada não deixa nenhuma entrar. O pagamento de
+  fatura é sugerido para o cartão cuja fatura fechada em aberto (ou, sem ela, o total devido)
+  tem o valor mais próximo do pago. O frontend acompanha o estado consultando
   `GET /imports/{id}` a cada 2 segundos enquanto o estado não é final.
 - **Rationale**: o estado `awaiting_mapping` é necessário porque o mapeamento de colunas acontece
   depois do envio. Manter as edições da revisão só no navegador evita endpoints por linha; o
@@ -187,6 +199,13 @@ no início da implementação.
 - **Decision**: `ofxtools`, com uma etapa própria de pré-processamento tolerante antes da
   leitura (detecção de codificação, correção de cabeçalho e de datas fora do padrão). O `FITID`
   vira o identificador externo; o saldo informado (`LEDGERBAL`) alimenta a comparação do FR-082.
+  Do `ofxtools` é usado só o leitor de marcação (`TreeBuilder`): a validação estrita dele
+  (`convert`) recusa arquivos sem `FITID`, sem saldo, sem cabeçalho ou com data fora do padrão,
+  comuns em bancos brasileiros. Os campos são lidos da árvore. A data vale como está escrita,
+  sem a hora e o fuso: `20260915220000[-3:BRT]` é dia 15, e convertê-la para UTC mudaria o dia.
+  Um lançamento com data ou valor ilegível falha o arquivo inteiro (`unreadable`), para o
+  extrato não entrar incompleto sem aviso. Arquivo com extrato de mais de uma conta é recusado
+  (`multiple_accounts`).
 - **Rationale**: é a biblioteca pedida e não traz dependências. Arquivos OFX de bancos
   brasileiros costumam fugir do padrão, então a tolerância fica isolada no importador e é coberta
   por fixtures de vários bancos.
@@ -201,7 +220,13 @@ no início da implementação.
   data, descrição e valor, o formato da data, o separador decimal e a convenção de sinal, e
   aceita também o caso de colunas separadas de entrada e saída. Ao pedir o mapeamento, o sistema
   sugere as colunas por heurística nos nomes e mostra a prévia das primeiras linhas. `.xls`
-  antigo não é aceito.
+  antigo não é aceito. As linhas de título antes do cabeçalho são puladas sozinhas, e as
+  colunas são indicadas pela posição. Linha sem data ou sem valor (rodapé de saldo, total) não
+  é transação. Uma célula com números que o modelo não consegue ler como data ou valor não é
+  pulada: a importação volta a `awaiting_mapping` com `mapping_mismatch` e o modelo é
+  descartado, porque ler errado em silêncio seria pior. O caso mais perigoso é o separador
+  decimal trocado (`45.90` lido como R$ 4.590,00), detectado porque um separador de milhar é
+  sempre seguido de grupos de três algarismos.
 - **Rationale**: "formato reconhecido" passa a ter definição testável: existe um modelo salvo do
   usuário com a mesma assinatura de cabeçalho (FR-039, SC-007).
 - **Alternatives considered**: catálogo embutido de modelos por banco (manutenção contínua;
@@ -209,11 +234,25 @@ no início da implementação.
 
 ## 13. PDF e imagem com IA
 
-- **Decision**: o arquivo vai inteiro para o modelo de extração, com saída estruturada (JSON
-  Schema) validada por Pydantic. O esquema do extrato traz as linhas e, quando houver, o total do
+- **Decision**: o arquivo vai inteiro para o modelo de extração, em uma única chamada por
+  documento (nunca uma por página: o plano gratuito do provedor permite poucas chamadas por dia
+  para o projeto inteiro), com saída estruturada (JSON Schema) validada por Pydantic. O esquema do extrato traz as linhas e, quando houver, o total do
   documento; o do comprovante traz uma única transação. O backend soma as linhas, compara com o
   total e registra a divergência. Valores monetários chegam como texto e são convertidos para
-  centavos com `Decimal`, nunca com `float`.
+  centavos com `Decimal`, nunca com `float`. Cada linha traz o sentido do dinheiro em um campo
+  próprio (`out` ou `in`), e não no sinal do valor. Na soma, as saídas somam e as entradas
+  abatem, como no total de uma fatura. Todo campo do schema é obrigatório, e o que pode faltar
+  aceita `null`: o schema vai ao provedor sem valores padrão. O usuário diz no envio se o
+  arquivo é um extrato ou fatura, ou um comprovante: uma foto só é lida como comprovante. Data
+  ou valor ilegível em uma linha recusa o documento inteiro (`document_unreadable`), como no
+  OFX; um comprovante sem data fica com a data do envio, para o usuário conferir. O conteúdo do
+  documento é tratado como dado: vai só no anexo, e o prompt de sistema manda não seguir o que
+  estiver escrito nele (FR-068). A leitura feita conta no limite diário mesmo quando o
+  documento não rende lançamentos; o limite é conferido no envio, contando também os
+  documentos que ainda estão na fila. Serviço ocupado ou indisponível: o job tenta de novo
+  (três tentativas, com a espera que o provedor pedir ou com backoff), o arquivo fica guardado
+  e a importação mostra `ai_busy`; cota do dia esgotada em todos os modelos: falha na hora,
+  com `ai_quota_exhausted`, sem nova tentativa (FR-072).
 - **Rationale**: atende FR-041 a FR-043 e o Princípio VI: a conferência é feita por código, e o
   usuário revisa tudo antes de salvar.
 - **Alternatives considered**: extrair o texto do PDF localmente e mandar só o texto (PDFs
@@ -227,8 +266,12 @@ no início da implementação.
   2. Impressão digital (`fingerprint` = hash de conta, data, tipo, valor e descrição
      normalizada), comparada por contagem: se o arquivo tem duas linhas idênticas e o banco já
      tem uma, só uma é marcada `exact`.
-  3. Provável: mesma conta, mesmo tipo e valor, data com até 3 dias de diferença, qualquer
-     descrição; marca `probable`. É o que pega lançamentos feitos à mão.
+  3. Provável: mesma conta, mesmo sentido do dinheiro e mesmo valor, data com até 3 dias de
+     diferença, qualquer descrição; marca `probable`. É o que pega lançamentos feitos à mão. O
+     sentido, e não o tipo, porque o extrato do banco não sabe o que é transferência: o
+     pagamento de fatura lançado à mão como transferência aparece nele como uma saída comum.
+  Cada transação existente explica no máximo uma linha do arquivo. Se o arquivo repete um
+  identificador externo, só a primeira linha fica com ele: o índice único recusaria a segunda.
   Linhas `exact` e `probable` chegam desmarcadas. O hash do arquivo é guardado para avisar que o
   mesmo arquivo já foi importado.
 - **Rationale**: reimportar o mesmo arquivo gera zero duplicatas com a seleção padrão (FR-050,
@@ -245,7 +288,22 @@ no início da implementação.
   o restante vai em um único lote à IA, que recebe só as descrições distintas e a lista de
   categorias do usuário, e devolve um índice por descrição; o que a IA não resolver, ou devolver
   inválido, fica em "Outros". Uma correção do usuário grava ou substitui a regra como `user`,
-  que a IA nunca sobrescreve.
+  que a IA nunca sobrescreve. Cada descrição normalizada vai à IA uma vez só, e a resposta
+  vale para todas as linhas iguais; a que aparece como despesa e como receita (a compra e o
+  estorno dela) vai com o tipo em que mais aparece, porque a regra guardada é uma por
+  descrição, e a entrada de mesma descrição recebe a categoria da compra, como estorno. O lote vai em pedidos de até 150 descrições, no máximo 4 por
+  importação; o que passar disso fica em "Outros". A IA recebe descrições normalizadas e nomes
+  de categorias, e nunca valores, datas ou contas. Se o provedor falhar, a importação segue com
+  "Outros". Na confirmação de uma importação, só uma categoria diferente da sugerida vira
+  regra do usuário, e ela vale para a descrição como veio do banco: aceitar o palpite da IA ou
+  o "Outros" não ensina nada. Ao lançar à mão, a categoria escolhida sempre vira regra.
+  Para uma entrada, vale também a regra da compra original: a regra de categoria de despesa
+  da mesma descrição, ou da descrição sem o prefixo de estorno ("estorno", "est", "reembolso",
+  "devolucao", "cancelamento", seguidos ou não de "de", "da", "do" ou "compra"). O prefixo é a
+  primeira palavra, inteira: "estacionamento" não começa com o prefixo "est". A entrada vem
+  então sugerida como estorno, na categoria da compra. A regra da própria descrição do estorno,
+  quando existe, vem antes. A IA não sugere estorno: para ela, receita vai com categoria de
+  receita.
 - **Rationale**: atende FR-047, FR-048 e o Princípio VII. O cache das respostas da IA poupa a
   cota gratuita em importações repetidas do mesmo comércio.
 - **Alternatives considered**: semelhança aproximada entre descrições (resultados imprevisíveis;
@@ -273,8 +331,21 @@ no início da implementação.
     uma compra na data d pertence à fatura que fecha na primeira data de fechamento posterior a
     d. Fatura atual é a que contém hoje. Parcelas futuras são as parcelas do cartão com data a
     partir do próximo fechamento.
+  - O que falta pagar das faturas fechadas: os pagamentos quitam primeiro as faturas mais
+    antigas, então é a dívida de hoje menos as compras (menos estornos) da fatura aberta que já
+    pesam no saldo, limitado à própria dívida. Fatura atrasada soma na última fechada, como no
+    extrato do banco. A dívida inicial de um cartão conta como de faturas já fechadas.
   - Um único serviço de relatórios, no módulo `dashboard`, é usado pelo painel e pelas
     ferramentas do assistente.
+  - Estorno: uma receita lançada em categoria de despesa. Nas somas dos relatórios ele abate
+    as saídas e o gasto da categoria, e não soma nas entradas; o saldo da conta e a fatura do
+    cartão não mudam, porque já contam o dinheiro que voltou. A categoria em que compra e
+    estorno se anulam não aparece; a que fica negativa, por um estorno em mês diferente do da
+    compra, aparece no fim, sem percentual, e o percentual das outras é a parte de cada uma
+    no que foi gasto. Não há tipo de transação nem coluna nova: o tipo da categoria diz que a
+    receita é um estorno, e por isso não houve migração. Foram descartados um tipo `refund`
+    (migração, seletor de tipo e todo lugar que trata os tipos) e a ligação do estorno com a
+    compra original (mais precisa, mas pede uma tela para casar os dois).
 - **Rationale**: saldo calculado não pode divergir das transações (SC-009), e o serviço único é
   o que garante números idênticos entre painel e assistente (FR-062, SC-010).
 - **Alternatives considered**: saldo armazenado e atualizado a cada transação (risco de
@@ -290,6 +361,13 @@ no início da implementação.
   grava `AiUsage`. Limites diários por usuário (30 perguntas, 10 extrações) contados no fuso de
   Brasília. Erros de limite do provedor viram uma exceção própria: no worker, nova tentativa com
   backoff; no chat, uma nova tentativa curta e, se persistir, mensagem amigável.
+  A nova tentativa é feita no modelo reserva (`AI_MODEL_CHAT_FALLBACK` e
+  `AI_MODEL_EXTRACTION_FALLBACK`), quando ele está configurado, por indisponibilidade ou por
+  cota; sem reserva, é repetida uma vez no mesmo modelo. A cota do dia do provedor é um erro à
+  parte (`LLMQuotaExhausted`), reconhecido pelo limite estourado que o provedor informa (um
+  `quotaId` por dia) ou por uma espera de horas: ele não é repetido no mesmo modelo e, quando
+  acaba também no reserva, o usuário lê que o limite do dia foi atingido e que volta no dia
+  seguinte (`429 ai_quota_exhausted`).
 - **Rationale**: Princípio VI. Desligar a execução automática mantém o backend no controle de
   cada chamada de ferramenta, que é onde o `user_id` é injetado.
 - **Alternatives considered**: bibliotecas de orquestração de LLM (abstração de terceiros no
@@ -300,9 +378,15 @@ no início da implementação.
 - **Decision**:
   - Laço de ferramentas com no máximo 5 rodadas. O modelo recebe a data de hoje em Brasília, as
     contas e as categorias do usuário (só nomes e ids) e as últimas 20 mensagens da conversa.
+    As respostas anteriores vão com as consultas que foram feitas (ferramenta e parâmetros,
+    sem os resultados): é o que dá assunto a "e no mês anterior?", e obriga a consultar de
+    novo para ter o número.
+  - Uma pergunta conta uma vez no limite diário do usuário, quantas chamadas ao modelo ela
+    precisar. Se o serviço de IA falhar no meio, nada é gravado: nem a pergunta, nem o uso.
   - Períodos são parâmetros simbólicos (`this_month`, `last_month`, `last_n_months`,
     `this_year`, `last_year`, `month`, `custom`), resolvidos em datas pelo backend. O modelo não
-    faz conta de datas.
+    faz conta de datas. O mês atual entra sempre inteiro, como no painel, para os números serem
+    os mesmos quando há lançamentos de data futura.
   - As ferramentas devolvem cada valor em centavos e também já formatado em reais, além das
     diferenças e percentuais já calculados.
   - Conferência da resposta: todo valor monetário e percentual presente no texto do modelo
@@ -432,6 +516,7 @@ decididas aqui:
 | `python-multipart` | upload de arquivos | exigido pelo FastAPI para `multipart/form-data` |
 | `ofxtools` | leitura de OFX | formato complexo; sem dependências próprias |
 | `openpyxl` | leitura de `.xlsx` | formato binário compactado |
+| `defusedxml` | leitura segura do XML das planilhas | sem ele o `openpyxl` não se protege de XML feito para esgotar a memória; a planilha vem de upload (Princípio V). Sem dependências próprias |
 | `filetype` | tipo real do arquivo | exigido pelo Princípio V; sem dependências |
 | `google-genai` | provedor de IA | SDK oficial, isolado atrás de `LLMProvider` |
 | `tzdata` | base de fusos | a imagem enxuta não traz a base do sistema |
@@ -441,6 +526,7 @@ decididas aqui:
 | `qrcode.react` | QR code das duas etapas | gerar QR à mão não se justifica |
 | `@tailwindcss/vite` | integra o Tailwind 4 ao Vite | plugin oficial do Tailwind 4, que faz parte da stack da constituição |
 | `motion` | transições de entrada e saída | animar a saída de elementos removidos não é possível só com CSS; uso restrito |
+| `react-error-boundary` | limite de erro em volta dos provedores de `App.tsx` | o React só oferece limite de erro como componente de classe, que o Princípio II proíbe no código do projeto; o `errorElement` do React Router cobre as rotas, mas não os provedores fora delas. A biblioteca entrega o limite como componente pronto, sem dependências próprias, e o código do app continua só com componentes funcionais |
 | `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event` | ambiente de teste | exigidos pelo Vitest com Testing Library |
 | `@vitejs/plugin-react` | React no Vite | plugin oficial; sem ele o Vite não compila JSX com recarga |
 | `typescript-eslint`, `@eslint/js`, `eslint-plugin-react-hooks`, `globals` | regras do ESLint | conjunto mínimo para aplicar o ESLint a TypeScript e React, e para proibir `any` |
@@ -484,6 +570,10 @@ Ele traz decisões que afetam a implementação além do visual.
     e `isAnimationActive` desligado no Recharts quando o usuário pede menos movimento.
   - **`design-preview/`** fica no repositório como referência visual. Não faz parte do build nem
     do deploy.
+  - **Documentação interativa só fora de produção**: a página `/api/docs` carrega scripts de
+    fora da origem, o que a política acima proíbe. Em produção, `/api/docs` e
+    `/api/openapi.json` ficam desligados; o OpenAPI continua sendo gerado automaticamente e
+    está disponível em desenvolvimento.
 - **Rationale**: servir as fontes pelo app mantém a política de conteúdo restrita à própria
   origem e não informa acessos a terceiros (Princípios V e VII). A lista fechada de cores é o
   que mantém válida a conferência de contraste e de daltonismo feita no design system.
@@ -506,3 +596,52 @@ Ele traz decisões que afetam a implementação além do visual.
 - Os arquivos de licença das duas fontes, ao copiá-las para o repositório.
 - O provedor de e-mail transacional e o de armazenamento de objetos para o backup, e as
   credenciais de cada um.
+
+## 28. Desempenho do painel e da lista: medição com 5.000 lançamentos
+
+Medição feita em 2 de outubro de 2026, depois do backend da US3, para conferir a SC-013 antes
+de construir as telas do painel.
+
+- **Massa**: um usuário de teste com 5.000 lançamentos espalhados por 24 meses (novembro de
+  2024 a outubro de 2026): 3.683 despesas, 581 receitas e 736 lados de transferência, em 4
+  contas e nas categorias padrão. A tabela `transactions` tinha 5.090 linhas no total.
+- **Ambiente**: o `docker compose` de desenvolvimento em uma máquina local (API com
+  `uvicorn --reload`, um processo, e PostgreSQL 17 no mesmo host). Não é o servidor de produção.
+- **Método**: 30 requisições por rota, depois de 3 de aquecimento, uma por vez. O tempo "no
+  servidor" é o `duration_ms` que a própria API registra em cada requisição (seção 21), casado
+  pelo `X-Request-ID`; inclui a autenticação, as consultas e a montagem da resposta.
+
+| Rota | Mediana | p95 | Máximo |
+|------|---------|-----|--------|
+| `GET /dashboard/summary` (um mês cheio) | 10 ms | 15 ms | 16 ms |
+| `GET /dashboard/categories` | 7 ms | 9 ms | 9 ms |
+| `GET /dashboard/trend`, 6 meses | 6 ms | 7 ms | 7 ms |
+| `GET /dashboard/trend`, 24 meses | 11 ms | 12 ms | 13 ms |
+| `GET /dashboard/top-expenses` | 5 ms | 8 ms | 8 ms |
+| `GET /transactions`, mês atual (padrão da tela) | 7 ms | 7 ms | 8 ms |
+| `GET /transactions`, um mês cheio | 8 ms | 9 ms | 13 ms |
+| `GET /transactions`, todo o período, 1ª página | 8 ms | 10 ms | 10 ms |
+| `GET /transactions`, todo o período, 2ª página (cursor) | 8 ms | 10 ms | 10 ms |
+| `GET /transactions`, todo o período, 200 por página | 12 ms | 14 ms | 48 ms |
+| `GET /transactions`, busca por texto em todo o período | 34 ms | 48 ms | 55 ms |
+| `GET /transactions`, categoria com subcategorias | 8 ms | 9 ms | 12 ms |
+| `GET /transactions`, conta e tipo | 8 ms | 9 ms | 9 ms |
+| `GET /accounts` (saldos) | 9 ms | 10 ms | 10 ms |
+
+- **Decision**: nenhum índice novo e nenhuma migração. O limite combinado para agir era 300 ms
+  no servidor em alguma rota; a mais lenta ficou em 55 ms. O painel inteiro (as quatro rotas,
+  mais a de contas) soma menos de 50 ms de servidor, bem abaixo dos 3 segundos da SC-013.
+- **Rationale**: os planos (`EXPLAIN ANALYZE`) mostram que todas as consultas do painel e da
+  lista já entram pelo índice `ix_transactions_user_id_date`: as de um mês leem só as linhas
+  do mês (cerca de 200), a primeira página da lista lê o índice de trás para a frente e para
+  em 51 linhas, e a contagem é feita só no índice. As consultas que percorrem os 5.000
+  lançamentos do usuário (evolução de 24 meses, saldos e busca por texto) levam de 2 a 9 ms no
+  banco. A busca por texto é a mais cara porque compara a descrição e a observação de cada
+  linha do usuário sem acentos, duas vezes (a página e a contagem); com este volume, não
+  justifica um índice de trigramas.
+- **Alternatives considered**: índice parcial por tipo (`user_id`, `date` só para despesa e
+  receita) e índice de trigramas para a busca. Os dois ficam para quando uma medição mostrar
+  necessidade: hoje só acrescentariam custo de escrita.
+- **A repetir**: a medição vale para um usuário com 5.000 lançamentos e pouca concorrência.
+  Repetir no servidor de produção, e de novo se um usuário passar de algumas dezenas de
+  milhares de lançamentos ou se a busca por texto ficar perceptível.
