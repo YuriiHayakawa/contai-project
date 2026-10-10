@@ -8,9 +8,10 @@ import type { CreditLimitUsage, InvoicePayment, InvoiceSummary } from "../dashbo
  * - `due`: fechada, com valor a pagar e dentro do prazo;
  * - `overdue`: fechada, com valor a pagar e vencida;
  * - `open`: a atual, que ainda recebe compras;
+ * - `paid_ahead`: a atual, mas já paga adiantado; volta a `open` se vier uma compra nova;
  * - `future`: ainda não começou; só tem parcelas e compras lançadas com data futura.
  */
-export type InvoiceStatus = "paid" | "due" | "overdue" | "open" | "future";
+export type InvoiceStatus = "paid" | "due" | "overdue" | "open" | "paid_ahead" | "future";
 
 export interface CardInvoice extends InvoiceSummary {
   status: InvoiceStatus;

@@ -653,9 +653,13 @@ async def test_paying_the_card_invoice_is_a_transfer_that_leaves_the_panel_total
     }
     # Pagar a fatura não muda o valor gasto nela; só o que falta pagar.
     cards_after = (await client_a.get(CARDS)).json()
+    skip = {"payment": None, "current_invoice_paid": None}
     for before, after in zip(cards_before["items"], cards_after["items"], strict=True):
-        assert {**after, "payment": None} == {**before, "payment": None}
+        assert {**after, **skip} == {**before, **skip}
     assert cards_after["items"][0]["payment"] == {"closed_invoice": None, "total_due_cents": 0}
+    # Pagar a fatura atual por completo a deixa paga antes de fechar.
+    assert cards_before["items"][0]["current_invoice_paid"] is False
+    assert cards_after["items"][0]["current_invoice_paid"] is True
 
 
 async def test_cards_summary_shows_the_current_invoice_and_future_installments(
@@ -705,6 +709,8 @@ async def test_cards_summary_shows_the_current_invoice_and_future_installments(
                 },
                 # O cartão não tem limite informado.
                 "credit_limit": None,
+                # A fatura atual ainda tem o que pagar: não está paga adiantado.
+                "current_invoice_paid": False,
             }
         ]
     }

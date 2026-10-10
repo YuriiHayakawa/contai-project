@@ -163,6 +163,8 @@ class CardSummary(BaseModel):
     payment: InvoicePayment
     # Null quando o cartão não tem limite informado.
     credit_limit: CreditLimitUsage | None
+    # A fatura atual está totalmente paga adiantado: vira "paga" antes de fechar (FR-086).
+    current_invoice_paid: bool
 
 
 class DashboardCards(BaseModel):
@@ -181,6 +183,9 @@ class InvoiceStatus(StrEnum):
     OVERDUE = "overdue"
     # A atual: ainda recebe compras.
     OPEN = "open"
+    # A atual, mas já paga adiantado: vira "paga" antes de fechar; volta a `open` se vier
+    # uma compra nova (FR-086).
+    PAID_AHEAD = "paid_ahead"
     # Ainda não começou: só tem as parcelas e as compras já lançadas com data futura.
     FUTURE = "future"
 

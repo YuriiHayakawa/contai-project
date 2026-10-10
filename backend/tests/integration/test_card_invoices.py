@@ -236,6 +236,84 @@ async def test_the_invoice_is_open_until_the_day_before_it_closes(
     assert invoices["2026-11-03"]["status"] == "open"
 
 
+async def test_the_current_invoice_paid_in_advance_shows_as_paid_before_closing(
+    client_a: AsyncClient, checking: Json, card: Json, food: Json
+) -> None:
+    # Uma compra na fatura atual (fecha 3 de outubro) e o pagamento dela por completo.
+    await create_transaction(client_a, card, food, amount_cents=11_000, date="2026-09-20")
+    assert _by_closing(await _invoices(client_a, card))["2026-10-03"]["status"] == "open"
+
+    await _pay(client_a, checking, card, 11_000, "2026-10-01")
+
+    paid = _by_closing(await _invoices(client_a, card))["2026-10-03"]
+    # Fica paga antes de fechar, mas continua sendo a fatura atual.
+    assert (paid["status"], paid["amount_cents"]) == ("paid_ahead", 11_000)
+    # O painel também vê a fatura atual como paga.
+    summary = (await client_a.get(CARDS)).json()["items"][0]
+    assert summary["current_invoice_paid"] is True
+    assert summary["payment"] == {"closed_invoice": None, "total_due_cents": 0}
+
+
+async def test_a_new_purchase_reopens_the_current_invoice(
+    client_a: AsyncClient, checking: Json, card: Json, food: Json
+) -> None:
+    await create_transaction(client_a, card, food, amount_cents=11_000, date="2026-09-20")
+    await _pay(client_a, checking, card, 11_000, "2026-10-01")
+    assert _by_closing(await _invoices(client_a, card))["2026-10-03"]["status"] == "paid_ahead"
+
+    await create_transaction(client_a, card, food, amount_cents=5_000, date="2026-10-01")
+
+    reopened = _by_closing(await _invoices(client_a, card))["2026-10-03"]
+    assert (reopened["status"], reopened["amount_cents"]) == ("open", 16_000)
+    assert (await client_a.get(CARDS)).json()["items"][0]["current_invoice_paid"] is False
+
+
+async def test_the_current_invoice_paid_only_in_part_stays_open(
+    client_a: AsyncClient, checking: Json, card: Json, food: Json
+) -> None:
+    await create_transaction(client_a, card, food, amount_cents=11_000, date="2026-09-20")
+    await _pay(client_a, checking, card, 6_000, "2026-10-01")
+
+    current = _by_closing(await _invoices(client_a, card))["2026-10-03"]
+
+    # Pago em parte: continua aberta, e o painel não a dá como paga.
+    assert current["status"] == "open"
+    assert (await client_a.get(CARDS)).json()["items"][0]["current_invoice_paid"] is False
+
+
+async def test_an_overpaid_current_invoice_is_paid_and_the_credit_abates_what_comes(
+    client_a: AsyncClient, checking: Json, card: Json, food: Json
+) -> None:
+    await create_transaction(client_a, card, food, amount_cents=11_000, date="2026-09-20")
+    # Paga R$ 40,00 a mais: a fatura fica paga, e o crédito abate o que vier.
+    await _pay(client_a, checking, card, 15_000, "2026-10-01")
+
+    assert _by_closing(await _invoices(client_a, card))["2026-10-03"]["status"] == "paid_ahead"
+    assert (await client_a.get(CARDS)).json()["items"][0]["current_invoice_paid"] is True
+
+
+async def test_the_current_invoice_without_charges_is_not_paid_ahead(
+    client_a: AsyncClient, checking: Json, card: Json
+) -> None:
+    # Sem compra na fatura atual, um pagamento (que vira crédito) não a deixa "paga".
+    await _pay(client_a, checking, card, 5_000, "2026-10-01")
+
+    assert _by_closing(await _invoices(client_a, card))["2026-10-03"]["status"] == "open"
+    assert (await client_a.get(CARDS)).json()["items"][0]["current_invoice_paid"] is False
+
+
+async def test_a_past_month_current_invoice_is_never_paid_ahead(
+    client_a: AsyncClient, checking: Json, card: Json, food: Json
+) -> None:
+    # A fatura atual está paga hoje, mas num mês que passou a fatura mostrada é outra.
+    await create_transaction(client_a, card, food, amount_cents=11_000, date="2026-09-20")
+    await _pay(client_a, checking, card, 11_000, "2026-10-01")
+
+    july = (await client_a.get(CARDS, params={"month": "2026-07"})).json()["items"][0]
+
+    assert july["current_invoice_paid"] is False
+
+
 async def test_a_paid_invoice_has_nothing_left(
     client_a: AsyncClient, card: Json, checking: Json, food: Json
 ) -> None:
@@ -390,7 +468,7 @@ async def test_invoice_categories_count_only_the_card_purchases_of_its_period(
 ) -> None:
     # A fatura que fecha em outubro: de 3 de setembro a 2 de outubro.
     await create_transaction(client_a, card, market, amount_cents=30_000, date="2026-09-03")
-    await create_transaction(client_a, card, food, amount_cents=5_000, date="2026-10-02")
+    await create_transaction(client_a, card, food, amount_cents=5_000, date="2026-10-01")
     await create_transaction(client_a, card, transport, amount_cents=12_000, date="2026-09-20")
     # Receita em categoria de receita não é gasto de nenhuma categoria.
     await create_transaction(client_a, card, refund, amount_cents=1_000, date="2026-09-21")

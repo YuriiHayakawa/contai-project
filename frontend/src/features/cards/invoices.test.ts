@@ -70,6 +70,10 @@ describe("statusLabel", () => {
   it("fatura fechada sem compras não aparece como paga", () => {
     expect(statusLabel({ ...september, amount_cents: 0 })).toBe("Sem compras");
   });
+
+  it('a fatura atual paga adiantado também é "Paga"', () => {
+    expect(statusLabel({ ...november, status: "paid_ahead" })).toBe("Paga");
+  });
 });
 
 describe("initialInvoice", () => {
@@ -86,6 +90,13 @@ describe("initialInvoice", () => {
   it("sem nada a pagar, abre na atual", () => {
     expect(initialInvoice([september, { ...october, status: "paid" }, november, january])).toBe(
       november,
+    );
+  });
+
+  it("abre na fatura atual mesmo quando ela está paga adiantado", () => {
+    const current = { ...november, status: "paid_ahead" as const };
+    expect(initialInvoice([september, { ...october, status: "paid" }, current, january])).toBe(
+      current,
     );
   });
 
