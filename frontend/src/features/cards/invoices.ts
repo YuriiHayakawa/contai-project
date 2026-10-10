@@ -16,8 +16,14 @@ export const STATUS_LABELS: Record<InvoiceStatus, string> = {
   due: "A pagar",
   overdue: "Vencida",
   open: "Aberta",
+  paid_ahead: "Paga",
   future: "Futura",
 };
+
+/** A fatura atual do cartão: a que ainda recebe compras, paga adiantado ou não. */
+export function isCurrent(invoice: CardInvoice): boolean {
+  return invoice.status === "open" || invoice.status === "paid_ahead";
+}
 
 /** O mês em que a fatura fecha: é o que a identifica no endereço e na API. */
 export function invoiceKey(invoice: InvoiceSummary): YearMonth {
@@ -69,11 +75,7 @@ export function statusLabel(invoice: CardInvoice): string {
  * uma ação; sem nenhuma, a atual.
  */
 export function initialInvoice(invoices: readonly CardInvoice[]): CardInvoice | undefined {
-  return (
-    invoices.filter(isUnpaid).at(-1) ??
-    invoices.find((invoice) => invoice.status === "open") ??
-    invoices.at(-1)
-  );
+  return invoices.filter(isUnpaid).at(-1) ?? invoices.find(isCurrent) ?? invoices.at(-1);
 }
 
 /** "vence hoje", "vence em 5 dias", "venceu ontem" ou "venceu há 3 dias". */

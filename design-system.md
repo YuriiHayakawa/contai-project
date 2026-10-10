@@ -489,9 +489,13 @@ não é o de hoje.
 | A pagar | `--primary` sobre `--primary-soft`, relógio | "Fechada, vence em 5 dias" |
 | Vencida | `--warning` sobre `--warning-soft`, triângulo de alerta | "Venceu há 3 dias" |
 | Aberta | `--ink-muted` sobre `--bg-sunken`, calendário | "Aberta, fecha em 23 dias" |
+| Paga em aberto | `--income` sobre `--income-soft`, ícone de confirmação | "Paga · fatura em aberto" |
 | Futura | `--ink-muted` sobre `--bg-sunken`, calendário | "Futura" |
 
-Fatura vencida é alerta, e não erro: usa `--warning`, nunca `--danger`.
+Fatura vencida é alerta, e não erro: usa `--warning`, nunca `--danger`. A fatura atual paga
+adiantado mostra "Paga", mas, por ainda não ter fechado, mantém as datas no presente ("fecha em
+X · vence em Y") e, no lugar do botão "Pagar fatura", a linha "Fatura paga. Novas compras entram
+nela e reabrem o pagamento."
 
 **Abas de fatura.** Uma linha com a seta "Fatura anterior", as abas e a seta "Próxima fatura",
 sobre uma pauta de 1px `--border`. Cada aba tem 56px de altura, o mês em `label` e o estado em

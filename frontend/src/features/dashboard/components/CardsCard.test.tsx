@@ -9,6 +9,7 @@ const nubank: CardSummary = {
   name: "Cartão Nubank",
   closing_day: 3,
   due_day: 10,
+  current_invoice_paid: false,
   credit_limit: null,
   current_invoice: {
     period_start: "2026-09-03",
@@ -67,6 +68,14 @@ describe("CardsCard", () => {
       "/cartoes?cartao=acc-cartao",
     );
     expect(screen.getByRole("link", { name: "Ver cartões" })).toHaveAttribute("href", "/cartoes");
+  });
+
+  it("quando a fatura atual está paga, diz Paga no lugar do fechamento", () => {
+    renderCard([{ ...nubank, current_invoice_paid: true }]);
+
+    expect(screen.getByRole("link", { name: /Cartão Nubank/ })).toHaveTextContent(
+      "Fatura atual · paga",
+    );
   });
 
   it("sem parcelas pela frente, diz isso", () => {

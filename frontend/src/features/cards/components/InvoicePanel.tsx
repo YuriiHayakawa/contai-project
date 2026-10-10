@@ -11,6 +11,7 @@ import {
   closingLabel,
   dueLabel,
   invoiceMonth,
+  isCurrent,
   isLastClosed,
   isUnpaid,
   statusLabel,
@@ -41,6 +42,7 @@ const HERO_LABELS: Record<InvoiceStatus, string> = {
   overdue: "Falta pagar",
   paid: "Total da fatura",
   open: "Até agora",
+  paid_ahead: "Total da fatura",
   future: "Já lançado",
 };
 
@@ -49,6 +51,7 @@ const SEALS: Record<InvoiceStatus, { icon: LucideIcon; tone: string }> = {
   due: { icon: Clock, tone: "bg-primary-soft text-primary" },
   overdue: { icon: TriangleAlert, tone: "bg-warning-soft text-warning" },
   open: { icon: CalendarClock, tone: "bg-bg-sunken text-ink-muted" },
+  paid_ahead: { icon: CircleCheck, tone: "bg-income-soft text-income" },
   future: { icon: CalendarClock, tone: "bg-bg-sunken text-ink-muted" },
 };
 
@@ -60,6 +63,7 @@ function sealText(invoice: CardInvoice): string {
   if (invoice.status === "due") return `Fechada, ${dueLabel(invoice.due_date)}`;
   if (invoice.status === "overdue") return capitalized(dueLabel(invoice.due_date));
   if (invoice.status === "open") return `Aberta, ${closingLabel(invoice.closing_date)}`;
+  if (invoice.status === "paid_ahead") return "Paga · fatura em aberto";
   return statusLabel(invoice);
 }
 
@@ -77,7 +81,8 @@ function Seal({ invoice }: SealProps) {
 /** O período das compras e as datas da fatura, no tempo certo do verbo. */
 function dates(invoice: CardInvoice): string {
   const period = `Compras de ${shortDate(invoice.period_start)} a ${shortDate(invoice.period_end)}`;
-  const closed = invoice.status !== "open" && invoice.status !== "future";
+  // A fatura atual (aberta ou paga adiantado) ainda não fechou: fica no presente.
+  const closed = !isCurrent(invoice) && invoice.status !== "future";
   const closing = `${closed ? "fechou" : "fecha"} em ${shortDate(invoice.closing_date)}`;
   const due = `${invoice.due_date < today() ? "venceu" : "vence"} em ${shortDate(invoice.due_date)}`;
   return [period, closing, due].join(" · ");
@@ -101,7 +106,8 @@ function unpaidNote(invoice: CardInvoice, payment: InvoicePayment): string | nul
 
 /** Só entre faturas fechadas: a aberta ainda está pela metade, e a comparação enganaria. */
 function comparison(invoice: CardInvoice, previous: CardInvoice | undefined): string | null {
-  if (!previous || invoice.status === "open" || invoice.status === "future") return null;
+  // A fatura atual ainda pode crescer: compará-la com a anterior enganaria.
+  if (!previous || isCurrent(invoice) || invoice.status === "future") return null;
   if (invoice.amount_cents <= 0 || previous.amount_cents <= 0) return null;
   const difference = invoice.amount_cents - previous.amount_cents;
   const other = `a fatura de ${invoiceMonth(previous)}`;
@@ -205,16 +211,23 @@ export function InvoicePanel({ invoice, previous, payment, account, onPay }: Inv
         </p>
       ))}
 
-      <div className="grid gap-2 sm:flex sm:items-center sm:gap-4">
-        <Button variant={unpaid ? "primary" : "secondary"} onClick={onPay}>
-          Pagar fatura
-        </Button>
+      {invoice.status === "paid_ahead" ? (
+        // Já paga: não há o que pagar, e o botão sai de cena.
         <p className="text-small text-ink-muted">
-          {unpaid
-            ? "Sai de uma conta sua para o cartão e não conta como gasto de novo."
-            : paymentNote(invoice, payment)}
+          Fatura paga. Novas compras entram nela e reabrem o pagamento.
         </p>
-      </div>
+      ) : (
+        <div className="grid gap-2 sm:flex sm:items-center sm:gap-4">
+          <Button variant={unpaid ? "primary" : "secondary"} onClick={onPay}>
+            Pagar fatura
+          </Button>
+          <p className="text-small text-ink-muted">
+            {unpaid
+              ? "Sai de uma conta sua para o cartão e não conta como gasto de novo."
+              : paymentNote(invoice, payment)}
+          </p>
+        </div>
+      )}
       {creditCents > 0 && (
         <p className="text-small text-ink-muted">
           O cartão está com {formatBRL(creditCents)} a seu favor, de pagamento a mais: esse valor
