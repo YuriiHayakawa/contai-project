@@ -94,6 +94,14 @@ export function closingLabel(closingDate: ISODate, reference: ISODate = today())
   return days <= 1 ? "fecha amanhã" : `fecha em ${days} dias`;
 }
 
+/**
+ * Quanto falta pagar da fatura atual (aberta): o que se deve no cartão menos o das faturas
+ * fechadas. Como os pagamentos quitam as mais antigas primeiro, o que sobra é da atual.
+ */
+export function currentRemaining(payment: InvoicePayment): number {
+  return payment.total_due_cents - (payment.closed_invoice?.amount_cents ?? 0);
+}
+
 /** A fatura que o "Pagar fatura" quita: a última fechada, enquanto houver o que pagar nela. */
 export function isLastClosed(invoice: InvoiceSummary, payment: InvoicePayment): boolean {
   return payment.closed_invoice?.closing_date === invoice.closing_date;

@@ -694,7 +694,9 @@ os 7 dias, não consegue mais entrar.
   compras, as datas de fechamento e de vencimento, o valor (compras menos estornos) e o estado
   de hoje: paga, a pagar, vencida, aberta ou futura. A fatura atual (aberta) que for paga por
   completo antes de fechar DEVE aparecer como paga, e DEVE voltar a aberta se uma compra nova
-  entrar nela. Os pagamentos quitam primeiro as faturas mais antigas. A tela DEVE abrir na fatura fechada que está a pagar, com o que falta pagar;
+  entrar nela. Quando a fatura atual está paga só em parte, o número principal DEVE ser o que
+  falta pagar (não o total), com uma barra mostrando quanto do total já foi pago. Os pagamentos
+  quitam primeiro as faturas mais antigas. A tela DEVE abrir na fatura fechada que está a pagar, com o que falta pagar;
   sem nenhuma, na fatura atual. "Pagar fatura" (FR-033) DEVE estar à vista em qualquer fatura:
   como ação principal na que está a pagar e, nas demais, dizendo o que o pagamento vai quitar (a
   fatura fechada do cartão, o que já se deve nele, ou nada); na fatura atual já paga, o botão
