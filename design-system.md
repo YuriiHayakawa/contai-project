@@ -511,6 +511,12 @@ período das compras e as datas. "Pagar fatura" está sempre no fim do cartão: 
 `primary` enquanto a fatura da tela está a pagar ou vencida e, nas demais, `secondary`, com uma
 frase em `small` ao lado que diz o que o pagamento vai quitar.
 
+**Fatura atual paga em parte.** Quando a fatura atual já tem parte paga mas ainda falta, o
+número principal é o que falta ("Falta pagar"), e não o total — senão o total gigante parece
+que se deve tudo de novo. Abaixo das datas, uma linha "Você já pagou R$ X de R$ Y" e uma barra
+de progresso (trilho `--bg-sunken`, preenchimento `--income`, `role="meter"`) mostram o quanto
+do total já foi pago. O botão vira `primary`.
+
 **Aviso de fatura a pagar.** No topo da tela inicial, um bloco por cartão, com raio
 `--radius-lg` e sem contorno: fundo `--primary-soft` e o ícone do cartão em um círculo de 44px
 `--primary`; vencida, fundo `--warning-soft` e o triângulo de alerta em um círculo `--warning`.

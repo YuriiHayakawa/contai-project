@@ -9,6 +9,7 @@ import type { InvoicePayment } from "../../dashboard/types";
 import {
   amountToPay,
   closingLabel,
+  currentRemaining,
   dueLabel,
   invoiceMonth,
   isCurrent,
@@ -166,7 +167,16 @@ function paymentNote(invoice: CardInvoice, payment: InvoicePayment): string {
  */
 export function InvoicePanel({ invoice, previous, payment, account, onPay }: InvoicePanelProps) {
   const unpaid = isUnpaid(invoice);
-  const cents = unpaid ? amountToPay(invoice, payment) : invoice.amount_cents;
+  // A fatura atual paga em parte: alguns pagamentos já feitos, mas ainda falta. Aí o número
+  // principal mostra o que falta, e uma barra conta quanto do total já foi pago.
+  const remaining = currentRemaining(payment);
+  const paidSoFar = Math.max(invoice.amount_cents - remaining, 0);
+  const partiallyPaid = invoice.status === "open" && paidSoFar > 0 && remaining > 0;
+  const cents = partiallyPaid
+    ? remaining
+    : unpaid
+      ? amountToPay(invoice, payment)
+      : invoice.amount_cents;
   const value = formatCentsAsDecimal(cents);
   const long = value.length >= LONG_VALUE_LENGTH;
   // Sem dívida e com saldo positivo, o cartão está com crédito, por um pagamento a mais: ele
@@ -180,7 +190,9 @@ export function InvoicePanel({ invoice, previous, payment, account, onPay }: Inv
           <h2 className="font-display text-title-2 text-ink">Fatura de {invoiceMonth(invoice)}</h2>
           <Seal invoice={invoice} />
         </div>
-        <p className="mt-2 text-label text-ink-muted">{HERO_LABELS[invoice.status]}</p>
+        <p className="mt-2 text-label text-ink-muted">
+          {partiallyPaid ? "Falta pagar" : HERO_LABELS[invoice.status]}
+        </p>
         <p
           className={cn(
             "money text-ink",
@@ -205,6 +217,31 @@ export function InvoicePanel({ invoice, previous, payment, account, onPay }: Inv
         <p className="mt-1 text-small text-ink-muted">{dates(invoice)}</p>
       </div>
 
+      {partiallyPaid && (
+        <div className="grid gap-2">
+          <p className="text-small text-ink-muted">
+            Você já pagou <span className="money font-bold text-ink">{formatBRL(paidSoFar)}</span>{" "}
+            de <span className="money font-bold text-ink">{formatBRL(invoice.amount_cents)}</span>.
+          </p>
+          <span
+            role="meter"
+            aria-label="Progresso do pagamento"
+            aria-valuemin={0}
+            aria-valuemax={invoice.amount_cents}
+            aria-valuenow={paidSoFar}
+            aria-valuetext={`${formatBRL(paidSoFar)} pagos de ${formatBRL(invoice.amount_cents)}`}
+            className="block h-2.5 overflow-hidden rounded-full bg-bg-sunken"
+          >
+            <span
+              className="block h-full rounded-full bg-income"
+              style={{
+                width: `${Math.min(Math.max((paidSoFar / invoice.amount_cents) * 100, 2), 100)}%`,
+              }}
+            />
+          </span>
+        </div>
+      )}
+
       {notes(invoice, previous, payment).map((line) => (
         <p key={line} className="text-small text-ink-muted">
           {line}
@@ -218,13 +255,15 @@ export function InvoicePanel({ invoice, previous, payment, account, onPay }: Inv
         </p>
       ) : (
         <div className="grid gap-2 sm:flex sm:items-center sm:gap-4">
-          <Button variant={unpaid ? "primary" : "secondary"} onClick={onPay}>
+          <Button variant={unpaid || partiallyPaid ? "primary" : "secondary"} onClick={onPay}>
             Pagar fatura
           </Button>
           <p className="text-small text-ink-muted">
             {unpaid
               ? "Sai de uma conta sua para o cartão e não conta como gasto de novo."
-              : paymentNote(invoice, payment)}
+              : partiallyPaid
+                ? `Paga os ${formatBRL(remaining)} que faltam.`
+                : paymentNote(invoice, payment)}
           </p>
         </div>
       )}
