@@ -402,12 +402,11 @@ class ReportingService:
             user_id, card.account_id, start=card.current_invoice.period_start, limit=limit
         )
 
-    async def invoice_payment(self, user_id: uuid.UUID, card: AccountRead) -> InvoicePayment:
-        """O que pagar no cartão hoje (FR-033): a última fatura fechada, se ainda falta pagar
-        algo dela, e o total devido.
+    async def _open_charges(self, user_id: uuid.UUID, card: AccountRead) -> int:
+        """Gastos menos estornos da fatura atual do cartão que já pesam no saldo hoje.
 
-        Os pagamentos quitam primeiro as faturas mais antigas. Por isso o que falta das
-        fechadas é o total devido menos as compras da fatura aberta que já pesam no saldo.
+        É o que o pagamento da fatura atual tem de cobrir. Fica à parte porque o que falta
+        pagar da fatura fechada e o "pagar adiantado" saem dos mesmos números.
         """
         days = _card_days(card)
         today = clock.today()
@@ -419,12 +418,29 @@ class ReportingService:
             start=max(open_invoice.period_start, card.initial_balance_date),
             end=today,
         )
-        open_charges = by_type.get(TransactionType.EXPENSE, 0) - by_type.get(
-            TransactionType.INCOME, 0
-        )
+        return by_type.get(TransactionType.EXPENSE, 0) - by_type.get(TransactionType.INCOME, 0)
+
+    @staticmethod
+    def _current_invoice_paid(*, balance_cents: int, open_charges_cents: int) -> bool:
+        """A fatura atual está paga adiantado (FR-086): já tem compras que pesam hoje e o cartão
+        não tem dívida. Como a fatura atual é a mais nova, qualquer dívida é dela primeiro; logo,
+        sem dívida (saldo >= 0) o que ela tem de compras já está coberto por pagamentos."""
+        return open_charges_cents > 0 and balance_cents >= 0
+
+    async def invoice_payment(self, user_id: uuid.UUID, card: AccountRead) -> InvoicePayment:
+        """O que pagar no cartão hoje (FR-033): a última fatura fechada, se ainda falta pagar
+        algo dela, e o total devido.
+
+        Os pagamentos quitam primeiro as faturas mais antigas. Por isso o que falta das
+        fechadas é o total devido menos as compras da fatura aberta que já pesam no saldo.
+        """
+        days = _card_days(card)
+        open_charges = await self._open_charges(user_id, card)
         debt = -card.balance_cents
         # Um estorno na fatura aberta não faz a fechada passar do que se deve.
         closed_due = min(debt - open_charges, debt)
+        # A última fatura fechada: a que fecha na véspera do início da fatura atual.
+        open_invoice = current_invoice(clock.today(), **days)
         closed = invoice_for(open_invoice.period_start - dt.timedelta(days=1), **days)
         return InvoicePayment(
             closed_invoice=ClosedInvoiceDue(
@@ -467,6 +483,7 @@ class ReportingService:
         """Por cartão ativo: a fatura que contém `reference` e as parcelas das faturas
         seguintes, por mês de vencimento e no total (FR-058), o que pagar nele hoje e quanto
         do limite está ocupado."""
+        today = clock.today()
         summaries: list[CardSummary] = []
         for card in await self._accounts.list(user_id):
             if card.type != AccountType.CREDIT_CARD:
@@ -508,6 +525,16 @@ class ReportingService:
                     ),
                     payment=await self.invoice_payment(user_id, card),
                     credit_limit=await self.credit_limit(user_id, card),
+                    # Só a fatura atual de verdade (a que contém hoje) pode estar paga adiantado;
+                    # num mês que passou, a fatura mostrada é outra.
+                    current_invoice_paid=self._current_invoice_paid(
+                        balance_cents=card.balance_cents,
+                        open_charges_cents=(
+                            await self._open_charges(user_id, card)
+                            if invoice.closing_date == current_invoice(today, **days).closing_date
+                            else 0
+                        ),
+                    ),
                 )
             )
         return summaries
@@ -557,6 +584,7 @@ class ReportingService:
             invoices.append(next_invoice(invoices[-1], **days))
 
         payment = await self.invoice_payment(user_id, card)
+        open_charges = await self._open_charges(user_id, card)
         owed = payment.closed_invoice.amount_cents if payment.closed_invoice else 0
         remaining: dict[dt.date, int] = {}
         left = owed
@@ -571,6 +599,10 @@ class ReportingService:
             if invoice.closing_date > current.closing_date:
                 return InvoiceStatus.FUTURE
             if invoice.closing_date == current.closing_date:
+                if self._current_invoice_paid(
+                    balance_cents=card.balance_cents, open_charges_cents=open_charges
+                ):
+                    return InvoiceStatus.PAID_AHEAD
                 return InvoiceStatus.OPEN
             unpaid = owed if invoice == last_closed else remaining[invoice.closing_date]
             if unpaid <= 0:

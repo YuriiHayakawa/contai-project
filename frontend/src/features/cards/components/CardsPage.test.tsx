@@ -96,6 +96,7 @@ const nubank: CardSummary = {
   name: "Cartão Nubank",
   closing_day: 28,
   due_day: 10,
+  current_invoice_paid: false,
   credit_limit: null,
   current_invoice: { ...invoice(NOVEMBER, "open", 38_640) },
   future_installments: {
@@ -132,6 +133,7 @@ const itau: CardSummary = {
   name: "Itaú Visa",
   closing_day: 15,
   due_day: 22,
+  current_invoice_paid: false,
   credit_limit: null,
   current_invoice: {
     ...invoice(["2026-09-15", "2026-10-14", "2026-10-15", "2026-10-22"], "open", 51_230),
@@ -469,6 +471,63 @@ describe("CardsPage", () => {
 
     expect(await screen.findByRole("dialog", { name: "Nova transferência" })).toBeInTheDocument();
     expect(screen.getByLabelText("Entra em", { selector: "select" })).toHaveValue("acc-nubank");
+  });
+
+  it("fatura atual paga em parte: número grande é o que falta, com barra do já pago", async () => {
+    // Fatura atual de R$ 159,90, com R$ 110,00 já pagos: faltam R$ 49,90.
+    const partial = { closed_invoice: null, total_due_cents: 4_990 };
+    getCards.mockResolvedValue({ items: [{ ...nubank, payment: partial }] });
+    getCardInvoices.mockResolvedValue({
+      ...nubankInvoices,
+      items: [invoice(OCTOBER, "paid", 0), invoice(NOVEMBER, "open", 15_990)],
+      payment: partial,
+    });
+    const user = renderPage();
+    await heading("Fatura de novembro");
+
+    // O número principal é o que falta, não o total.
+    expect(hero("Falta pagar")).toHaveTextContent("R$49,90");
+    expect(screen.getByText(/Você já pagou/)).toHaveTextContent(
+      "Você já pagou R$ 110,00 de R$ 159,90.",
+    );
+    const meter = screen.getByRole("meter", { name: "Progresso do pagamento" });
+    expect(meter).toHaveAttribute("aria-valuenow", "11000");
+    expect(meter).toHaveAttribute("aria-valuemax", "15990");
+    expect(meter.getAttribute("aria-valuetext")).toMatch(/110,00 pagos de .*159,90/);
+    expect(screen.getByText("Paga os R$ 49,90 que faltam.")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Pagar fatura" }));
+
+    expect(await screen.findByRole("dialog", { name: "Nova transferência" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Valor em reais" })).toHaveValue("49,90");
+  });
+
+  it("fatura atual paga adiantado: mostra Paga, sem botão de pagar, com datas no presente", async () => {
+    // Nenhuma fatura fechada a pagar, e a atual (novembro) paga adiantado.
+    const settled = { closed_invoice: null, total_due_cents: 0 };
+    getCards.mockResolvedValue({ items: [{ ...nubank, payment: settled }] });
+    getCardInvoices.mockResolvedValue({
+      ...nubankInvoices,
+      items: [invoice(OCTOBER, "paid", 0), invoice(NOVEMBER, "paid_ahead", 38_640)],
+      payment: settled,
+    });
+    renderPage();
+
+    expect(await heading("Fatura de novembro")).toBeVisible();
+    expect(screen.getByText("Paga · fatura em aberto")).toBeVisible();
+    expect(hero("Total da fatura")).toHaveTextContent("R$386,40");
+    // Ainda não fechou: tempo presente.
+    expect(screen.getByText(/fecha em 28 de out\. · vence em 10 de nov\./)).toBeVisible();
+    // Sem botão de pagar; a nota diz que novas compras reabrem.
+    expect(screen.queryByRole("button", { name: "Pagar fatura" })).toBeNull();
+    expect(
+      screen.getByText("Fatura paga. Novas compras entram nela e reabrem o pagamento."),
+    ).toBeVisible();
+    // A aba da atual aparece como "Paga".
+    expect(screen.getByRole("button", { name: "Fatura de novembro: paga" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
   });
 
   it("com limite informado, mostra o disponível, o usado e o limite, que não mudam a fatura", async () => {

@@ -692,11 +692,15 @@ os 7 dias, não consegue mais entrar.
   ativo, a tela DEVE mostrar as faturas, da primeira com lançamento à última com parcela (no
   máximo 36 antes e 48 depois da atual), cada uma com o nome do mês em que vence, o período das
   compras, as datas de fechamento e de vencimento, o valor (compras menos estornos) e o estado
-  de hoje: paga, a pagar, vencida, aberta ou futura. Os pagamentos quitam primeiro as faturas
-  mais antigas. A tela DEVE abrir na fatura fechada que está a pagar, com o que falta pagar;
+  de hoje: paga, a pagar, vencida, aberta ou futura. A fatura atual (aberta) que for paga por
+  completo antes de fechar DEVE aparecer como paga, e DEVE voltar a aberta se uma compra nova
+  entrar nela. Quando a fatura atual está paga só em parte, o número principal DEVE ser o que
+  falta pagar (não o total), com uma barra mostrando quanto do total já foi pago. Os pagamentos
+  quitam primeiro as faturas mais antigas. A tela DEVE abrir na fatura fechada que está a pagar, com o que falta pagar;
   sem nenhuma, na fatura atual. "Pagar fatura" (FR-033) DEVE estar à vista em qualquer fatura:
   como ação principal na que está a pagar e, nas demais, dizendo o que o pagamento vai quitar (a
-  fatura fechada do cartão, o que já se deve nele, ou nada). Quando o cartão está com saldo a
+  fatura fechada do cartão, o que já se deve nele, ou nada); na fatura atual já paga, o botão
+  NÃO aparece, só uma confirmação de que está paga. Quando o cartão está com saldo a
   favor, por um pagamento a mais, a tela DEVE dizer isso. De cada fatura, a tela DEVE listar as
   compras e os estornos que somam o valor dela (o pagamento, que é transferência, fica de fora)
   e os gastos por categoria; do cartão, o uso do limite (FR-088), o total das parcelas futuras
@@ -812,7 +816,7 @@ os 7 dias, não consegue mais entrar.
   maiores gastos do mês.
 - **FR-058**: Para cada cartão de crédito, o painel DEVE mostrar o valor da fatura atual e o
   total das parcelas futuras, com o caminho para a tela do cartão (FR-086), onde ficam as
-  parcelas por mês.
+  parcelas por mês. Quando a fatura atual está paga adiantado, o bloco a mostra como paga.
 - **FR-059**: O usuário DEVE poder escolher o mês exibido no painel; o padrão é o mês atual, e
   "mês" segue o horário de Brasília. Períodos personalizados (por exemplo, os últimos 3 meses ou
   um intervalo de datas) NÃO fazem parte do painel: são atendidos pelo assistente (FR-061).

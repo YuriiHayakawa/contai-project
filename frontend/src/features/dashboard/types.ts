@@ -125,6 +125,8 @@ export interface CardSummary {
   payment: InvoicePayment;
   /** `null` quando o cartão não tem limite informado. */
   credit_limit: CreditLimitUsage | null;
+  /** A fatura atual está totalmente paga adiantado: vira "paga" antes de fechar. */
+  current_invoice_paid: boolean;
 }
 
 export interface DashboardCards {
