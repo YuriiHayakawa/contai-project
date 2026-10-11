@@ -51,7 +51,9 @@ export function CardsCard({ cards }: CardsCardProps) {
                 <span className="grid min-w-0">
                   <span className="truncate text-body font-bold text-ink">{card.name}</span>
                   <span className="truncate text-small text-ink-muted">
-                    Fatura atual · fecha em {shortDate(invoice.closing_date)}
+                    {card.current_invoice_paid
+                      ? "Fatura atual · paga"
+                      : `Fatura atual · fecha em ${shortDate(invoice.closing_date)}`}
                   </span>
                   <span className="truncate text-small text-ink-muted">
                     {future.total_cents > 0

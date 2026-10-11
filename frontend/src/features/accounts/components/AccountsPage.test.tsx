@@ -50,6 +50,7 @@ const summary: CardSummary = {
   name: "Cartão Nubank",
   closing_day: 3,
   due_day: 10,
+  current_invoice_paid: false,
   credit_limit: null,
   current_invoice: {
     period_start: "2026-09-03",

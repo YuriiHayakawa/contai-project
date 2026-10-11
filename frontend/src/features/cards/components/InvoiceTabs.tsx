@@ -22,6 +22,7 @@ const STATUS_TONE: Record<InvoiceStatus, string> = {
   due: "text-ink",
   overdue: "text-warning",
   open: "text-ink-muted",
+  paid_ahead: "text-income",
   future: "text-ink-muted",
 };
 
