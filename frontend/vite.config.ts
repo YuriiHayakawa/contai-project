@@ -15,5 +15,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./src/test-setup.ts"],
     css: false,
+    // Em paralelo, uma tela com `import()` próprio pode demorar mais para a primeira pintura; os
+    // limites acomodam o `asyncUtilTimeout` de 5s do test-setup, sem reduzir o paralelismo.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });
