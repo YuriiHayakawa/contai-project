@@ -1,4 +1,5 @@
 import { MonitorSmartphone, ShieldCheck, ShieldOff, SunMoon, UserRound } from "lucide-react";
+import { useState } from "react";
 
 import { PageContent } from "../../../components/layout/AppShell";
 import { PageHeader } from "../../../components/layout/PageHeader";
@@ -23,11 +24,7 @@ function initials(name: string): string {
   return (first + last).toUpperCase() || "?";
 }
 
-function scrollToSecurity(): void {
-  document.getElementById(SECURITY_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function IdentityHeader({ user }: { user: CurrentUser }) {
+function IdentityHeader({ user, onManageSecurity }: { user: CurrentUser; onManageSecurity: () => void }) {
   const enabled = user.two_factor_enabled;
   const Icon = enabled ? ShieldCheck : ShieldOff;
   return (
@@ -41,7 +38,7 @@ function IdentityHeader({ user }: { user: CurrentUser }) {
       </div>
       <button
         type="button"
-        onClick={scrollToSecurity}
+        onClick={onManageSecurity}
         className={cn(
           "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-label font-bold",
           "transition-colors duration-fast ease-out",
@@ -60,6 +57,7 @@ function IdentityHeader({ user }: { user: CurrentUser }) {
 /** Configurações da conta: perfil, segurança, dispositivos e aparência, num painel de duas colunas. */
 export function SettingsPage() {
   const { user } = useAuth();
+  const [active, setActive] = useState("perfil");
 
   if (!user) {
     return (
@@ -109,8 +107,8 @@ export function SettingsPage() {
   return (
     <PageContent>
       <PageHeader title="Configurações" />
-      <IdentityHeader user={user} />
-      <SettingsLayout groups={groups} />
+      <IdentityHeader user={user} onManageSecurity={() => setActive(SECURITY_ID)} />
+      <SettingsLayout groups={groups} active={active} onSelect={setActive} />
     </PageContent>
   );
 }

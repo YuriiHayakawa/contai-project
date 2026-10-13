@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Settings } from "lucide-react";
+import { useState } from "react";
 
 import { SettingsLayout, type SettingsGroup } from "./SettingsLayout";
 
@@ -9,40 +10,50 @@ const groups: SettingsGroup[] = [
   { id: "seguranca", label: "Segurança", icon: Settings, content: <p>Conteúdo de segurança</p> },
 ];
 
-const nav = (): HTMLElement =>
-  screen.getByRole("navigation", { name: "Seções das configurações" });
+/** O estado da aba vive na página; aqui um invólucro faz esse papel. */
+function Harness() {
+  const [active, setActive] = useState("perfil");
+  return <SettingsLayout groups={groups} active={active} onSelect={setActive} />;
+}
 
-beforeEach(() => {
-  // O jsdom não implementa scrollIntoView; o IntersectionObserver fica ausente de propósito.
-  Element.prototype.scrollIntoView = vi.fn();
-});
+const tablist = (): HTMLElement =>
+  screen.getByRole("tablist", { name: "Seções das configurações" });
 
 describe("SettingsLayout", () => {
-  it("mostra a navegação e todas as seções, com a primeira marcada como ativa", () => {
-    render(<SettingsLayout groups={groups} />);
+  it("mostra só o conteúdo da aba ativa", () => {
+    render(<Harness />);
 
-    expect(within(nav()).getByRole("button", { name: "Perfil" })).toHaveAttribute(
-      "aria-current",
+    expect(within(tablist()).getByRole("tab", { name: "Perfil" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
-    expect(within(nav()).getByRole("button", { name: "Segurança" })).not.toHaveAttribute(
-      "aria-current",
-    );
-    expect(screen.getByRole("heading", { name: "Perfil", level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Segurança", level: 2 })).toBeInTheDocument();
-    expect(screen.getByText("Conteúdo de segurança")).toBeInTheDocument();
+    expect(screen.getByText("Conteúdo do perfil")).toBeVisible();
+    expect(screen.getByText("Conteúdo de segurança")).not.toBeVisible();
   });
 
-  it("clicar num item leva até a seção e passa a marcá-la como ativa", async () => {
+  it("clicar numa aba troca a seção mostrada, sem rolar a página", async () => {
     const user = userEvent.setup();
-    render(<SettingsLayout groups={groups} />);
+    render(<Harness />);
 
-    await user.click(within(nav()).getByRole("button", { name: "Segurança" }));
+    await user.click(within(tablist()).getByRole("tab", { name: "Segurança" }));
 
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
-    expect(within(nav()).getByRole("button", { name: "Segurança" })).toHaveAttribute(
-      "aria-current",
+    expect(within(tablist()).getByRole("tab", { name: "Segurança" })).toHaveAttribute(
+      "aria-selected",
       "true",
     );
+    expect(screen.getByText("Conteúdo de segurança")).toBeVisible();
+    expect(screen.getByText("Conteúdo do perfil")).not.toBeVisible();
+  });
+
+  it("as setas do teclado trocam de aba", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.tab(); // foco entra na aba ativa
+    expect(within(tablist()).getByRole("tab", { name: "Perfil" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+
+    expect(within(tablist()).getByRole("tab", { name: "Segurança" })).toHaveFocus();
+    expect(screen.getByText("Conteúdo de segurança")).toBeVisible();
   });
 });
