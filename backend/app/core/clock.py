@@ -64,6 +64,12 @@ def month_name(day: date) -> str:
     return f"{MONTH_NAMES[day.month - 1]} de {day.year}"
 
 
+def format_datetime(moment: datetime) -> str:
+    """Um instante no fuso de Brasília, por extenso: "14 de outubro de 2026 às 12:00"."""
+    local = moment.astimezone(SAO_PAULO)
+    return f"{local.day} de {month_name(local.date())} às {local:%H:%M}"
+
+
 def add_months(day: date, months: int) -> date:
     """Soma meses a uma data; em mês mais curto, usa o último dia dele."""
     month_index = day.year * 12 + (day.month - 1) + months

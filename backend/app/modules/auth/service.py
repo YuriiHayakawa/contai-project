@@ -19,6 +19,8 @@ from app.core import clock
 from app.core.errors import Unauthenticated, ValidationFailed
 from app.core.security import (
     create_access_token,
+    create_challenge_token,
+    decode_challenge_token,
     hash_password,
     hash_token,
     new_token,
@@ -32,9 +34,11 @@ from app.modules.auth.errors import (
     EmailNotVerified,
     InvalidCredentials,
     InvalidOrExpiredToken,
+    InvalidTwoFactorCode,
 )
 from app.modules.auth.models import EmailToken, EmailTokenType, Session, SessionRevokedReason
 from app.modules.auth.repository import AuthRepository
+from app.modules.auth.two_factor import verify_second_factor
 from app.modules.categories.service import CategoryService
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
@@ -49,6 +53,10 @@ LOCK_DURATION = timedelta(minutes=15)
 # Uma contagem sem erro novo por este tempo é apagada: os erros deixam de ser "seguidos".
 LOGIN_ATTEMPT_RETENTION = timedelta(hours=24)
 SESSION_TTL = timedelta(days=30)
+# A desativação da verificação em duas etapas só vale 72 horas após o pedido (FR-013), com um
+# lembrete por e-mail 24 horas antes.
+TWO_FACTOR_RESET_DELAY = timedelta(hours=72)
+TWO_FACTOR_RESET_REMINDER_LEAD = timedelta(hours=24)
 
 PRIVACY_POLICY_REQUIRED_MESSAGE = "Para criar a conta, é preciso aceitar a política de privacidade."
 
@@ -59,6 +67,17 @@ class IssuedTokens:
 
     access_token: str
     refresh_token: str
+
+
+@dataclass(frozen=True)
+class TwoFactorChallenge:
+    """Login com e-mail e senha corretos, faltando a segunda etapa (FR-012)."""
+
+    challenge_token: str
+
+
+# O que o login devolve: as credenciais, ou o desafio da segunda etapa.
+LoginOutcome = IssuedTokens | TwoFactorChallenge
 
 
 @lru_cache
@@ -166,13 +185,16 @@ class AuthService:
 
     # ---------- login, refresh e logout
 
-    async def login(self, *, email: str, password: str, user_agent: str, ip: str) -> IssuedTokens:
+    async def login(self, *, email: str, password: str, user_agent: str, ip: str) -> LoginOutcome:
         """Entra com e-mail e senha.
 
         Um e-mail sem conta percorre exatamente o mesmo caminho de um com conta e senha errada:
         a mesma contagem de erros, o mesmo bloqueio, uma conferência de senha (contra um hash
         fictício) e as mesmas respostas. Assim nem a resposta nem o tempo revelam se o e-mail
         está cadastrado (FR-008).
+
+        Com a verificação em duas etapas ativa, a senha correta não dá acesso: devolve um desafio
+        para a segunda etapa (FR-012).
         """
         now = clock.utcnow()
         email_key = _login_attempt_key(email)
@@ -199,6 +221,46 @@ class AuthService:
             await self._session.commit()
             raise EmailNotVerified()
 
+        if user.totp_enabled_at is not None:
+            return TwoFactorChallenge(challenge_token=create_challenge_token(user.id))
+
+        return await self._open_session(user, user_agent=user_agent, ip=ip, now=now)
+
+    async def complete_two_factor_login(
+        self,
+        *,
+        challenge_token: str,
+        code: str | None,
+        recovery_code: str | None,
+        user_agent: str,
+        ip: str,
+    ) -> IssuedTokens:
+        """Segunda etapa do login: confere o código do app ou um de recuperação (FR-012).
+
+        Um código errado conta para o mesmo bloqueio do login. Entrar com um código válido
+        cancela um pedido de desativação da verificação em duas etapas que esteja em aberto.
+        """
+        user_id = decode_challenge_token(challenge_token)
+        now = clock.utcnow()
+        user = await self._users.get_by_id(user_id)
+        if user is None or user.totp_enabled_at is None:
+            raise Unauthenticated()
+
+        email_key = _login_attempt_key(user.email)
+        attempt = await self._auth.get_login_attempt(email_key)
+        if attempt is not None and attempt.locked_until is not None and attempt.locked_until > now:
+            raise AccountLocked(math.ceil((attempt.locked_until - now).total_seconds()))
+
+        verified = await verify_second_factor(
+            self._auth, user, code=code, recovery_code=recovery_code, now=now
+        )
+        if not verified:
+            await self._record_failed_login(email_key, now)
+            raise InvalidTwoFactorCode()
+
+        await self._auth.clear_login_attempts(email_key)
+        await self._auth.cancel_open_reset_requests(user.id, now)
+        await self._users.save(user)
         return await self._open_session(user, user_agent=user_agent, ip=ip, now=now)
 
     async def _record_failed_login(self, email_key: str, now: datetime) -> None:
@@ -303,6 +365,87 @@ class AuthService:
         await self._auth.revoke_all_sessions(
             user.id, reason=SessionRevokedReason.PASSWORD_RESET, now=now
         )
+
+    # ---------- desativação da verificação em duas etapas (recuperação, FR-013)
+
+    async def request_two_factor_reset(self, challenge_token: str) -> None:
+        """Quem perdeu o celular e os códigos pede, após a senha, o link de desativação.
+
+        O `challenge_token` prova que a senha já foi conferida. A resposta é a mesma com ou sem
+        pedido de verdade: nada aqui revela o estado da conta.
+        """
+        user_id = decode_challenge_token(challenge_token)
+        user = await self._users.get_by_id(user_id)
+        if user is not None and user.totp_enabled_at is not None:
+            await enqueue_email(
+                self._session, user_id=user.id, email_type=emails.TWO_FACTOR_RESET_LINK
+            )
+
+    async def confirm_two_factor_reset(self, token: str) -> datetime:
+        """Abre a contagem de 72 horas e avisa o usuário, com um link para cancelar (FR-013)."""
+        email_token = await self._use_email_token(token, EmailTokenType.TWO_FACTOR_RESET_CONFIRM)
+        user = await self._users.get_by_id(email_token.user_id)
+        if user is None or user.totp_enabled_at is None:
+            raise InvalidOrExpiredToken()
+
+        now = clock.utcnow()
+        existing = await self._auth.get_open_reset_request(user.id)
+        if existing is not None:
+            # Um pedido já estava em aberto: mantém a data em vez de reiniciar a contagem.
+            return existing.effective_at
+
+        effective_at = now + TWO_FACTOR_RESET_DELAY
+        await self._auth.create_reset_request(
+            user_id=user.id, requested_at=now, effective_at=effective_at
+        )
+        await enqueue_email(
+            self._session,
+            user_id=user.id,
+            email_type=emails.TWO_FACTOR_RESET_NOTICE,
+            context={"effective_at": clock.format_datetime(effective_at)},
+        )
+        return effective_at
+
+    async def cancel_two_factor_reset(self, token: str) -> None:
+        email_token = await self._use_email_token(token, EmailTokenType.TWO_FACTOR_RESET_CANCEL)
+        await self._auth.cancel_open_reset_requests(email_token.user_id, clock.utcnow())
+
+    async def send_two_factor_reset_reminders(self) -> int:
+        """Envia o lembrete 24 horas antes de a desativação valer; devolve quantos saíram."""
+        now = clock.utcnow()
+        due = await self._auth.list_reset_requests_needing_reminder(
+            now=now, remind_at_or_before=now + TWO_FACTOR_RESET_REMINDER_LEAD
+        )
+        for request in due:
+            await enqueue_email(
+                self._session,
+                user_id=request.user_id,
+                email_type=emails.TWO_FACTOR_RESET_REMINDER,
+                context={"effective_at": clock.format_datetime(request.effective_at)},
+            )
+            await self._auth.mark_reset_reminder_sent(request.id, now)
+        return len(due)
+
+    async def apply_due_two_factor_resets(self) -> int:
+        """Aplica os pedidos vencidos: desativa a verificação e encerra todas as sessões."""
+        now = clock.utcnow()
+        due = await self._auth.list_reset_requests_due(now)
+        for request in due:
+            user = await self._users.get_by_id(request.user_id)
+            if user is not None and user.totp_enabled_at is not None:
+                user.totp_secret_encrypted = None
+                user.totp_enabled_at = None
+                user.totp_last_used_step = None
+                await self._auth.delete_recovery_codes(user.id)
+                await self._auth.revoke_all_sessions(
+                    user.id, reason=SessionRevokedReason.TWO_FACTOR_RESET, now=now
+                )
+                await self._users.save(user)
+                await enqueue_email(
+                    self._session, user_id=user.id, email_type=emails.TWO_FACTOR_RESET_APPLIED
+                )
+            await self._auth.mark_reset_applied(request.id, now)
+        return len(due)
 
     # ---------- tokens enviados por e-mail
 

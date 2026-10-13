@@ -15,14 +15,20 @@ from app.modules.auth.errors import RefreshNotFromApp
 from app.modules.auth.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
+    LoginResponse,
     MessageResponse,
     RegisterRequest,
     ResendVerificationRequest,
     ResetPasswordRequest,
     TokenResponse,
+    TwoFactorLoginRequest,
+    TwoFactorResetCancelBody,
+    TwoFactorResetConfirmBody,
+    TwoFactorResetConfirmResponse,
+    TwoFactorResetRequestBody,
     VerifyEmailRequest,
 )
-from app.modules.auth.service import SESSION_TTL, AuthService, IssuedTokens
+from app.modules.auth.service import SESSION_TTL, AuthService, IssuedTokens, TwoFactorChallenge
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -39,6 +45,10 @@ RESENT_MESSAGE = (
 )
 FORGOT_MESSAGE = (
     "Se este e-mail tiver uma conta no Contaí, enviamos um link para criar uma nova senha."
+)
+TWO_FACTOR_RESET_REQUESTED_MESSAGE = (
+    "Se a verificação em duas etapas estiver ativa nesta conta, enviamos para o seu e-mail um "
+    "link para desativá-la."
 )
 
 
@@ -135,15 +145,40 @@ async def resend_verification(
 @router.post(
     "/login",
     summary="Entrar com e-mail e senha",
-    description="Devolve o access token e grava o refresh token em um cookie `httpOnly`.",
+    description=(
+        "Devolve o access token e grava o refresh token em um cookie `httpOnly`. Com a "
+        "verificação em duas etapas ativa, devolve `two_factor_required` e um `challenge_token`."
+    ),
 )
 @limiter.limit(_login_limit)
 async def login(
     request: Request, response: Response, body: LoginRequest, service: AuthServiceDep
-) -> TokenResponse:
-    tokens = await service.login(
+) -> LoginResponse:
+    outcome = await service.login(
         email=body.email,
         password=body.password,
+        user_agent=request.headers.get("user-agent", ""),
+        ip=client_ip(request),
+    )
+    if isinstance(outcome, TwoFactorChallenge):
+        return LoginResponse(two_factor_required=True, challenge_token=outcome.challenge_token)
+    _set_refresh_cookie(response, outcome.refresh_token)
+    return LoginResponse(access_token=outcome.access_token, token_type="bearer")  # noqa: S106
+
+
+@router.post(
+    "/login/2fa",
+    summary="Concluir a entrada com o código da segunda etapa",
+    description="Aceita um código do app autenticador ou um código de recuperação.",
+)
+@limiter.limit(_login_limit)
+async def login_two_factor(
+    request: Request, response: Response, body: TwoFactorLoginRequest, service: AuthServiceDep
+) -> TokenResponse:
+    tokens = await service.complete_two_factor_login(
+        challenge_token=body.challenge_token,
+        code=body.code,
+        recovery_code=body.recovery_code,
         user_agent=request.headers.get("user-agent", ""),
         ip=client_ip(request),
     )
@@ -206,3 +241,38 @@ async def forgot_password(
 )
 async def reset_password(body: ResetPasswordRequest, service: AuthServiceDep) -> None:
     await service.reset_password(token=body.token, new_password=body.new_password)
+
+
+@router.post(
+    "/2fa/reset/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Pedir, por e-mail, a desativação da verificação em duas etapas",
+    description="Para quem perdeu o app e os códigos. Exige o desafio da etapa da senha.",
+)
+@limiter.limit(_email_request_limit)
+async def request_two_factor_reset(
+    request: Request, body: TwoFactorResetRequestBody, service: AuthServiceDep
+) -> MessageResponse:
+    await service.request_two_factor_reset(body.challenge_token)
+    return MessageResponse(message=TWO_FACTOR_RESET_REQUESTED_MESSAGE)
+
+
+@router.post(
+    "/2fa/reset/confirm",
+    summary="Abrir a contagem de 72 horas para a desativação",
+    description="Confirma o pedido pelo link do e-mail e devolve quando a desativação vale.",
+)
+async def confirm_two_factor_reset(
+    body: TwoFactorResetConfirmBody, service: AuthServiceDep
+) -> TwoFactorResetConfirmResponse:
+    effective_at = await service.confirm_two_factor_reset(body.token)
+    return TwoFactorResetConfirmResponse(effective_at=effective_at)
+
+
+@router.post(
+    "/2fa/reset/cancel",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cancelar o pedido de desativação pelo link do e-mail",
+)
+async def cancel_two_factor_reset(body: TwoFactorResetCancelBody, service: AuthServiceDep) -> None:
+    await service.cancel_two_factor_reset(body.token)

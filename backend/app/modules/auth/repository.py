@@ -17,8 +17,10 @@ from app.modules.auth.models import (
     EmailToken,
     EmailTokenType,
     LoginAttempt,
+    RecoveryCode,
     Session,
     SessionRevokedReason,
+    TwoFactorResetRequest,
 )
 
 
@@ -192,6 +194,110 @@ class AuthRepository:
             )
             .values(used_at=now)
         )
+
+    # ---------- códigos de recuperação da verificação em duas etapas
+
+    async def replace_recovery_codes(self, user_id: uuid.UUID, code_hashes: list[str]) -> None:
+        """Apaga os códigos do usuário e grava os novos: são sempre 10, gerados juntos."""
+        await self.delete_recovery_codes(user_id)
+        self._session.add_all(
+            RecoveryCode(user_id=user_id, code_hash=code_hash) for code_hash in code_hashes
+        )
+        await self._session.flush()
+
+    async def delete_recovery_codes(self, user_id: uuid.UUID) -> None:
+        await self._session.execute(delete(RecoveryCode).where(RecoveryCode.user_id == user_id))
+
+    async def use_recovery_code(self, user_id: uuid.UUID, code_hash: str, now: datetime) -> bool:
+        """Marca como usado um código de recuperação ainda não usado; devolve se havia um."""
+        result = await self._session.execute(
+            update(RecoveryCode)
+            .where(
+                RecoveryCode.user_id == user_id,
+                RecoveryCode.code_hash == code_hash,
+                RecoveryCode.used_at.is_(None),
+            )
+            .values(used_at=now)
+            .returning(RecoveryCode.id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    # ---------- pedido de desativação da verificação em duas etapas
+
+    async def create_reset_request(
+        self, *, user_id: uuid.UUID, requested_at: datetime, effective_at: datetime
+    ) -> TwoFactorResetRequest:
+        request = TwoFactorResetRequest(
+            user_id=user_id, requested_at=requested_at, effective_at=effective_at
+        )
+        self._session.add(request)
+        await self._session.flush()
+        await self._session.refresh(request)
+        return request
+
+    async def get_open_reset_request(self, user_id: uuid.UUID) -> TwoFactorResetRequest | None:
+        result = await self._session.execute(
+            select(TwoFactorResetRequest).where(
+                TwoFactorResetRequest.user_id == user_id,
+                TwoFactorResetRequest.cancelled_at.is_(None),
+                TwoFactorResetRequest.applied_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def cancel_open_reset_requests(self, user_id: uuid.UUID, now: datetime) -> int:
+        """Cancela o pedido em aberto do usuário (pelo link ou por login com código válido)."""
+        result = await self._session.execute(
+            update(TwoFactorResetRequest)
+            .where(
+                TwoFactorResetRequest.user_id == user_id,
+                TwoFactorResetRequest.cancelled_at.is_(None),
+                TwoFactorResetRequest.applied_at.is_(None),
+            )
+            .values(cancelled_at=now)
+            .returning(TwoFactorResetRequest.id)
+        )
+        return len(result.scalars().all())
+
+    async def mark_reset_reminder_sent(self, request_id: uuid.UUID, now: datetime) -> None:
+        await self._session.execute(
+            update(TwoFactorResetRequest)
+            .where(TwoFactorResetRequest.id == request_id)
+            .values(reminder_sent_at=now)
+        )
+
+    async def mark_reset_applied(self, request_id: uuid.UUID, now: datetime) -> None:
+        await self._session.execute(
+            update(TwoFactorResetRequest)
+            .where(TwoFactorResetRequest.id == request_id)
+            .values(applied_at=now)
+        )
+
+    async def list_reset_requests_due(self, now: datetime) -> list[TwoFactorResetRequest]:
+        """Pedidos em aberto cujo prazo de 72 horas já passou (varredura do worker)."""
+        result = await self._session.execute(
+            select(TwoFactorResetRequest).where(
+                TwoFactorResetRequest.cancelled_at.is_(None),
+                TwoFactorResetRequest.applied_at.is_(None),
+                TwoFactorResetRequest.effective_at <= now,
+            )
+        )
+        return list(result.scalars())
+
+    async def list_reset_requests_needing_reminder(
+        self, *, now: datetime, remind_at_or_before: datetime
+    ) -> list[TwoFactorResetRequest]:
+        """Pedidos em aberto ainda sem lembrete e a menos de 24 horas do prazo."""
+        result = await self._session.execute(
+            select(TwoFactorResetRequest).where(
+                TwoFactorResetRequest.cancelled_at.is_(None),
+                TwoFactorResetRequest.applied_at.is_(None),
+                TwoFactorResetRequest.reminder_sent_at.is_(None),
+                TwoFactorResetRequest.effective_at > now,
+                TwoFactorResetRequest.effective_at <= remind_at_or_before,
+            )
+        )
+        return list(result.scalars())
 
     # ---------- tentativas de login (por e-mail informado, sem `user_id`)
 

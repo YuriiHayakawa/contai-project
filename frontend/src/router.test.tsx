@@ -515,8 +515,9 @@ describe("criar conta e confirmar o e-mail", () => {
 
     expect(await screen.findByRole("button", { name: "Confirmar meu e-mail" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Falta só um passo" })).toBeVisible();
-    // Um verificador automático que só abre o endereço não gasta o link de uso único.
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Um verificador automático que só abre o endereço não gasta o link de uso único. A espera
+    // fica dentro de `act` para o refresh silencioso assentar sem o aviso de update fora de act.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(requestsTo("/auth/verify-email")).toHaveLength(0);
   });
 

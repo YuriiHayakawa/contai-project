@@ -63,7 +63,12 @@ function renderChat(path: string = paths.assistant) {
   const router = createMemoryRouter([{ path: paths.assistantChat, element: <ChatPage /> }], {
     initialEntries: [path],
   });
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // `staleTime` como o de produção (createQueryClient): sem ele, a conversa recém-gravada no
+  // cache pela mutação seria relida na hora, e esse refetch de fundo (que em produção não
+  // acontece) cairia no mock vazio de `getConversation`, poluindo o teste com um erro.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+  });
   render(
     <QueryClientProvider client={queryClient}>
       <ToastProvider>

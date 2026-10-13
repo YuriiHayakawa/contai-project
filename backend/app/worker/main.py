@@ -27,6 +27,9 @@ HEARTBEAT_INTERVAL = timedelta(seconds=15)
 STUCK_CHECK_INTERVAL = timedelta(minutes=1)
 LOGIN_ATTEMPT_PURGE_INTERVAL = timedelta(hours=1)
 IMPORT_CLEANUP_INTERVAL = timedelta(minutes=10)
+# A desativação da verificação em duas etapas tem prazo de 72 horas: conferir de hora em hora
+# dá folga de sobra para o lembrete de 24 horas antes e para aplicar no fim do prazo.
+TWO_FACTOR_RESET_INTERVAL = timedelta(minutes=30)
 UNEXPECTED_ERROR_CODE = "unexpected_error"
 
 JobHandler = Callable[[AsyncSession, Job], Awaitable[None]]
@@ -146,6 +149,10 @@ def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     from app.worker.jobs.login_attempts import purge_login_attempts
     from app.worker.jobs.process_import import handle_import_given_up, handle_process_import
     from app.worker.jobs.send_email import handle_send_email
+    from app.worker.jobs.two_factor_reset import (
+        apply_due_two_factor_resets,
+        send_two_factor_reset_reminders,
+    )
 
     worker = Worker(session_factory=session_factory)
     worker.register_handler(JobType.SEND_EMAIL, handle_send_email)
@@ -157,6 +164,12 @@ def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
         "purge_login_attempts", LOGIN_ATTEMPT_PURGE_INTERVAL, purge_login_attempts
     )
     worker.register_periodic("cleanup_imports", IMPORT_CLEANUP_INTERVAL, cleanup_imports)
+    worker.register_periodic(
+        "two_factor_reset_reminders", TWO_FACTOR_RESET_INTERVAL, send_two_factor_reset_reminders
+    )
+    worker.register_periodic(
+        "apply_two_factor_resets", TWO_FACTOR_RESET_INTERVAL, apply_due_two_factor_resets
+    )
     return worker
 
 
