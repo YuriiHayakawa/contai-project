@@ -7,7 +7,7 @@ import { MemoryRouter } from "react-router";
 import { ApiError } from "../../../lib/api-client";
 import { AuthProvider, useAuth, type AuthContextValue } from "../hooks/useAuth";
 import * as authService from "../services/authService";
-import type { CurrentUser, TokenResponse } from "../types";
+import type { CurrentUser, LoginResponse } from "../types";
 import { LoginForm } from "./LoginForm";
 
 vi.mock("../services/authService");
@@ -24,7 +24,12 @@ const marina: CurrentUser = {
   ai_documents_consent: false,
   deletion_scheduled_at: null,
 };
-const tokens: TokenResponse = { access_token: "token-1", token_type: "bearer" };
+const tokens: LoginResponse = {
+  access_token: "token-1",
+  token_type: "bearer",
+  two_factor_required: false,
+  challenge_token: null,
+};
 
 let auth: AuthContextValue;
 
@@ -84,9 +89,9 @@ describe("LoginForm", () => {
   });
 
   it("entra: envia as credenciais, mostra carregando e começa a sessão", async () => {
-    let finish: (value: TokenResponse) => void = () => undefined;
+    let finish: (value: LoginResponse) => void = () => undefined;
     loginService.mockReturnValue(
-      new Promise<TokenResponse>((resolve) => {
+      new Promise<LoginResponse>((resolve) => {
         finish = resolve;
       }),
     );

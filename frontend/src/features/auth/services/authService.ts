@@ -3,10 +3,13 @@ import { api, refreshAccessToken, setAccessToken } from "../../../lib/api-client
 import type {
   CurrentUser,
   LoginInput,
+  LoginResponse,
   MessageResponse,
   RegisterInput,
   ResetPasswordInput,
   TokenResponse,
+  TwoFactorLoginInput,
+  TwoFactorResetConfirmResponse,
 } from "../types";
 
 // ---------- cadastro e confirmação de e-mail
@@ -25,13 +28,34 @@ export function resendVerification(email: string): Promise<MessageResponse> {
 
 // ---------- entrada e saída
 
-export function login(input: LoginInput): Promise<TokenResponse> {
-  return api.post<TokenResponse>("/auth/login", input);
+export function login(input: LoginInput): Promise<LoginResponse> {
+  return api.post<LoginResponse>("/auth/login", input);
+}
+
+/** Conclui a entrada com um código do app autenticador ou um código de recuperação. */
+export function loginTwoFactor(input: TwoFactorLoginInput): Promise<TokenResponse> {
+  return api.post<TokenResponse>("/auth/login/2fa", input);
 }
 
 /** Encerra a sessão deste aparelho no servidor e apaga o cookie de refresh. */
 export function logout(): Promise<void> {
   return api.post("/auth/logout");
+}
+
+// ---------- desativação da verificação em duas etapas (recuperação)
+
+export function requestTwoFactorReset(challengeToken: string): Promise<MessageResponse> {
+  return api.post<MessageResponse>("/auth/2fa/reset/request", {
+    challenge_token: challengeToken,
+  });
+}
+
+export function confirmTwoFactorReset(token: string): Promise<TwoFactorResetConfirmResponse> {
+  return api.post<TwoFactorResetConfirmResponse>("/auth/2fa/reset/confirm", { token });
+}
+
+export function cancelTwoFactorReset(token: string): Promise<void> {
+  return api.post("/auth/2fa/reset/cancel", { token });
 }
 
 // ---------- recuperação de senha

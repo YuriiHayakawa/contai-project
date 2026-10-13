@@ -16,11 +16,16 @@ export const paths = {
   settings: "/configuracoes",
   login: "/entrar",
   register: "/criar-conta",
-  // Os dois caminhos abaixo estão nos links dos e-mails enviados pelo backend
+  // Segunda etapa do login (código do app) e o pedido de desativação para quem perdeu o acesso.
+  twoFactorLogin: "/entrar/duas-etapas",
+  twoFactorResetRequest: "/entrar/recuperar-acesso",
+  // Os caminhos abaixo estão nos links dos e-mails enviados pelo backend
   // (backend/app/modules/auth/emails.py): mudar aqui exige mudar lá.
   verifyEmail: "/confirmar-email",
   resetPassword: "/redefinir-senha",
   forgotPassword: "/esqueci-a-senha",
+  twoFactorResetConfirm: "/desativar-duas-etapas/confirmar",
+  twoFactorResetCancel: "/desativar-duas-etapas/cancelar",
   privacy: "/privacidade",
 } as const;
 
