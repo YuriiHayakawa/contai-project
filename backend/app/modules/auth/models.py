@@ -69,6 +69,43 @@ class EmailToken(UUIDPrimaryKey, CreatedAt, Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class RecoveryCode(UUIDPrimaryKey, CreatedAt, Base):
+    """Código de recuperação da verificação em duas etapas. São sempre 10 por usuário."""
+
+    __tablename__ = "recovery_codes"
+    __table_args__ = (Index("ix_recovery_codes_user_id", "user_id"),)
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TwoFactorResetRequest(UUIDPrimaryKey, CreatedAt, Base):
+    """Pedido para desativar a verificação em duas etapas de quem perdeu o celular e os códigos.
+
+    Só vale 72 horas depois do pedido; nesse prazo pode ser cancelado pelo link enviado por
+    e-mail ou por uma entrada com código válido. No máximo um pedido em aberto por usuário.
+    """
+
+    __tablename__ = "two_factor_reset_requests"
+    __table_args__ = (
+        # No máximo um pedido em aberto (nem cancelado nem aplicado) por usuário.
+        Index(
+            "uq_two_factor_reset_open_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("cancelled_at IS NULL AND applied_at IS NULL"),
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class LoginAttempt(Base):
     """Erros seguidos de login para um e-mail informado, exista ou não uma conta com ele.
 

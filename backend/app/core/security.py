@@ -5,18 +5,21 @@ A lista de senhas comuns em `data/common_passwords.txt` vem da coleção públic
 português.
 """
 
+import base64
 import hashlib
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import jwt
+import pyotp
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.core import clock
 from app.core.config import get_settings
@@ -26,6 +29,17 @@ MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 128
 ACCESS_TOKEN_TTL = timedelta(minutes=15)
 CHALLENGE_TOKEN_TTL = timedelta(minutes=5)
+
+# Verificação em duas etapas (TOTP).
+TOTP_ISSUER = "Contaí"
+TOTP_STEP_SECONDS = 30
+# Aceita o passo atual e um de folga para cada lado, cobrindo um relógio um pouco adiantado ou
+# atrasado no celular.
+TOTP_VALID_WINDOW = 1
+RECOVERY_CODE_COUNT = 10
+# Alfabeto dos códigos de recuperação, sem os caracteres que se confundem ao copiar à mão.
+_RECOVERY_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+_RECOVERY_GROUP = 5
 
 _JWT_ALGORITHM = "HS256"
 _ACCESS_TOKEN_TYPE = "access"  # noqa: S105 - nome de tipo, não é segredo
@@ -163,3 +177,86 @@ def create_challenge_token(user_id: uuid.UUID) -> str:
 
 def decode_challenge_token(token: str) -> uuid.UUID:
     return _to_uuid(_decode(token, _CHALLENGE_TOKEN_TYPE)["sub"])
+
+
+# ---------- verificação em duas etapas (TOTP)
+
+
+# Derivada e estável, para desenvolvimento e testes, quando TOTP_ENCRYPTION_KEY vem vazia; em
+# produção a configuração exige uma chave de verdade (Fernet.generate_key()).
+_DEV_TOTP_KEY = base64.urlsafe_b64encode(hashlib.sha256(b"contai-development-totp-key").digest())
+
+
+def _totp_cipher() -> Fernet:
+    key = get_settings().totp_encryption_key.get_secret_value()
+    return Fernet(key.encode() if key else _DEV_TOTP_KEY)
+
+
+def generate_totp_secret() -> str:
+    """Segredo base32 novo, compartilhado com o app autenticador."""
+    return pyotp.random_base32()
+
+
+def encrypt_totp_secret(secret: str) -> str:
+    """Cifra o segredo para guardá-lo; o banco nunca vê o segredo em claro."""
+    return _totp_cipher().encrypt(secret.encode()).decode()
+
+
+def decrypt_totp_secret(encrypted: str) -> str:
+    try:
+        return _totp_cipher().decrypt(encrypted.encode()).decode()
+    except InvalidToken as exc:
+        # Chave trocada ou dado corrompido: trata como segredo inexistente, sem derrubar o app.
+        raise Unauthenticated() from exc
+
+
+def totp_provisioning_uri(secret: str, account_email: str) -> str:
+    """`otpauth://` que o QR code representa, com o emissor e a conta."""
+    return pyotp.TOTP(secret).provisioning_uri(name=account_email, issuer_name=TOTP_ISSUER)
+
+
+def verify_totp(
+    secret: str, code: str, *, last_used_step: int | None, now: datetime | None = None
+) -> int | None:
+    """Confere um código do app. Devolve o passo aceito, ou `None` se não confere.
+
+    Aceita o passo atual e um de folga para cada lado (relógio levemente adiantado ou atrasado).
+    Um código de um passo já usado (ou anterior ao último usado) é recusado, para o mesmo código
+    não valer duas vezes.
+    """
+    code = code.strip()
+    if not code.isdigit():
+        return None
+    totp = pyotp.TOTP(secret)
+    reference = (now or clock.utcnow()).timestamp()
+    current_step = int(reference // TOTP_STEP_SECONDS)
+    for offset in range(-TOTP_VALID_WINDOW, TOTP_VALID_WINDOW + 1):
+        step = current_step + offset
+        at = datetime.fromtimestamp(step * TOTP_STEP_SECONDS, tz=UTC)
+        if totp.verify(code, for_time=at, valid_window=0):
+            if last_used_step is not None and step <= last_used_step:
+                return None
+            return step
+    return None
+
+
+# ---------- códigos de recuperação
+
+
+def _format_recovery_code() -> str:
+    raw = "".join(secrets.choice(_RECOVERY_ALPHABET) for _ in range(_RECOVERY_GROUP * 2))
+    return f"{raw[:_RECOVERY_GROUP]}-{raw[_RECOVERY_GROUP:]}"
+
+
+def generate_recovery_codes() -> list[str]:
+    """Dez códigos de recuperação de uso único, no formato `abcde-fghij`."""
+    return [_format_recovery_code() for _ in range(RECOVERY_CODE_COUNT)]
+
+
+def normalize_recovery_code(code: str) -> str:
+    """Ignora maiúsculas, espaços e hífens, para o usuário poder digitar do jeito que preferir."""
+    return "".join(char for char in code.lower() if char.isalnum())
+
+
+def hash_recovery_code(code: str) -> str:
+    return hash_token(normalize_recovery_code(code))

@@ -1,0 +1,14 @@
+Assunto: A verificação em duas etapas será desativada em 72 horas
+
+Olá, $name!
+
+Confirmamos o pedido para desativar a verificação em duas etapas da sua conta no Contaí.
+
+Ela será desativada em $effective_at. Até lá, a entrada continua pedindo o código.
+
+Se não foi você, cancele agora por este link:
+$link
+
+Entrar com um código do aplicativo autenticador também cancela o pedido.
+
+Contaí

@@ -1,15 +1,17 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { useLocation, useNavigate } from "react-router";
 
 import { Button } from "../../../components/ui/Button";
 import { Notice } from "../../../components/ui/Notice";
 import { TextField } from "../../../components/ui/TextField";
 import { TextLink } from "../../../components/ui/TextLink";
 import { errorMessage, isApiError } from "../../../lib/api-client";
-import { paths } from "../../../lib/paths";
+import { paths, type LoginLocationState } from "../../../lib/paths";
 import { useLogin } from "../hooks/useLogin";
 import { useResendVerification } from "../hooks/useResendVerification";
 import { loginSchema, type LoginFormValues } from "../schemas";
+import type { TwoFactorLocationState } from "../types";
 
 /**
  * Formulário de entrada. Ao entrar, a sessão começa no `AuthProvider`; quem leva a pessoa
@@ -19,6 +21,8 @@ import { loginSchema, type LoginFormValues } from "../schemas";
 export function LoginForm() {
   const login = useLogin();
   const resend = useResendVerification();
+  const navigate = useNavigate();
+  const location = useLocation();
   const {
     register: field,
     handleSubmit,
@@ -33,7 +37,17 @@ export function LoginForm() {
 
   const submit = handleSubmit((values) => {
     resend.reset();
-    login.mutate({ email: values.email, password: values.password });
+    login.mutate(
+      { email: values.email, password: values.password },
+      {
+        onSuccess: ({ challengeToken }) => {
+          if (!challengeToken) return; // sem segunda etapa: o guard leva adiante
+          const from = (location.state as LoginLocationState | null)?.from;
+          const state: TwoFactorLocationState = { challengeToken, from };
+          void navigate(paths.twoFactorLogin, { state });
+        },
+      },
+    );
   });
 
   return (

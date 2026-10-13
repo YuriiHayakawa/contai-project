@@ -1,0 +1,13 @@
+Assunto: Falta pouco para a verificação em duas etapas ser desativada
+
+Olá, $name!
+
+Lembrando: a verificação em duas etapas da sua conta no Contaí será desativada em
+$effective_at, conforme o pedido feito há alguns dias.
+
+Se não foi você quem pediu, cancele agora por este link, enquanto ainda dá tempo:
+$link
+
+Entrar com um código do aplicativo autenticador também cancela o pedido.
+
+Contaí

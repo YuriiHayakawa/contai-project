@@ -1,0 +1,19 @@
+Assunto: Desativar a verificação em duas etapas do Contaí
+
+Olá, $name!
+
+Recebemos um pedido para desativar a verificação em duas etapas da sua conta no Contaí, feito
+por quem não tem mais o aplicativo autenticador nem os códigos de recuperação.
+
+Para continuar, abra este link:
+$link
+
+Por segurança, a verificação só será desativada 72 horas depois que você abrir o link. Nesse
+período, avisaremos você por e-mail e será possível cancelar a qualquer momento. Entrar com um
+código do aplicativo também cancela o pedido.
+
+Este link vale por 1 hora e só pode ser usado uma vez.
+
+Se não foi você quem pediu, ignore este e-mail: nada muda na sua conta.
+
+Contaí

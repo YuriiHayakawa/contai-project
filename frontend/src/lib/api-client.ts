@@ -78,6 +78,10 @@ let accessToken: string | null = null;
 let refreshInFlight: Promise<boolean> | null = null;
 const sessionExpiredListeners = new Set<() => void>();
 
+// Toda troca de sessão (entrar, sair, expirar) avança a geração. Um refresh que começou antes
+// e só responde depois não pode ressuscitar uma sessão que já foi encerrada nesse meio-tempo.
+let sessionGeneration = 0;
+
 export function getAccessToken(): string | null {
   return accessToken;
 }
@@ -85,6 +89,7 @@ export function getAccessToken(): string | null {
 /** Guarda o token depois do login, ou o apaga (`null`) na saída. Nunca vai para o disco. */
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+  sessionGeneration += 1;
 }
 
 /**
@@ -102,6 +107,7 @@ function expireSession(): void {
   // Várias requisições podem falhar juntas; o aviso sai uma vez só.
   if (accessToken === null) return;
   accessToken = null;
+  sessionGeneration += 1;
   sessionExpiredListeners.forEach((listener) => listener());
 }
 
@@ -125,6 +131,7 @@ function withRefreshLock<T>(task: () => Promise<T>): Promise<T> {
 }
 
 async function requestNewToken(): Promise<boolean> {
+  const generation = sessionGeneration;
   const response = await send("POST", REFRESH_PATH, {
     headers: { "X-Contai-Client": "web" },
     token: null,
@@ -132,6 +139,8 @@ async function requestNewToken(): Promise<boolean> {
   if (response.ok) {
     const body: unknown = await readJson(response);
     if (isRecord(body) && typeof body.access_token === "string") {
+      // A sessão mudou (saída, expiração ou novo login) enquanto renovávamos: não ressuscita.
+      if (generation !== sessionGeneration) return false;
       accessToken = body.access_token;
       return true;
     }
@@ -152,10 +161,23 @@ async function requestNewToken(): Promise<boolean> {
  * Chamadas simultâneas compartilham a mesma renovação.
  */
 export function refreshAccessToken(): Promise<boolean> {
-  refreshInFlight ??= withRefreshLock(requestNewToken).finally(() => {
-    refreshInFlight = null;
+  if (refreshInFlight) return refreshInFlight;
+  const inFlight = withRefreshLock(requestNewToken).finally(() => {
+    // Só libera a vaga se ainda for esta renovação: outra pode tê-la assumido.
+    if (refreshInFlight === inFlight) refreshInFlight = null;
   });
+  refreshInFlight = inFlight;
   return refreshInFlight;
+}
+
+/**
+ * Testes: zera a sessão em memória entre um teste e outro. Avança a geração para neutralizar
+ * qualquer renovação que tenha ficado em andamento, para que um teste não vaze no seguinte.
+ */
+export function resetAuthSession(): void {
+  accessToken = null;
+  refreshInFlight = null;
+  sessionGeneration += 1;
 }
 
 // ---------- requisições ----------

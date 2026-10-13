@@ -4,7 +4,20 @@ Estas rotas não recebem id nenhum: agem sobre o usuário e a sessão do própri
 conferem que o token de um usuário nunca alcança o perfil nem a sessão de outro.
 """
 
-from tests.isolation.registry import IsolationContext, isolation_case
+from tests.isolation.registry import IsolationContext, exempt, isolation_case
+
+# Rotas que agem só sobre a conta do próprio token: não recebem id de outro usuário para
+# alcançar. As sessões ficam em test_sessions.py.
+exempt("PATCH", "/api/v1/users/me", "altera o nome do próprio usuário do token")
+exempt("POST", "/api/v1/users/me/password", "troca a senha do próprio usuário do token")
+exempt("POST", "/api/v1/users/me/2fa/setup", "configura a verificação do próprio usuário")
+exempt("POST", "/api/v1/users/me/2fa/enable", "ativa a verificação do próprio usuário")
+exempt("POST", "/api/v1/users/me/2fa/disable", "desativa a verificação do próprio usuário")
+exempt(
+    "POST",
+    "/api/v1/users/me/2fa/recovery-codes",
+    "gera códigos de recuperação do próprio usuário",
+)
 
 
 @isolation_case("GET", "/api/v1/users/me")
