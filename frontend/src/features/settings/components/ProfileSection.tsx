@@ -32,18 +32,26 @@ export function ProfileSection({ user }: ProfileSectionProps) {
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { name: user.name } });
 
   const submit = handleSubmit((values) => {
-    update.mutate(
-      { name: values.name },
-      { onSuccess: () => toast.success("Nome atualizado.") },
-    );
+    update.mutate({ name: values.name }, { onSuccess: () => toast.success("Nome atualizado.") });
   });
 
   return (
     <SettingsSection>
       <form noValidate onSubmit={(event) => void submit(event)} className="grid gap-4">
         {update.isError && <Notice kind="error">{errorMessage(update.error)}</Notice>}
-        <TextField label="Nome" autoComplete="name" error={errors.name?.message} {...field("name")} />
-        <TextField label="E-mail" value={user.email} readOnly disabled help="O e-mail não pode ser alterado." />
+        <TextField
+          label="Nome"
+          autoComplete="name"
+          error={errors.name?.message}
+          {...field("name")}
+        />
+        <TextField
+          label="E-mail"
+          value={user.email}
+          readOnly
+          disabled
+          help="O e-mail não pode ser alterado."
+        />
         <div className="justify-self-start">
           <Button type="submit" loading={update.isPending} disabled={!isDirty}>
             Salvar

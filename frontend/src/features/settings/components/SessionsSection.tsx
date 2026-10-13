@@ -28,7 +28,9 @@ function SessionRow({ session, onEnd, ending }: SessionRowProps) {
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0">
         <p className="truncate text-body font-bold text-ink">{session.device}</p>
-        <p className="text-label text-ink-muted">Última atividade: {lastUsedLabel(session.last_used_at)}</p>
+        <p className="text-label text-ink-muted">
+          Última atividade: {lastUsedLabel(session.last_used_at)}
+        </p>
       </div>
       {session.is_current ? (
         <span className="shrink-0 rounded-sm bg-primary-soft px-2 py-1 text-label font-bold text-primary">
@@ -69,7 +71,6 @@ export function SessionsSection() {
 
   return (
     <SettingsSection description="Aparelhos e navegadores onde sua conta está aberta.">
-
       {sessions.isPending && (
         <div role="status" className="grid gap-3">
           <span className="sr-only">Carregando as sessões…</span>

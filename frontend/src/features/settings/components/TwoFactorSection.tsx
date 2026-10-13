@@ -284,7 +284,12 @@ function PasswordCodeDialog({ action, onClose, onRecoveryCodes }: PasswordCodeDi
       description="Confirme com sua senha e um código do aplicativo autenticador."
       footer={
         <>
-          <Button type="submit" form="two-factor-confirm" variant={action === "disable" ? "danger" : "primary"} loading={mutation.isPending}>
+          <Button
+            type="submit"
+            form="two-factor-confirm"
+            variant={action === "disable" ? "danger" : "primary"}
+            loading={mutation.isPending}
+          >
             {action === "disable" ? "Desativar" : "Gerar códigos"}
           </Button>
           <Button variant="secondary" disabled={mutation.isPending} onClick={onClose}>

@@ -44,17 +44,23 @@ export function TwoFactorResetRequestPage() {
         <Card>
           <div className="grid gap-4">
             <p className="text-body text-ink">
-              Perdeu o aplicativo autenticador e também os códigos de recuperação? Dá para
-              desativar a verificação em duas etapas por e-mail. Veja como funciona:
+              Perdeu o aplicativo autenticador e também os códigos de recuperação? Dá para desativar
+              a verificação em duas etapas por e-mail. Veja como funciona:
             </p>
             <ul className="grid list-disc gap-2 pl-5 text-body text-ink-muted">
               <li>Enviamos um link para o e-mail da conta.</li>
               <li>Ao abrir o link, começa uma espera de 72 horas, por segurança.</li>
-              <li>Durante a espera, avisamos você por e-mail e dá para cancelar a qualquer hora.</li>
+              <li>
+                Durante a espera, avisamos você por e-mail e dá para cancelar a qualquer hora.
+              </li>
               <li>Entrar com um código do aplicativo também cancela o pedido.</li>
             </ul>
             {request.isError && <Notice kind="error">{errorMessage(request.error)}</Notice>}
-            <Button block loading={request.isPending} onClick={() => request.mutate(challengeToken)}>
+            <Button
+              block
+              loading={request.isPending}
+              onClick={() => request.mutate(challengeToken)}
+            >
               Enviar o link por e-mail
             </Button>
           </div>

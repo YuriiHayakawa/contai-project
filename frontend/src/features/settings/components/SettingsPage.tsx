@@ -24,7 +24,13 @@ function initials(name: string): string {
   return (first + last).toUpperCase() || "?";
 }
 
-function IdentityHeader({ user, onManageSecurity }: { user: CurrentUser; onManageSecurity: () => void }) {
+function IdentityHeader({
+  user,
+  onManageSecurity,
+}: {
+  user: CurrentUser;
+  onManageSecurity: () => void;
+}) {
   const enabled = user.two_factor_enabled;
   const Icon = enabled ? ShieldCheck : ShieldOff;
   return (

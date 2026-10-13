@@ -31,8 +31,10 @@ export function SettingsLayout({ groups, active, onSelect }: SettingsLayoutProps
     const current = groups.findIndex((group) => group.id === active);
     const last = groups.length - 1;
     let next: number;
-    if (event.key === "ArrowDown" || event.key === "ArrowRight") next = current >= last ? 0 : current + 1;
-    else if (event.key === "ArrowUp" || event.key === "ArrowLeft") next = current <= 0 ? last : current - 1;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight")
+      next = current >= last ? 0 : current + 1;
+    else if (event.key === "ArrowUp" || event.key === "ArrowLeft")
+      next = current <= 0 ? last : current - 1;
     else if (event.key === "Home") next = 0;
     else if (event.key === "End") next = last;
     else return;

@@ -47,10 +47,9 @@ export function TwoFactorResetConfirmPage() {
         <Card>
           <div className="grid gap-4">
             <p className="text-body text-ink">
-              Ao confirmar, a verificação em duas etapas desta conta será desativada daqui a
-              72 horas. Nesse período você pode cancelar pelo e-mail que enviaremos, ou entrando
-              com um código do aplicativo. Quando a desativação valer, todas as sessões serão
-              encerradas.
+              Ao confirmar, a verificação em duas etapas desta conta será desativada daqui a 72
+              horas. Nesse período você pode cancelar pelo e-mail que enviaremos, ou entrando com um
+              código do aplicativo. Quando a desativação valer, todas as sessões serão encerradas.
             </p>
             {confirm.isError && <Notice kind="error">{errorMessage(confirm.error)}</Notice>}
             <Button block loading={confirm.isPending} onClick={() => confirm.mutate(token)}>

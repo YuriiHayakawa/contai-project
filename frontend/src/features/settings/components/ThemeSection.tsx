@@ -21,14 +21,7 @@ export function ThemeSection() {
 
   return (
     <SettingsSection description="No modo automático, o Contaí acompanha o tema do seu aparelho.">
-
-      <SegmentedControl
-        label="Tema"
-        hideLabel
-        options={OPTIONS}
-        value={choice}
-        onChange={change}
-      />
+      <SegmentedControl label="Tema" hideLabel options={OPTIONS} value={choice} onChange={change} />
     </SettingsSection>
   );
 }
