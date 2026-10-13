@@ -1,0 +1,14 @@
+Assunto: A verificação em duas etapas foi desativada
+
+Olá, $name!
+
+A verificação em duas etapas da sua conta no Contaí foi desativada, como pedido. Por segurança,
+encerramos todas as sessões: será preciso entrar de novo.
+
+Agora a entrada pede apenas e-mail e senha. Recomendamos ativar a verificação em duas etapas de
+novo assim que puder, nas Configurações, para manter a conta protegida.
+
+Se não foi você quem pediu, crie uma nova senha o quanto antes e ative de novo a verificação em
+duas etapas.
+
+Contaí

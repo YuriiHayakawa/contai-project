@@ -28,10 +28,59 @@ export interface ResetPasswordInput {
   new_password: string;
 }
 
-/** Resposta do login e do refresh. O refresh token vai só no cookie `httpOnly`. */
+/** Resposta do refresh e da segunda etapa do login. O refresh token vai só no cookie. */
 export interface TokenResponse {
   access_token: string;
   token_type: "bearer";
+}
+
+/**
+ * Resposta do login: ou as credenciais, ou o desafio da segunda etapa. Com a verificação em
+ * duas etapas ativa, a senha correta devolve `two_factor_required` e um `challenge_token`.
+ */
+export interface LoginResponse {
+  access_token: string | null;
+  token_type: "bearer" | null;
+  two_factor_required: boolean;
+  challenge_token: string | null;
+}
+
+/** Segunda etapa do login: o desafio e um código do app ou de recuperação. */
+export interface TwoFactorLoginInput {
+  challenge_token: string;
+  code?: string;
+  recovery_code?: string;
+}
+
+/** Resposta de `POST /auth/2fa/reset/confirm`: quando a desativação passa a valer. */
+export interface TwoFactorResetConfirmResponse {
+  effective_at: string;
+}
+
+/** Começo da ativação: o segredo em texto e o `otpauth://` que o QR code representa. */
+export interface TwoFactorSetup {
+  otpauth_uri: string;
+  secret: string;
+}
+
+/** Os 10 códigos de recuperação, devolvidos uma única vez. */
+export interface RecoveryCodes {
+  recovery_codes: string[];
+}
+
+/** Uma sessão ativa na tela de dispositivos conectados. */
+export interface SessionInfo {
+  id: string;
+  device: string;
+  last_used_at: string;
+  is_current: boolean;
+}
+
+/** Estado de navegação levado à etapa do código e ao pedido de recuperação. */
+export interface TwoFactorLocationState {
+  challengeToken: string;
+  /** Endereço para onde voltar depois de concluir a entrada. */
+  from?: string;
 }
 
 /** Resposta genérica dos pedidos que não revelam se um e-mail tem conta. */

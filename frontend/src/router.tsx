@@ -1,4 +1,4 @@
-import { Hammer, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { Suspense, lazy } from "react";
 import {
   Navigate,
@@ -9,9 +9,8 @@ import {
   type RouteObject,
 } from "react-router";
 
-import { AppShell, PageContent } from "./components/layout/AppShell";
+import { AppShell } from "./components/layout/AppShell";
 import { RouteErrorPage } from "./components/layout/ErrorPage";
-import { PageHeader } from "./components/layout/PageHeader";
 import { PageSkeleton } from "./components/layout/PageSkeleton";
 import { EmptyState } from "./components/ui/EmptyState";
 import { useAccounts } from "./features/accounts/hooks/useAccounts";
@@ -51,6 +50,31 @@ const ResetPasswordPage = lazy(() =>
 const PrivacyPolicyPage = lazy(() =>
   import("./features/auth/components/PrivacyPolicyPage").then((module) => ({
     default: module.PrivacyPolicyPage,
+  })),
+);
+const TwoFactorStep = lazy(() =>
+  import("./features/auth/components/TwoFactorStep").then((module) => ({
+    default: module.TwoFactorStep,
+  })),
+);
+const TwoFactorResetRequestPage = lazy(() =>
+  import("./features/auth/components/TwoFactorResetRequestPage").then((module) => ({
+    default: module.TwoFactorResetRequestPage,
+  })),
+);
+const TwoFactorResetConfirmPage = lazy(() =>
+  import("./features/auth/components/TwoFactorResetConfirmPage").then((module) => ({
+    default: module.TwoFactorResetConfirmPage,
+  })),
+);
+const TwoFactorResetCancelPage = lazy(() =>
+  import("./features/auth/components/TwoFactorResetCancelPage").then((module) => ({
+    default: module.TwoFactorResetCancelPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("./features/settings/components/SettingsPage").then((module) => ({
+    default: module.SettingsPage,
   })),
 );
 const DashboardPage = lazy(() =>
@@ -98,10 +122,6 @@ const ChatPage = lazy(() =>
     default: module.ChatPage,
   })),
 );
-
-interface PendingPageProps {
-  title: string;
-}
 
 function LoadingScreen() {
   return (
@@ -206,21 +226,6 @@ function AppLayout() {
   );
 }
 
-/** Ocupa o lugar de uma tela até a história dela ser implementada. */
-function PendingPage({ title }: PendingPageProps) {
-  return (
-    <PageContent>
-      <PageHeader title={title} />
-      <EmptyState
-        kind="first-time"
-        icon={Hammer}
-        title="Em preparação"
-        description="Esta parte do Contaí ainda está sendo feita."
-      />
-    </PageContent>
-  );
-}
-
 function NotFoundPage() {
   const navigate = useNavigate();
 
@@ -264,11 +269,16 @@ export const routes: RouteObject[] = [
           { path: paths.login, element: <LoginPage /> },
           { path: paths.register, element: <RegisterPage /> },
           { path: paths.forgotPassword, element: <ForgotPasswordPage /> },
+          // Etapas da entrada com verificação em duas etapas: dependem do desafio, em memória.
+          { path: paths.twoFactorLogin, element: <TwoFactorStep /> },
+          { path: paths.twoFactorResetRequest, element: <TwoFactorResetRequestPage /> },
         ],
       },
       // Os links dos e-mails funcionam com ou sem sessão aberta neste aparelho.
       { path: paths.verifyEmail, element: <VerifyEmailPage /> },
       { path: paths.resetPassword, element: <ResetPasswordPage /> },
+      { path: paths.twoFactorResetConfirm, element: <TwoFactorResetConfirmPage /> },
+      { path: paths.twoFactorResetCancel, element: <TwoFactorResetCancelPage /> },
       { path: paths.privacy, element: <PrivacyPolicyPage /> },
       ...devRoutes,
 
@@ -289,7 +299,7 @@ export const routes: RouteObject[] = [
               { path: paths.importDetail, element: <UploadPage /> },
               { path: paths.importReview, element: <ReviewPage /> },
               { path: paths.assistantChat, element: <ChatPage /> },
-              { path: paths.settings, element: <PendingPage title="Configurações" /> },
+              { path: paths.settings, element: <SettingsPage /> },
             ],
           },
         ],
