@@ -88,7 +88,9 @@ describe("TwoFactorSection", () => {
     await user.type(screen.getByLabelText("Código de 6 dígitos"), "123456");
     await user.click(screen.getByRole("button", { name: "Ativar" }));
 
-    expect(await screen.findByText("Pronto! A verificação em duas etapas está ativa.")).toBeVisible();
+    expect(
+      await screen.findByText("Pronto! A verificação em duas etapas está ativa."),
+    ).toBeVisible();
     expect(screen.getByText(/Guarde estes códigos agora/)).toBeInTheDocument();
     for (const code of CODES) {
       expect(screen.getByText(code)).toBeInTheDocument();

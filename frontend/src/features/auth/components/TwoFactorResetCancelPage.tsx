@@ -37,8 +37,8 @@ export function TwoFactorResetCancelPage() {
         <Card>
           <div className="grid gap-4">
             <p className="text-body text-ink">
-              Alguém pediu para desativar a verificação em duas etapas desta conta. Se não foi
-              você, ou se mudou de ideia, cancele o pedido agora.
+              Alguém pediu para desativar a verificação em duas etapas desta conta. Se não foi você,
+              ou se mudou de ideia, cancele o pedido agora.
             </p>
             {cancel.isError && <Notice kind="error">{errorMessage(cancel.error)}</Notice>}
             <Button block loading={cancel.isPending} onClick={() => cancel.mutate(token)}>
