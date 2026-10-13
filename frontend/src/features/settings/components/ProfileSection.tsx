@@ -39,7 +39,7 @@ export function ProfileSection({ user }: ProfileSectionProps) {
   });
 
   return (
-    <SettingsSection title="Perfil">
+    <SettingsSection>
       <form noValidate onSubmit={(event) => void submit(event)} className="grid gap-4">
         {update.isError && <Notice kind="error">{errorMessage(update.error)}</Notice>}
         <TextField label="Nome" autoComplete="name" error={errors.name?.message} {...field("name")} />

@@ -20,10 +20,8 @@ export function ThemeSection() {
   };
 
   return (
-    <SettingsSection
-      title="Aparência"
-      description="No modo automático, o Contaí acompanha o tema do seu aparelho."
-    >
+    <SettingsSection description="No modo automático, o Contaí acompanha o tema do seu aparelho.">
+
       <SegmentedControl
         label="Tema"
         hideLabel

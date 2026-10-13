@@ -68,10 +68,8 @@ export function SessionsSection() {
   };
 
   return (
-    <SettingsSection
-      title="Dispositivos conectados"
-      description="Aparelhos e navegadores onde sua conta está aberta."
-    >
+    <SettingsSection description="Aparelhos e navegadores onde sua conta está aberta.">
+
       {sessions.isPending && (
         <div role="status" className="grid gap-3">
           <span className="sr-only">Carregando as sessões…</span>
