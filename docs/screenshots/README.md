@@ -1,7 +1,10 @@
 # Capturas de tela
 
-As imagens referenciadas pelo [README](../../README.md) ficam aqui. Elas **não** são geradas
-automaticamente neste ambiente (não há navegador com interface gráfica), então precisam ser
+As imagens referenciadas pelo [README](../../README.md) ficam aqui.
+
+As cinco capturas já foram geradas (`painel.png`, `lancamentos.png`, `importacao-revisao.png`,
+`assistente.png`, `configuracoes.png`). Use o guia abaixo se precisar atualizá-las — elas não são
+geradas automaticamente neste ambiente (não há navegador com interface gráfica), então são
 capturadas à mão e adicionadas a esta pasta.
 
 ## O que capturar
