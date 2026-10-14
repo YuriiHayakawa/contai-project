@@ -5,7 +5,7 @@
 
 export const PRIVACY_POLICY_VERSION = "1";
 /** Data da versão, como dia de calendário (`YYYY-MM-DD`). */
-export const PRIVACY_POLICY_UPDATED_ON = "2026-10-01";
+export const PRIVACY_POLICY_UPDATED_ON = "2026-10-14";
 
 export interface PolicySection {
   title: string;
@@ -37,7 +37,7 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
   {
     title: "O que é enviado ao serviço de inteligência artificial",
     paragraphs: [
-      "Algumas funções do Contaí usam um serviço de inteligência artificial (IA) de outra empresa. Enviamos a ele só o necessário para cada tarefa:",
+      "Algumas funções do Contaí usam o plano gratuito de um serviço de inteligência artificial (IA) de outra empresa. Enviamos a ele só o necessário para cada tarefa:",
     ],
     items: [
       "quando você faz uma pergunta ao assistente: a pergunta e os dados necessários para respondê-la, como totais e lançamentos do período perguntado;",
@@ -55,7 +55,7 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
   {
     title: "Como o serviço de IA pode usar esses dados",
     paragraphs: [
-      "A empresa que fornece o serviço de IA pode usar os dados que recebe para melhorar os próprios modelos. Isso vale para tudo o que é enviado a ela, conforme a lista acima.",
+      "Como o Contaí usa o plano gratuito desse serviço, a empresa que o fornece pode usar os dados que recebe para melhorar os próprios modelos. Isso vale para tudo o que é enviado a ela, conforme a lista acima.",
       "Se você não quiser que um documento seja usado assim, não envie PDFs nem imagens: você pode lançar os valores à mão ou importar arquivos OFX, CSV e planilhas, que não passam pela IA.",
     ],
   },

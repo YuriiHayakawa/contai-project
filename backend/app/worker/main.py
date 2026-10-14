@@ -27,9 +27,13 @@ HEARTBEAT_INTERVAL = timedelta(seconds=15)
 STUCK_CHECK_INTERVAL = timedelta(minutes=1)
 LOGIN_ATTEMPT_PURGE_INTERVAL = timedelta(hours=1)
 IMPORT_CLEANUP_INTERVAL = timedelta(minutes=10)
+# Tokens vencidos, sessões antigas e jobs concluídos não têm pressa: uma vez por hora basta.
+EXPIRED_DATA_CLEANUP_INTERVAL = timedelta(hours=1)
 # A desativação da verificação em duas etapas tem prazo de 72 horas: conferir de hora em hora
 # dá folga de sobra para o lembrete de 24 horas antes e para aplicar no fim do prazo.
 TWO_FACTOR_RESET_INTERVAL = timedelta(minutes=30)
+# A exclusão de conta tem prazo de 7 dias: conferir de hora em hora é mais que suficiente.
+ACCOUNT_DELETION_INTERVAL = timedelta(hours=1)
 UNEXPECTED_ERROR_CODE = "unexpected_error"
 
 JobHandler = Callable[[AsyncSession, Job], Awaitable[None]]
@@ -143,9 +147,11 @@ async def _wait(stop: asyncio.Event, seconds: float) -> None:
 
 def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     """Monta o worker com tudo que ele executa."""
-    # Importar o módulo registra os tipos de e-mail que o job sabe enviar.
+    # Importar os módulos registra os tipos de e-mail que o job sabe enviar.
     from app.modules.auth import emails as _auth_emails  # noqa: F401
-    from app.worker.jobs.cleanup import cleanup_imports
+    from app.modules.users import emails as _user_emails  # noqa: F401
+    from app.worker.jobs.account_deletion import purge_due_account_deletions
+    from app.worker.jobs.cleanup import cleanup_expired_auth_and_jobs, cleanup_imports
     from app.worker.jobs.login_attempts import purge_login_attempts
     from app.worker.jobs.process_import import handle_import_given_up, handle_process_import
     from app.worker.jobs.send_email import handle_send_email
@@ -165,10 +171,18 @@ def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     )
     worker.register_periodic("cleanup_imports", IMPORT_CLEANUP_INTERVAL, cleanup_imports)
     worker.register_periodic(
+        "cleanup_expired_auth_and_jobs",
+        EXPIRED_DATA_CLEANUP_INTERVAL,
+        cleanup_expired_auth_and_jobs,
+    )
+    worker.register_periodic(
         "two_factor_reset_reminders", TWO_FACTOR_RESET_INTERVAL, send_two_factor_reset_reminders
     )
     worker.register_periodic(
         "apply_two_factor_resets", TWO_FACTOR_RESET_INTERVAL, apply_due_two_factor_resets
+    )
+    worker.register_periodic(
+        "purge_account_deletions", ACCOUNT_DELETION_INTERVAL, purge_due_account_deletions
     )
     return worker
 

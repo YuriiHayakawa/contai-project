@@ -725,7 +725,7 @@ describe("política de privacidade", () => {
     }
     expect(screen.getByText(/melhorar os próprios modelos/)).toBeInTheDocument();
     expect(screen.getByText(/guardada por 14 dias/)).toBeInTheDocument();
-    expect(screen.getByText(/Versão 1, de 1 de outubro de 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Versão 1, de 14 de outubro de 2026/)).toBeInTheDocument();
   });
 });
 

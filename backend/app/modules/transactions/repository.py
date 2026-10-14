@@ -167,6 +167,15 @@ class TransactionRepository:
         await self._session.refresh(transaction)
         return transaction
 
+    async def list_all_for_user(self, user_id: uuid.UUID) -> list[Transaction]:
+        """Todas as transações do usuário, da mais antiga para a mais nova (exportação)."""
+        statement = (
+            select(Transaction)
+            .where(Transaction.user_id == user_id)
+            .order_by(Transaction.date, Transaction.created_at, Transaction.id)
+        )
+        return list((await self._session.execute(statement)).scalars())
+
     async def get(self, user_id: uuid.UUID, transaction_id: uuid.UUID) -> Transaction | None:
         result = await self._session.execute(
             select(Transaction).where(

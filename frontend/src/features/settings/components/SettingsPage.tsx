@@ -1,4 +1,11 @@
-import { MonitorSmartphone, ShieldCheck, ShieldOff, SunMoon, UserRound } from "lucide-react";
+import {
+  DatabaseBackup,
+  MonitorSmartphone,
+  ShieldCheck,
+  ShieldOff,
+  SunMoon,
+  UserRound,
+} from "lucide-react";
 import { useState } from "react";
 
 import { PageContent } from "../../../components/layout/AppShell";
@@ -7,6 +14,8 @@ import { Skeleton } from "../../../components/ui/Skeleton";
 import { cn } from "../../../lib/cn";
 import type { CurrentUser } from "../../auth/types";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { DeleteAccountSection } from "./DeleteAccountSection";
+import { ExportSection } from "./ExportSection";
 import { PasswordSection } from "./PasswordSection";
 import { ProfileSection } from "./ProfileSection";
 import { SessionsSection } from "./SessionsSection";
@@ -107,6 +116,17 @@ export function SettingsPage() {
       label: "Aparência",
       icon: SunMoon,
       content: <ThemeSection />,
+    },
+    {
+      id: "conta",
+      label: "Conta",
+      icon: DatabaseBackup,
+      content: (
+        <>
+          <ExportSection />
+          <DeleteAccountSection user={user} />
+        </>
+      ),
     },
   ];
 
