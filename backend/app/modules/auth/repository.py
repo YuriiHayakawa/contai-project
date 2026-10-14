@@ -341,3 +341,27 @@ class AuthRepository:
             .returning(LoginAttempt.email_hash)
         )
         return len(result.scalars().all())
+
+    async def delete_expired_email_tokens(self, now: datetime) -> int:
+        """Apaga os tokens de e-mail já vencidos (o link deles não vale mais)."""
+        result = await self._session.execute(
+            delete(EmailToken).where(EmailToken.expires_at < now).returning(EmailToken.id)
+        )
+        return len(result.scalars().all())
+
+    async def delete_stale_sessions(self, *, now: datetime, revoked_before: datetime) -> int:
+        """Apaga as sessões já expiradas e as revogadas há mais de 30 dias.
+
+        As sessões ativas ficam; uma revogada recente ainda serve para auditar o motivo.
+        """
+        result = await self._session.execute(
+            delete(Session)
+            .where(
+                or_(
+                    Session.expires_at < now,
+                    Session.revoked_at < revoked_before,
+                )
+            )
+            .returning(Session.id)
+        )
+        return len(result.scalars().all())
