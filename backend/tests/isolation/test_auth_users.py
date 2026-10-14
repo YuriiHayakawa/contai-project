@@ -18,6 +18,9 @@ exempt(
     "/api/v1/users/me/2fa/recovery-codes",
     "gera códigos de recuperação do próprio usuário",
 )
+exempt("GET", "/api/v1/users/me/export", "exporta só os dados do próprio usuário do token")
+exempt("POST", "/api/v1/users/me/deletion", "agenda a exclusão do próprio usuário do token")
+exempt("DELETE", "/api/v1/users/me/deletion", "cancela a exclusão do próprio usuário do token")
 
 
 @isolation_case("GET", "/api/v1/users/me")

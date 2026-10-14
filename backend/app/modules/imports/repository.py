@@ -291,3 +291,22 @@ class ImportRepository:
             select(Import.stored_filename).where(Import.stored_filename.is_not(None))
         )
         return {name for name in result.scalars() if name is not None}
+
+    async def list_all_for_user(self, user_id: uuid.UUID) -> list[Import]:
+        """Todas as importações do usuário, da mais antiga para a mais nova (exportação)."""
+        statement = (
+            select(Import).where(Import.user_id == user_id).order_by(Import.created_at, Import.id)
+        )
+        return list((await self._session.execute(statement)).scalars())
+
+    async def stored_filenames_for_user(self, user_id: uuid.UUID) -> set[str]:
+        """Os nomes dos arquivos que as importações deste usuário ainda guardam.
+
+        Usado na exclusão definitiva para apagar do disco o que sobra depois da cascata.
+        """
+        result = await self._session.execute(
+            select(Import.stored_filename).where(
+                Import.user_id == user_id, Import.stored_filename.is_not(None)
+            )
+        )
+        return {name for name in result.scalars() if name is not None}
