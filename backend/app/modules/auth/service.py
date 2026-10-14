@@ -53,6 +53,8 @@ LOCK_DURATION = timedelta(minutes=15)
 # Uma contagem sem erro novo por este tempo é apagada: os erros deixam de ser "seguidos".
 LOGIN_ATTEMPT_RETENTION = timedelta(hours=24)
 SESSION_TTL = timedelta(days=30)
+# Uma sessão revogada ainda serve por um tempo para auditar o motivo; depois disso, sai.
+REVOKED_SESSION_RETENTION = timedelta(days=30)
 # A desativação da verificação em duas etapas só vale 72 horas após o pedido (FR-013), com um
 # lembrete por e-mail 24 horas antes.
 TWO_FACTOR_RESET_DELAY = timedelta(hours=72)
@@ -276,6 +278,18 @@ class AuthService:
         return await self._auth.purge_login_attempts(
             last_failed_before=now - LOGIN_ATTEMPT_RETENTION, now=now
         )
+
+    async def purge_expired_auth_data(self) -> int:
+        """Apaga tokens de e-mail vencidos e sessões expiradas ou revogadas há mais de 30 dias.
+
+        Devolve o total de linhas apagadas, só para o log do worker.
+        """
+        now = clock.utcnow()
+        tokens = await self._auth.delete_expired_email_tokens(now)
+        sessions = await self._auth.delete_stale_sessions(
+            now=now, revoked_before=now - REVOKED_SESSION_RETENTION
+        )
+        return tokens + sessions
 
     async def _open_session(
         self, user: User, *, user_agent: str, ip: str, now: datetime
