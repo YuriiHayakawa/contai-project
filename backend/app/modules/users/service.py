@@ -1,7 +1,7 @@
 """Regras do usuário sobre a própria conta: perfil, senha, sessões e verificação em duas etapas."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +29,11 @@ from app.modules.auth.errors import (
 from app.modules.auth.models import SessionRevokedReason
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.two_factor import verify_second_factor
-from app.modules.users.models import User
+from app.modules.imports import storage
+from app.modules.imports.repository import ImportRepository
+from app.modules.users import emails
+from app.modules.users.export import build_account_export
+from app.modules.users.models import User, UserStatus
 from app.modules.users.repository import UserRepository
 from app.modules.users.schemas import (
     RecoveryCodesResponse,
@@ -37,6 +41,11 @@ from app.modules.users.schemas import (
     TwoFactorSetupResponse,
     UserRead,
 )
+from app.worker.jobs.send_email import enqueue_email
+from app.worker.repository import WorkerRepository
+
+# A conta fica desativada por 7 dias antes de ser apagada de vez; nesse prazo, dá para desistir.
+DELETION_GRACE_PERIOD = timedelta(days=7)
 
 
 class UserService:
@@ -198,3 +207,71 @@ class UserService:
         codes = generate_recovery_codes()
         await self._auth.replace_recovery_codes(user_id, [hash_recovery_code(c) for c in codes])
         return RecoveryCodesResponse(recovery_codes=codes)
+
+    # ---------- exportação e exclusão da conta (FR-016, FR-017)
+
+    async def export_data(self, user_id: uuid.UUID) -> bytes:
+        """Monta o ZIP com todos os dados do usuário (FR-016)."""
+        await self._require(user_id)
+        return await build_account_export(self._session, user_id)
+
+    async def request_deletion(
+        self, user_id: uuid.UUID, *, password: str, code: str | None
+    ) -> datetime:
+        """Agenda a exclusão: desativa a conta na hora e encerra as sessões (FR-017).
+
+        Exige a senha e, com as duas etapas ativas, um código do app ou de recuperação. Os jobs
+        pendentes são cancelados para nada rodar durante o prazo. Pedir de novo, já em exclusão,
+        não muda a data agendada.
+        """
+        user = await self._require(user_id)
+        if user.status == UserStatus.PENDING_DELETION and user.deletion_scheduled_at is not None:
+            return user.deletion_scheduled_at
+
+        now = clock.utcnow()
+        self._require_password(user, password)
+        if user.totp_enabled_at is not None:
+            await self._require_code(user, code or "", now)
+
+        scheduled_at = now + DELETION_GRACE_PERIOD
+        user.status = UserStatus.PENDING_DELETION
+        user.deletion_requested_at = now
+        user.deletion_scheduled_at = scheduled_at
+        await self._users.save(user)
+        await self._auth.revoke_all_sessions(
+            user_id, reason=SessionRevokedReason.ACCOUNT_DELETION, now=now
+        )
+        await WorkerRepository(self._session).cancel_pending_for_user(user_id)
+        await enqueue_email(
+            self._session,
+            user_id=user_id,
+            email_type=emails.ACCOUNT_DELETION_SCHEDULED,
+            context={"scheduled_at": clock.format_datetime(scheduled_at)},
+        )
+        return scheduled_at
+
+    async def cancel_deletion(self, user_id: uuid.UUID) -> None:
+        """Desiste da exclusão dentro do prazo: a conta volta a funcionar por inteiro."""
+        user = await self._require(user_id)
+        if user.status != UserStatus.PENDING_DELETION:
+            return
+        user.status = UserStatus.ACTIVE
+        user.deletion_requested_at = None
+        user.deletion_scheduled_at = None
+        await self._users.save(user)
+
+    async def purge_due_account_deletions(self) -> int:
+        """Apaga de vez as contas cujo prazo venceu: o banco cascateia e os arquivos saem do disco.
+
+        Os nomes dos arquivos são colhidos antes de apagar o usuário, pois a cascata remove as
+        importações que os apontavam.
+        """
+        now = clock.utcnow()
+        due = await self._users.list_deletions_due(now)
+        imports = ImportRepository(self._session)
+        for user in due:
+            stored = await imports.stored_filenames_for_user(user.id)
+            await self._users.delete(user.id)
+            for stored_filename in stored:
+                await storage.delete(stored_filename)
+        return len(due)

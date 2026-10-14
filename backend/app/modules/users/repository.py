@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.users.models import User
+from app.modules.users.models import User, UserStatus
 
 
 class UserRepository:
@@ -50,3 +50,13 @@ class UserRepository:
     async def delete(self, user_id: uuid.UUID) -> None:
         """Apaga o usuário; o banco apaga em cascata todos os dados dele."""
         await self._session.execute(delete(User).where(User.id == user_id))
+
+    async def list_deletions_due(self, now: datetime) -> list[User]:
+        """Contas com exclusão pedida cujo prazo de 7 dias já venceu."""
+        result = await self._session.execute(
+            select(User).where(
+                User.status == UserStatus.PENDING_DELETION,
+                User.deletion_scheduled_at <= now,
+            )
+        )
+        return list(result.scalars())

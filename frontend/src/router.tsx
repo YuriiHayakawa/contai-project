@@ -77,6 +77,11 @@ const SettingsPage = lazy(() =>
     default: module.SettingsPage,
   })),
 );
+const PendingDeletionPage = lazy(() =>
+  import("./features/settings/components/PendingDeletionPage").then((module) => ({
+    default: module.PendingDeletionPage,
+  })),
+);
 const DashboardPage = lazy(() =>
   import("./features/dashboard/components/DashboardPage").then((module) => ({
     default: module.DashboardPage,
@@ -163,6 +168,18 @@ export function RequireAuth() {
     return <Navigate to={paths.login} replace state={state} />;
   }
 
+  return <Outlet />;
+}
+
+/**
+ * Guard das telas internas: uma conta com exclusão pedida não entra no app. Fica na tela única
+ * de exclusão, onde só dá para cancelar ou sair, até a conta voltar a ser ativa (FR-017).
+ */
+function RequireActiveAccount() {
+  const { user } = useAuth();
+  if (user?.status === "pending_deletion") {
+    return <Navigate to={paths.pendingDeletion} replace />;
+  }
   return <Outlet />;
 }
 
@@ -286,20 +303,27 @@ export const routes: RouteObject[] = [
       {
         element: <RequireAuth />,
         children: [
+          // A tela de conta em exclusão fica fora da casca: sem navegação para o resto do app.
+          { path: paths.pendingDeletion, element: <PendingDeletionPage /> },
           {
-            element: <AppLayout />,
+            element: <RequireActiveAccount />,
             children: [
-              { path: paths.home, element: <DashboardPage /> },
-              { path: paths.transactions, element: <TransactionsPage /> },
-              { path: paths.accounts, element: <AccountsPage /> },
-              { path: paths.cards, element: <CardsPage /> },
-              { path: paths.categories, element: <CategoriesPage /> },
-              { path: paths.imports, element: <ImportHistoryPage /> },
-              { path: paths.importNew, element: <UploadPage /> },
-              { path: paths.importDetail, element: <UploadPage /> },
-              { path: paths.importReview, element: <ReviewPage /> },
-              { path: paths.assistantChat, element: <ChatPage /> },
-              { path: paths.settings, element: <SettingsPage /> },
+              {
+                element: <AppLayout />,
+                children: [
+                  { path: paths.home, element: <DashboardPage /> },
+                  { path: paths.transactions, element: <TransactionsPage /> },
+                  { path: paths.accounts, element: <AccountsPage /> },
+                  { path: paths.cards, element: <CardsPage /> },
+                  { path: paths.categories, element: <CategoriesPage /> },
+                  { path: paths.imports, element: <ImportHistoryPage /> },
+                  { path: paths.importNew, element: <UploadPage /> },
+                  { path: paths.importDetail, element: <UploadPage /> },
+                  { path: paths.importReview, element: <ReviewPage /> },
+                  { path: paths.assistantChat, element: <ChatPage /> },
+                  { path: paths.settings, element: <SettingsPage /> },
+                ],
+              },
             ],
           },
         ],

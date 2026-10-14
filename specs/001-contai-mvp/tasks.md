@@ -491,17 +491,17 @@ do prazo, pedir de novo e, passados os 7 dias, não conseguir mais entrar
 
 ### Tests for User Story 10 ⚠️
 
-- [ ] T204 [P] [US10] Escrever `backend/tests/integration/test_export.py`: o ZIP contém perfil, contas, categorias, transações, importações e conversas do próprio usuário e nada de outro usuário
-- [ ] T205 [P] [US10] Escrever `backend/tests/integration/test_account_deletion.py`: o pedido exige a senha, desativa a conta na hora, encerra as sessões, cancela os jobs pendentes e envia o e-mail com a data; durante os 7 dias só `GET /users/me` e o cancelamento funcionam; o cancelamento restaura tudo; no prazo, o worker apaga o usuário e, em cascata, todas as tabelas e os arquivos; depois disso não é possível entrar
-- [ ] T206 [P] [US10] Escrever `frontend/src/features/settings/components/DeleteAccountSection.test.tsx`: mostra o aviso do prazo de 7 dias e o convite a baixar os dados; exige a senha; pede confirmação antes de enviar; senha errada mostra o erro sem fechar o diálogo
+- [X] T204 [P] [US10] Escrever `backend/tests/integration/test_export.py`: o ZIP contém perfil, contas, categorias, transações, importações e conversas do próprio usuário e nada de outro usuário
+- [X] T205 [P] [US10] Escrever `backend/tests/integration/test_account_deletion.py`: o pedido exige a senha, desativa a conta na hora, encerra as sessões, cancela os jobs pendentes e envia o e-mail com a data; durante os 7 dias só `GET /users/me` e o cancelamento funcionam; o cancelamento restaura tudo; no prazo, o worker apaga o usuário e, em cascata, todas as tabelas e os arquivos; depois disso não é possível entrar
+- [X] T206 [P] [US10] Escrever `frontend/src/features/settings/components/DeleteAccountSection.test.tsx`: mostra o aviso do prazo de 7 dias e o convite a baixar os dados; exige a senha; pede confirmação antes de enviar; senha errada mostra o erro sem fechar o diálogo
 
 ### Implementation for User Story 10
 
-- [ ] T207 [P] [US10] Implementar `backend/app/modules/users/export.py`: ZIP gerado com `zipfile` e `csv` da biblioteca padrão (CSV para contas, categorias, transações e importações; JSON para perfil e conversas), lendo os dados só pelos repositórios de `users`, `accounts`, `categories`, `transactions`, `imports` e `assistant`, sempre com `user_id`
-- [ ] T208 [US10] Implementar em `backend/app/modules/users/service.py` e `router.py` as rotas `GET /users/me/export`, `POST /users/me/deletion` e `DELETE /users/me/deletion`, com o modelo `backend/app/email/templates/account_deletion_scheduled.txt` (FR-016, FR-017)
-- [ ] T209 [US10] Implementar em `backend/app/modules/users/service.py` a exclusão definitiva das contas vencidas (apaga o usuário pelo repositório de `users`, com cascata no banco, e remove os arquivos remanescentes) e a tarefa periódica `backend/app/worker/jobs/account_deletion.py`, que só chama esse serviço, sem consulta direta ao banco; registrá-la em `backend/app/worker/main.py`
-- [ ] T210 [P] [US10] Implementar `frontend/src/features/settings/components/ExportSection.tsx` e `DeleteAccountSection.tsx` (aviso do prazo de 7 dias, convite a baixar os dados antes e confirmação com a senha) e incluí-las em `SettingsPage.tsx`
-- [ ] T211 [US10] Implementar `frontend/src/features/settings/components/PendingDeletionPage.tsx` (data da exclusão e botão de cancelar) e direcionar para ela em `frontend/src/features/auth/hooks/useAuth.tsx` quando a conta está em exclusão
+- [X] T207 [P] [US10] Implementar `backend/app/modules/users/export.py`: ZIP gerado com `zipfile` e `csv` da biblioteca padrão (CSV para contas, categorias, transações e importações; JSON para perfil e conversas), lendo os dados só pelos repositórios de `users`, `accounts`, `categories`, `transactions`, `imports` e `assistant`, sempre com `user_id`
+- [X] T208 [US10] Implementar em `backend/app/modules/users/service.py` e `router.py` as rotas `GET /users/me/export`, `POST /users/me/deletion` e `DELETE /users/me/deletion`, com o modelo `backend/app/email/templates/account_deletion_scheduled.txt` (FR-016, FR-017)
+- [X] T209 [US10] Implementar em `backend/app/modules/users/service.py` a exclusão definitiva das contas vencidas (apaga o usuário pelo repositório de `users`, com cascata no banco, e remove os arquivos remanescentes) e a tarefa periódica `backend/app/worker/jobs/account_deletion.py`, que só chama esse serviço, sem consulta direta ao banco; registrá-la em `backend/app/worker/main.py`
+- [X] T210 [P] [US10] Implementar `frontend/src/features/settings/components/ExportSection.tsx` e `DeleteAccountSection.tsx` (aviso do prazo de 7 dias, convite a baixar os dados antes e confirmação com a senha) e incluí-las em `SettingsPage.tsx`
+- [X] T211 [US10] Implementar `frontend/src/features/settings/components/PendingDeletionPage.tsx` (data da exclusão e botão de cancelar) e direcionar para ela em `frontend/src/features/auth/hooks/useAuth.tsx` quando a conta está em exclusão
 
 **Checkpoint**: SC-011 conferido adiantando o prazo em ambiente de teste
 
