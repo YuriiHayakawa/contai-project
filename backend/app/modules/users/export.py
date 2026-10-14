@@ -11,7 +11,7 @@ import io
 import json
 import uuid
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +60,7 @@ def _when(moment: datetime | None) -> str:
     return moment.isoformat() if moment is not None else ""
 
 
-def _csv(header: list[str], rows: Iterable[list[object]]) -> str:
+def _csv(header: list[str], rows: Iterable[Sequence[object]]) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow(header)
