@@ -92,3 +92,16 @@ class RecoveryCodesResponse(BaseModel):
     """Os 10 códigos de recuperação, exibidos uma única vez (FR-011)."""
 
     recovery_codes: list[str]
+
+
+class AccountDeletionRequest(BaseModel):
+    """Pedido de exclusão: exige a senha e, com as duas etapas ativas, um código (FR-017)."""
+
+    password: Password
+    code: TwoFactorCode | None = None
+
+
+class AccountDeletionResponse(BaseModel):
+    """Resposta ao pedido: quando a conta será apagada de vez."""
+
+    deletion_scheduled_at: datetime

@@ -1,0 +1,14 @@
+Assunto: Sua conta no Contaí será excluída
+
+Olá, $name!
+
+Recebemos o pedido para excluir a sua conta no Contaí. Ela já foi desativada.
+
+A exclusão definitiva acontece em $scheduled_at. Até lá, você pode desistir: é só entrar de novo
+no Contaí com o seu e-mail e senha e cancelar a exclusão.
+
+Depois dessa data, seus dados, arquivos e conversas são apagados de vez e não há como recuperá-los.
+
+Se você não pediu isso, entre no Contaí e cancele a exclusão agora mesmo.
+
+Contaí

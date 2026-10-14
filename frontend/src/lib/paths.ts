@@ -14,6 +14,8 @@ export const paths = {
   // O chat: sem `:conversationId`, uma conversa nova; com ele, uma conversa do histórico.
   assistantChat: "/assistente/:conversationId?",
   settings: "/configuracoes",
+  // Tela única de quem entrou com a conta em exclusão: mostra a data e deixa cancelar.
+  pendingDeletion: "/conta/exclusao",
   login: "/entrar",
   register: "/criar-conta",
   // Segunda etapa do login (código do app) e o pedido de desativação para quem perdeu o acesso.

@@ -49,6 +49,15 @@ class AssistantRepository:
         statement = statement.order_by(*(column.desc() for column in order)).limit(limit)
         return list((await self._session.execute(statement)).scalars())
 
+    async def list_all_conversations(self, user_id: uuid.UUID) -> list[Conversation]:
+        """Todas as conversas do usuário, da mais antiga para a mais nova (exportação)."""
+        statement = (
+            select(Conversation)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.created_at, Conversation.id)
+        )
+        return list((await self._session.execute(statement)).scalars())
+
     async def save_conversation(self, user_id: uuid.UUID, conversation: Conversation) -> None:
         if conversation.user_id != user_id:
             raise ValueError("a conversa não é deste usuário")

@@ -3,12 +3,15 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.core.database import get_session
 from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.users.schemas import (
+    AccountDeletionRequest,
+    AccountDeletionResponse,
     ChangePasswordRequest,
     RecoveryCodesRegenerateRequest,
     RecoveryCodesResponse,
@@ -144,3 +147,47 @@ async def regenerate_recovery_codes(
 )
 async def accept_ai_documents(current: CurrentUserDep, service: UserServiceDep) -> None:
     await service.accept_ai_documents(current.id)
+
+
+@router.get(
+    "/me/export",
+    summary="Baixar todos os dados da conta",
+    description="Devolve um ZIP com perfil, contas, categorias, lançamentos, importações, "
+    "regras de categoria e conversas (FR-016).",
+    response_class=Response,
+    responses={200: {"content": {"application/zip": {}}}},
+)
+async def export_data(current: CurrentUserDep, service: UserServiceDep) -> Response:
+    content = await service.export_data(current.id)
+    today = clock.today().isoformat()
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="contai-dados-{today}.zip"'},
+    )
+
+
+@router.post(
+    "/me/deletion",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Pedir a exclusão da conta",
+    description="Exige a senha e, com as duas etapas ativas, um código. Desativa a conta na hora "
+    "e encerra as sessões; a exclusão definitiva acontece em 7 dias (FR-017).",
+)
+async def request_deletion(
+    body: AccountDeletionRequest, current: CurrentUserDep, service: UserServiceDep
+) -> AccountDeletionResponse:
+    scheduled_at = await service.request_deletion(
+        current.id, password=body.password, code=body.code
+    )
+    return AccountDeletionResponse(deletion_scheduled_at=scheduled_at)
+
+
+@router.delete(
+    "/me/deletion",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cancelar a exclusão da conta",
+    description="Dentro dos 7 dias, desiste da exclusão e reativa a conta.",
+)
+async def cancel_deletion(current: CurrentUserDep, service: UserServiceDep) -> None:
+    await service.cancel_deletion(current.id)

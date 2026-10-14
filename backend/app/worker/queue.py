@@ -97,3 +97,13 @@ async def fail(session: AsyncSession, job: Job, error: JobError) -> bool:
 
 async def recover_stuck(session: AsyncSession) -> int:
     return await WorkerRepository(session).requeue_stuck(clock.utcnow() - STUCK_AFTER)
+
+
+# Jobs concluídos (ou que desistiram) são guardados por um tempo para auditoria; depois saem.
+FINISHED_JOB_RETENTION = timedelta(days=7)
+
+
+async def purge_finished(session: AsyncSession) -> int:
+    """Apaga os jobs concluídos ou com falha definitiva há mais de uma semana."""
+    cutoff = clock.utcnow() - FINISHED_JOB_RETENTION
+    return await WorkerRepository(session).delete_finished_before(cutoff)

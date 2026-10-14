@@ -2,7 +2,13 @@
 // desta feature chamam este módulo.
 import { api } from "../../../lib/api-client";
 import type { CurrentUser, RecoveryCodes, SessionInfo, TwoFactorSetup } from "../../auth/types";
-import type { ChangePasswordInput, TwoFactorPasswordCode, UpdateProfileInput } from "../types";
+import type {
+  AccountDeletion,
+  AccountDeletionInput,
+  ChangePasswordInput,
+  TwoFactorPasswordCode,
+  UpdateProfileInput,
+} from "../types";
 
 export function updateProfile(input: UpdateProfileInput): Promise<CurrentUser> {
   return api.patch<CurrentUser>("/users/me", input);
@@ -40,4 +46,21 @@ export function disableTwoFactor(input: TwoFactorPasswordCode): Promise<void> {
 
 export function regenerateRecoveryCodes(input: TwoFactorPasswordCode): Promise<RecoveryCodes> {
   return api.post<RecoveryCodes>("/users/me/2fa/recovery-codes", input);
+}
+
+// ---------- exportar os dados e excluir a conta
+
+/** Baixa um ZIP com todos os dados da conta (FR-016). */
+export function exportData(): Promise<Blob> {
+  return api.get<Blob>("/users/me/export", { responseType: "blob" });
+}
+
+/** Pede a exclusão da conta: desativa na hora e agenda a exclusão definitiva (FR-017). */
+export function requestDeletion(input: AccountDeletionInput): Promise<AccountDeletion> {
+  return api.post<AccountDeletion>("/users/me/deletion", input);
+}
+
+/** Cancela a exclusão dentro do prazo e reativa a conta. */
+export function cancelDeletion(): Promise<void> {
+  return api.delete("/users/me/deletion");
 }
