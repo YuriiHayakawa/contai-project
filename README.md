@@ -310,7 +310,6 @@ e na pesquisa, mas ainda não implementada:
 
 ## 👤 Autor
 
-Feito por **Yuri** · [GitHub](https://github.com/YuriiHayakawa)
+Feito por **Yuri Hayakawa** · [GitHub](https://github.com/YuriiHayakawa)
 
-Projeto pessoal e de portfólio. Caso venha a ser aberto publicamente, adicione um arquivo
-`LICENSE` com a licença desejada.
+Projeto pessoal e de portfólio, distribuído sob a licença [MIT](LICENSE).
