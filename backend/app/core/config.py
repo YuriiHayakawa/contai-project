@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # Segredos: sem valor padrão, sempre vindos do ambiente
     jwt_secret: SecretStr
     totp_encryption_key: SecretStr
+    # Segredo que a Vercel acrescenta a cada requisição repassada; vazio desliga a checagem.
+    proxy_shared_secret: SecretStr = SecretStr("")
 
     # E-mail
     smtp_host: str
@@ -77,6 +79,10 @@ class Settings(BaseSettings):
             )
         if not self.totp_encryption_key.get_secret_value():
             raise ValueError("TOTP_ENCRYPTION_KEY é obrigatória em produção")
+        if len(self.proxy_shared_secret.get_secret_value()) < MIN_JWT_SECRET_LENGTH:
+            raise ValueError(
+                "PROXY_SHARED_SECRET precisa ser gerado para produção (mínimo de 32 caracteres)"
+            )
         if self.ai_provider == "gemini" and not self.ai_api_key.get_secret_value():
             raise ValueError("AI_API_KEY é obrigatória com AI_PROVIDER=gemini")
         return self

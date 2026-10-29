@@ -21,7 +21,8 @@ COPY --chmod=755 entrypoint.sh /entrypoint.sh
 
 USER app
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# O Render informa a porta em PORT; fora dele vale a 8000.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port \"${PORT:-8000}\""]
 
 # Desenvolvimento: inclui as ferramentas de lint, tipos e testes; o código vem por volume.
 FROM base AS dev

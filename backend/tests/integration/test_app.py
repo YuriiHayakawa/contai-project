@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.core.config import Settings
 from app.core.errors import Conflict, NotFound, RateLimited
 from app.core.logging import JsonFormatter
+from app.core.proxy import PROXY_SECRET_HEADER
 from app.main import create_app
 
 
@@ -142,6 +143,9 @@ async def test_every_response_has_request_id_and_security_headers(api: AsyncClie
         assert "Strict-Transport-Security" not in response.headers
 
 
+PROXY_SECRET = "p" * 64
+
+
 def _production_settings(**overrides: str) -> Settings:
     values = {
         "environment": "production",
@@ -149,6 +153,7 @@ def _production_settings(**overrides: str) -> Settings:
         "app_origin": "https://contai.example",
         "jwt_secret": "x" * 64,
         "totp_encryption_key": "chave",
+        "proxy_shared_secret": PROXY_SECRET,
         "smtp_host": "smtp.example",
         "email_from": "Contaí <nao-responda@contai.example>",
         **overrides,
@@ -158,7 +163,12 @@ def _production_settings(**overrides: str) -> Settings:
 
 async def test_production_adds_hsts_and_hides_the_docs() -> None:
     app = create_app(_production_settings())
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        # Em produção, só passa o que veio pelo proxy da Vercel, com o segredo.
+        headers={PROXY_SECRET_HEADER: PROXY_SECRET},
+    ) as client:
         missing = await client.get("/nao-existe")
         docs = await client.get("/api/docs")
         openapi = await client.get("/api/openapi.json")
