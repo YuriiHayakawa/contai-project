@@ -17,6 +17,8 @@ async def test_responses_carry_the_security_headers(client: AsyncClient) -> None
     assert response.status_code == 401
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["referrer-policy"] == "no-referrer"
+    # Nada da API vai para cache, nem no navegador nem no CDN da Vercel.
+    assert response.headers["cache-control"] == "no-store"
     csp = response.headers["content-security-policy"]
     assert "default-src 'none'" in csp
     assert "frame-ancestors 'none'" in csp
@@ -25,7 +27,11 @@ async def test_responses_carry_the_security_headers(client: AsyncClient) -> None
 
 
 async def test_hsts_is_added_in_production() -> None:
-    settings = Settings(environment="production", totp_encryption_key="chave-de-teste-producao")
+    settings = Settings(
+        environment="production",
+        totp_encryption_key="chave-de-teste-producao",
+        proxy_shared_secret="p" * 64,
+    )
     production_app = create_app(settings)
     transport = ASGITransport(app=production_app)
     async with AsyncClient(transport=transport, base_url=TEST_BASE_URL) as client:

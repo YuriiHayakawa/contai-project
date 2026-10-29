@@ -12,6 +12,7 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_engine
 from app.core.errors import UnexpectedErrorMiddleware, register_error_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging
+from app.core.proxy import ProxySecretMiddleware
 from app.core.rate_limit import register_rate_limiter
 from app.modules.accounts.router import router as accounts_router
 from app.modules.assistant.router import router as assistant_router
@@ -46,6 +47,9 @@ class SecurityHeadersMiddleware:
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
+                # Respostas da API nunca vão para cache: nem no navegador, nem no CDN da Vercel.
+                if not any(name.lower() == b"cache-control" for name, _ in headers):
+                    headers.append((b"cache-control", b"no-store"))
                 headers.append((b"x-content-type-options", b"nosniff"))
                 headers.append((b"referrer-policy", b"no-referrer"))
                 # A página de documentação carrega os próprios scripts; só existe fora de produção.
@@ -81,7 +85,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     # A ordem importa: o último middleware adicionado é o primeiro a receber a requisição.
-    # De fora para dentro: cabeçalhos de segurança, id da requisição, CORS, erros inesperados.
+    # De fora para dentro: id da requisição, cabeçalhos de segurança, CORS, erros inesperados e,
+    # em produção, a checagem do segredo do proxy.
+    proxy_secret = settings.proxy_shared_secret.get_secret_value()
+    if proxy_secret:
+        app.add_middleware(ProxySecretMiddleware, secret=proxy_secret)
     app.add_middleware(UnexpectedErrorMiddleware)
     if settings.cors_origins:
         app.add_middleware(

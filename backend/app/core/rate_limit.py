@@ -15,6 +15,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
 from app.core.errors import RateLimited, error_response
+from app.core.proxy import PROXIED_CLIENT_IP
 
 FORWARDED_FOR_HEADER = "x-forwarded-for"
 DEFAULT_RETRY_AFTER_SECONDS = 60
@@ -45,9 +46,14 @@ def _is_internal(host: str) -> bool:
 def client_ip(request: Request) -> str:
     """IP do cliente.
 
-    O cabeçalho `X-Forwarded-For` só é aceito quando a conexão vem da rede interna, isto é, do
-    Caddy. O Caddy acrescenta o IP real ao fim da lista, por isso vale a última entrada.
+    Em produção, vale o IP que a Vercel informou numa requisição com o segredo do proxy (ver
+    `core/proxy.py`). Em desenvolvimento, o cabeçalho `X-Forwarded-For` só é aceito quando a
+    conexão vem da rede interna, isto é, do Caddy. O Caddy acrescenta o IP real ao fim da lista,
+    por isso vale a última entrada.
     """
+    proxied: str | None = getattr(request.state, PROXIED_CLIENT_IP, None)
+    if proxied:
+        return proxied
     peer = request.client.host if request.client else ""
     forwarded = request.headers.get(FORWARDED_FOR_HEADER)
     if forwarded and _is_internal(peer):

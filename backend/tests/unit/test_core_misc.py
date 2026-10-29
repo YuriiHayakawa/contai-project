@@ -19,6 +19,7 @@ BASE = {
     "app_origin": "https://contai.example",
     "jwt_secret": "x" * 64,
     "totp_encryption_key": "chave",
+    "proxy_shared_secret": "p" * 64,
     "smtp_host": "smtp.example",
     "email_from": "Contaí <nao-responda@contai.example>",
 }
@@ -54,6 +55,8 @@ def test_cors_origins_are_parsed_from_a_comma_separated_list() -> None:
         {"jwt_secret": JWT_SECRET_PLACEHOLDER},
         {"jwt_secret": "curto"},
         {"totp_encryption_key": ""},
+        {"proxy_shared_secret": ""},
+        {"proxy_shared_secret": "curto"},
         {"ai_provider": "gemini", "ai_api_key": ""},
     ],
 )
