@@ -50,14 +50,15 @@ async def test_health_check_needs_no_secret(api: AsyncClient) -> None:
     assert (await api.get("/api/v1/health")).status_code == 200
 
 
-async def test_with_the_secret_the_real_ip_from_the_proxy_is_used(api: AsyncClient) -> None:
+async def test_with_the_secret_the_visitor_ip_from_vercel_is_used(api: AsyncClient) -> None:
     response = await api.get(
         "/api/v1/ip",
         headers={
             PROXY_SECRET_HEADER: SECRET,
-            "X-Real-IP": "203.0.113.10",
-            # A última entrada é o IP da própria Vercel, acrescentado pelo proxy do Render.
-            "X-Forwarded-For": "203.0.113.10, 76.76.21.21",
+            "X-Vercel-Forwarded-For": "203.0.113.10",
+            # O proxy do Render reescreve estes dois com endereços que não são o do visitante.
+            "X-Real-IP": "10.30.3.140",
+            "X-Forwarded-For": "203.0.113.10, 76.76.21.21, 10.30.3.140",
         },
     )
 
@@ -65,9 +66,19 @@ async def test_with_the_secret_the_real_ip_from_the_proxy_is_used(api: AsyncClie
     assert response.json() == {"ip": "203.0.113.10"}
 
 
-async def test_an_invalid_real_ip_is_ignored(api: AsyncClient) -> None:
+async def test_only_the_first_entry_of_the_vercel_header_counts(api: AsyncClient) -> None:
     response = await api.get(
-        "/api/v1/ip", headers={PROXY_SECRET_HEADER: SECRET, "X-Real-IP": "nao-e-um-ip"}
+        "/api/v1/ip",
+        headers={PROXY_SECRET_HEADER: SECRET, "X-Vercel-Forwarded-For": "2001:db8::1, 10.0.0.1"},
+    )
+
+    assert response.json() == {"ip": "2001:db8::1"}
+
+
+async def test_an_invalid_visitor_ip_is_ignored(api: AsyncClient) -> None:
+    response = await api.get(
+        "/api/v1/ip",
+        headers={PROXY_SECRET_HEADER: SECRET, "X-Vercel-Forwarded-For": "nao-e-um-ip"},
     )
 
     assert response.status_code == 200
