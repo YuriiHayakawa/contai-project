@@ -89,11 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # em produção, a checagem do segredo do proxy.
     proxy_secret = settings.proxy_shared_secret.get_secret_value()
     if proxy_secret:
-        app.add_middleware(
-            ProxySecretMiddleware,
-            secret=proxy_secret,
-            log_client_ip_headers=settings.log_client_ip_headers,
-        )
+        app.add_middleware(ProxySecretMiddleware, secret=proxy_secret)
     app.add_middleware(UnexpectedErrorMiddleware)
     if settings.cors_origins:
         app.add_middleware(

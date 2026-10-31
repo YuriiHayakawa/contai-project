@@ -34,8 +34,6 @@ ALLOWED_FIELDS = frozenset(
         "attempt",
         "worker_id",
         "count",
-        # Temporário: diagnóstico dos cabeçalhos de IP na validação do deploy (core/proxy.py).
-        "client_ip_headers",
     }
 )
 

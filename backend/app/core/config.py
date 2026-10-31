@@ -29,8 +29,6 @@ class Settings(BaseSettings):
     totp_encryption_key: SecretStr
     # Segredo que a Vercel acrescenta a cada requisição repassada; vazio desliga a checagem.
     proxy_shared_secret: SecretStr = SecretStr("")
-    # Temporário: registra os cabeçalhos de IP dos health checks que chegam pela Vercel.
-    log_client_ip_headers: bool = False
 
     # E-mail
     smtp_host: str
