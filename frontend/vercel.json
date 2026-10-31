@@ -27,7 +27,28 @@
       },
       "continue": true
     },
+    {
+      "src": "/assets/(.*)",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      },
+      "continue": true
+    },
+    {
+      "src": "/((?!assets/).*)",
+      "headers": {
+        "Cache-Control": "no-cache"
+      },
+      "continue": true
+    },
     { "handle": "filesystem" },
+    {
+      "src": "/assets/(.*)",
+      "status": 404,
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
