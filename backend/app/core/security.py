@@ -46,7 +46,19 @@ _ACCESS_TOKEN_TYPE = "access"  # noqa: S105 - nome de tipo, não é segredo
 _CHALLENGE_TOKEN_TYPE = "2fa_challenge"  # noqa: S105 - nome de tipo, não é segredo
 _COMMON_PASSWORDS_FILE = Path(__file__).parent / "data" / "common_passwords.txt"
 
-_hasher = PasswordHasher()
+# Argon2id com m=19 MiB, t=2 e p=1, a primeira configuração recomendada pelo OWASP. O padrão da
+# biblioteca (64 MiB, t=3, p=4) levava cerca de 1,4 s por senha no Render gratuito, que tem
+# 0,1 CPU: lá o paralelismo não rende, e cada login simultâneo ocupava 64 MiB dos 512 MB de
+# memória. Um hash feito com outros parâmetros é refeito no próximo login.
+ARGON2_MEMORY_COST_KIB = 19 * 1024
+ARGON2_TIME_COST = 2
+ARGON2_PARALLELISM = 1
+
+_hasher = PasswordHasher(
+    time_cost=ARGON2_TIME_COST,
+    memory_cost=ARGON2_MEMORY_COST_KIB,
+    parallelism=ARGON2_PARALLELISM,
+)
 
 
 # ---------- senhas

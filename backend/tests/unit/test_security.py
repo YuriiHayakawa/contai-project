@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
+from argon2 import PasswordHasher, Type, extract_parameters
 
 from app.core import clock, security
 from app.core.config import get_settings
@@ -72,6 +73,30 @@ def test_password_hash_uses_argon2id_and_verifies() -> None:
     assert security.verify_password(password_hash, "uma frase só minha") is True
     assert security.verify_password(password_hash, "outra frase") is False
     assert security.password_needs_rehash(password_hash) is False
+
+
+# Configurações mínimas do OWASP para o Argon2id (Password Storage Cheat Sheet): memória em KiB e
+# número de iterações, sempre com paralelismo 1. Basta atender uma delas.
+OWASP_ARGON2ID_MINIMUMS = [(47104, 1), (19456, 2), (12288, 3), (9216, 4), (7168, 5)]
+
+
+def test_password_hash_meets_an_owasp_minimum_for_argon2id() -> None:
+    parameters = extract_parameters(security.hash_password("uma frase só minha"))
+
+    assert parameters.type is Type.ID
+    assert parameters.parallelism >= 1
+    assert any(
+        parameters.memory_cost >= memory and parameters.time_cost >= iterations
+        for memory, iterations in OWASP_ARGON2ID_MINIMUMS
+    )
+
+
+def test_hashes_made_with_the_library_defaults_are_redone_on_login() -> None:
+    # Os parâmetros usados antes desta configuração (64 MiB, t=3, p=4).
+    previous = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=4).hash("frase antiga")
+
+    assert security.verify_password(previous, "frase antiga") is True
+    assert security.password_needs_rehash(previous) is True
 
 
 def test_same_password_gets_different_hashes() -> None:
