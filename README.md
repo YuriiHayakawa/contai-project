@@ -10,7 +10,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![Testes](https://img.shields.io/badge/testes-1.284%20backend%20%2F%20460%20frontend-success)
+![Testes](https://img.shields.io/badge/testes-1.322%20backend%20%2F%20468%20frontend-success)
 ![Cobertura](https://img.shields.io/badge/cobertura%20backend-98%25-success)
 
 </div>
@@ -51,7 +51,8 @@ escreve uma frase para o assistente — e acompanha para onde o dinheiro vai, m�
 
 **O que este projeto demonstra:**
 
-- Uma aplicação full-stack real (API assíncrona, worker, SPA, proxy, banco) orquestrada com Docker.
+- Uma aplicação full-stack real (API assíncrona com worker embutido, SPA e banco), com Docker
+  Compose no desenvolvimento e publicada só em planos gratuitos (Vercel, Render e Neon).
 - Domínio financeiro com exatidão: dinheiro em centavos inteiros, saldo e fatura sempre calculados.
 - Integração com LLM com **garantia numérica** — o assistente nunca apresenta um valor que não
   tenha vindo das ferramentas do próprio sistema.
@@ -114,8 +115,11 @@ As imagens ficam em [`docs/screenshots/`](docs/screenshots/) — veja ali como g
   **React Router**, **qrcode.react** (QR do 2FA).
 
 ### Infraestrutura
-- **Docker Compose** (dev e produção), **Caddy** como proxy (mesma origem, HTTPS automático em
-  produção), **Mailpit** para e-mails em desenvolvimento.
+- **Produção**, só em planos gratuitos: **Vercel** (frontend e repasse de `/api`), **Render** (API
+  em contêiner Docker) e **Neon** (PostgreSQL gerenciado), com e-mails pela API do **Brevo** e
+  tarefas agendadas disparadas pelo **GitHub Actions**.
+- **Desenvolvimento**: **Docker Compose**, com **Caddy** como proxy na mesma origem e **Mailpit**
+  para os e-mails.
 
 ### Qualidade
 - Backend: **Ruff** (lint + format), **mypy**, **pytest** (+cobertura), **pip-audit**.
@@ -125,35 +129,43 @@ As imagens ficam em [`docs/screenshots/`](docs/screenshots/) — veja ali como g
 
 ## 🏗 Arquitetura
 
-Tudo roda atrás de um único proxy, na **mesma origem** — o navegador nunca fala direto com a API.
+O navegador fala com **uma origem só**: a Vercel entrega o app e repassa `/api` para a API, que
+nunca é chamada direto.
 
 ```text
-                     ┌─────────────┐
-       navegador ──► │    Caddy    │  HTTPS · CSP/HSTS · limite de 10 MB
-                     └──────┬──────┘
-              /api/* ───────┤──────── / (resto)
-                     ┌──────▼──────┐          ┌──────────────┐
-                     │     API     │          │   frontend   │  React + Vite
-                     │  (FastAPI)  │          │  (estático)  │
-                     └──────┬──────┘          └──────────────┘
-              ┌─────────────┼───────────────┐
-       ┌──────▼─────┐  ┌────▼─────┐   ┌──────▼──────┐
-       │ PostgreSQL │  │  worker  │   │  volume de  │
-       │    (17)    │◄─┤ (fila de │   │   uploads   │  privado, fora do backup
-       │            │  │  jobs)   │   │             │
-       └────────────┘  └──────────┘   └─────────────┘
+                       ┌──────────────────────────┐
+         navegador ──► │          Vercel          │  app estático · CSP/HSTS · cache
+                       └────────────┬─────────────┘
+                     /api/* + segredo do repasse
+                       ┌────────────▼─────────────┐        ┌─────────────────┐
+  GitHub Actions ────► │       API no Render      │ ─────► │  Brevo (e-mail) │
+  (tarefas a cada 3 h) │  FastAPI + worker junto  │        └─────────────────┘
+                       └────────────┬─────────────┘
+                       ┌────────────▼─────────────┐
+                       │   PostgreSQL no Neon     │  dados, fila de jobs e
+                       │                          │  arquivos até serem lidos
+                       └──────────────────────────┘
 ```
+
+- **Uma origem só**: a Vercel repassa `/api` ao Render com um cabeçalho secreto, e a API recusa
+  quem chega sem ele. O cookie de refresh fica `httpOnly`, `Secure` e `SameSite=Strict`, sem CORS.
+- **Servidor que dorme**: o Render gratuito dorme depois de 15 minutos sem acesso e leva cerca de
+  um minuto para acordar; o app avisa enquanto espera. As tarefas com prazo rodam por um disparo
+  do GitHub Actions a cada 3 horas, e não dependem de alguém usar o app.
+- **No ambiente local**, o Docker Compose sobe o PostgreSQL, a API (com o worker embutido), o
+  servidor do Vite, o Caddy, que faz o papel da Vercel, e o Mailpit.
 
 - **Backend por domínio**: cada módulo em `app/modules/<domínio>/` segue
   `router → service → repository → models/schemas`. **Só o repositório toca o banco**, e todo
   método que lida com dados do usuário exige o `user_id` — o isolamento entre contas é verificado
   por testes dedicados.
-- **Worker**: consome uma fila de jobs no próprio PostgreSQL (`SELECT ... FOR UPDATE SKIP LOCKED`),
-  com novas tentativas por backoff. Cuida de e-mails, importações, exclusões de conta vencidas,
-  desativação de 2FA e limpezas periódicas. Os jobs chamam serviços dos módulos — nunca SQL direto.
+- **Worker**: roda dentro do processo da API e consome uma fila de jobs no próprio PostgreSQL
+  (`SELECT ... FOR UPDATE SKIP LOCKED`), com novas tentativas por backoff. Cuida de e-mails,
+  importações, exclusões de conta vencidas, desativação de 2FA e limpezas periódicas, cada tarefa
+  periódica sob um advisory lock próprio. Os jobs chamam serviços dos módulos — nunca SQL direto.
 - **Frontend por feature**: `src/features/<domínio>/` com `components`, `hooks`, `services` e
   `types`; o access token vive só em memória e é renovado por um refresh token em cookie `httpOnly`.
-- **Migrações** com Alembic rodam na subida da API; o worker só sobe com a API saudável.
+- **Migrações** com Alembic rodam na subida da API.
 
 ---
 
@@ -178,10 +190,12 @@ Contaí/
 │       ├── features/       # uma pasta por domínio
 │       ├── lib/            # cliente HTTP, rotas, formatação de dinheiro/datas
 │       └── styles/         # tokens e CSS global
+├── infra/                  # Caddy e PostgreSQL de desenvolvimento, backup
 ├── docs/
 │   ├── adr/                # decisões de arquitetura
 │   └── screenshots/        # imagens do README
 ├── specs/001-contai-mvp/   # especificação, plano, pesquisa, contratos e tarefas
+├── .github/workflows/      # CI e disparo das tarefas agendadas
 ├── docker-compose.yml      # ambiente de desenvolvimento
 └── .env.example            # variáveis de ambiente comentadas
 ```
@@ -203,7 +217,8 @@ Contaí/
   descrição, valor e conteúdo de documento nunca saem (coberto por teste).
 - **Privacidade**: cada pessoa vê só os próprios dados; à IA vai só o mínimo (descrições e nomes de
   categoria, nunca a senha nem o histórico completo); documentos enviados são apagados após a
-  leitura; dá para **baixar tudo** e **excluir a conta** (com 7 dias para desistir).
+  leitura; dá para **baixar tudo** e **excluir a conta** (com 7 dias para desistir). A política de
+  privacidade diz onde os dados ficam e quais empresas recebem o quê.
 
 ---
 
@@ -219,9 +234,9 @@ Contaí/
 
 ## ✅ Qualidade e testes
 
-- **Backend**: 1.284 testes (unit, integração e isolamento entre usuários), **98% de cobertura** em
+- **Backend**: 1.322 testes (unit, integração e isolamento entre usuários), **98% de cobertura** em
   `app/modules`. Um teste garante que **toda rota autenticada** tem caso de isolamento.
-- **Frontend**: 460 testes (componentes e rotas) com Vitest + Testing Library.
+- **Frontend**: 468 testes (componentes e rotas) com Vitest + Testing Library.
 - Lint, formatação e checagem de tipos em CI nos dois lados.
 
 ```sh
@@ -247,10 +262,12 @@ As escolhas de arquitetura ficam registradas em [`docs/adr/`](docs/adr/):
 | [0003](docs/adr/0003-camada-de-ia-e-garantia-numerica.md) | Camada de IA e garantia numérica das respostas |
 | [0004](docs/adr/0004-dinheiro-em-centavos-e-saldo-calculado.md) | Dinheiro em centavos e saldo sempre calculado |
 | [0005](docs/adr/0005-importadores-e-duplicatas.md) | Importadores e detecção de duplicatas |
-| [0006](docs/adr/0006-uploads-em-volume-privado.md) | Uploads em volume privado, fora do backup |
-| [0007](docs/adr/0007-backup-cifrado.md) | Backup diário cifrado com chave pública |
+| [0006](docs/adr/0006-uploads-em-volume-privado.md) | Uploads em volume privado (substituído pelo 0011) |
+| [0007](docs/adr/0007-backup-cifrado.md) | Backup diário cifrado com chave pública, guardado por 14 dias |
 | [0008](docs/adr/0008-politica-de-seguranca-de-conteudo.md) | Política de segurança de conteúdo (CSP) |
 | [0009](docs/adr/0009-modulo-categorization.md) | Módulo `categorization` como domínio |
+| [0010](docs/adr/0010-hospedagem-em-planos-gratuitos.md) | Hospedagem em planos gratuitos: Vercel, Render e Neon |
+| [0011](docs/adr/0011-arquivos-enviados-no-banco.md) | Arquivos enviados no banco até serem lidos, fora do backup |
 
 O contexto completo de cada escolha está em
 [`specs/001-contai-mvp/research.md`](specs/001-contai-mvp/research.md).
@@ -265,9 +282,12 @@ O contexto completo de cada escolha está em
 # 1. Variáveis de ambiente (os padrões já servem para desenvolvimento)
 cp .env.example .env
 
-# 2. Suba tudo (a API aplica as migrações; o worker sobe com a API saudável)
+# 2. Suba tudo (a API aplica as migrações e roda o worker junto)
 docker compose up --build
 ```
+
+> Quem tinha o ambiente de antes do worker embutido deve subir com
+> `docker compose up -d --build --remove-orphans`, que remove o antigo contêiner `worker`.
 
 Depois, abra:
 
@@ -297,14 +317,14 @@ Entra com `demo@contai.local` / `conta demonstracao 2026`. O seed se recusa a ro
 
 ## 🗺 Roadmap
 
-O MVP (histórias 1–10) está completo. O que falta é a **camada de produção**, já desenhada nos ADRs
-e na pesquisa, mas ainda não implementada:
+O MVP (histórias 1–10) está completo e a hospedagem em planos gratuitos já está no ar, com o worker
+embutido na API, os arquivos enviados no banco, os e-mails pelo Brevo e o disparo das tarefas
+agendadas. Falta fechar a produção:
 
-- [ ] `docker-compose.prod.yml` + `Caddyfile` (HTTPS automático, CSP/HSTS).
-- [ ] Serviço de backup diário cifrado com `age` e envio por `rclone` (retenção de 14 dias).
+- [ ] Backup diário cifrado com `age`, guardado por 14 dias num repositório privado.
 - [ ] Ensaio de restauração do backup.
-- [ ] Deploy por GitHub Actions (dependente do CI verde).
-- [ ] Validação de ponta a ponta com o provedor de IA real.
+- [ ] Deploy por GitHub Actions, só com o CI verde.
+- [ ] Validação de ponta a ponta em produção, com o provedor de IA real.
 
 ---
 

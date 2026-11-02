@@ -1,4 +1,3 @@
-import { LoaderCircle } from "lucide-react";
 import { Suspense, lazy } from "react";
 import {
   Navigate,
@@ -11,10 +10,12 @@ import {
 
 import { AppShell } from "./components/layout/AppShell";
 import { RouteErrorPage } from "./components/layout/ErrorPage";
+import { LoadingScreen } from "./components/layout/LoadingScreen";
 import { PageSkeleton } from "./components/layout/PageSkeleton";
 import { EmptyState } from "./components/ui/EmptyState";
 import { useAccounts } from "./features/accounts/hooks/useAccounts";
 import { SidebarHistory } from "./features/assistant/components/SidebarHistory";
+import { RestoringSessionScreen } from "./features/auth/components/RestoringSessionScreen";
 import { useAuth } from "./features/auth/hooks/useAuth";
 import { useLogout } from "./features/auth/hooks/useLogout";
 import {
@@ -128,16 +129,6 @@ const ChatPage = lazy(() =>
   })),
 );
 
-function LoadingScreen() {
-  return (
-    <div role="status" className="flex min-h-dvh flex-col items-center justify-center gap-4">
-      <p className="font-display text-display font-extrabold text-primary">Contaí</p>
-      <LoaderCircle aria-hidden="true" className="size-6 animate-spin text-ink-muted" />
-      <span className="sr-only">Carregando…</span>
-    </div>
-  );
-}
-
 /**
  * Guard único das rotas autenticadas (Princípio IV). Quem não tem sessão vai para a tela de
  * entrada, levando a rota de origem para voltar a ela depois do login.
@@ -146,7 +137,7 @@ export function RequireAuth() {
   const { status, retry } = useAuth();
   const location = useLocation();
 
-  if (status === "loading") return <LoadingScreen />;
+  if (status === "loading") return <RestoringSessionScreen />;
 
   if (status === "unavailable") {
     return (
@@ -192,7 +183,7 @@ function RedirectIfAuthenticated() {
   const { status } = useAuth();
   const location = useLocation();
 
-  if (status === "loading") return <LoadingScreen />;
+  if (status === "loading") return <RestoringSessionScreen />;
   if (status === "authenticated") {
     return <Navigate to={returnPathFrom(location.state)} replace />;
   }

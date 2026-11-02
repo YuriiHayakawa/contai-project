@@ -27,6 +27,10 @@ RESET_PASSWORD_PATH = "/redefinir-senha"  # noqa: S105 - caminho de rota, não �
 TWO_FACTOR_RESET_CONFIRM_PATH = "/desativar-duas-etapas/confirmar"
 TWO_FACTOR_RESET_CANCEL_PATH = "/desativar-duas-etapas/cancelar"
 
+# Os e-mails saem do domínio do serviço de envio, sem domínio próprio, e podem cair no spam:
+# toda mensagem que pede para abrir um deles lembra disso (FR-089).
+SPAM_REMINDER = "Se não encontrar o e-mail, confira também a caixa de spam."
+
 
 def register_auth_email_types() -> None:
     register_email_type(

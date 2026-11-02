@@ -3,9 +3,9 @@
 // backend/app/modules/auth/service.py. O texto final é conferido na T220, com os termos atuais
 // do provedor de IA.
 
-export const PRIVACY_POLICY_VERSION = "1";
+export const PRIVACY_POLICY_VERSION = "2";
 /** Data da versão, como dia de calendário (`YYYY-MM-DD`). */
-export const PRIVACY_POLICY_UPDATED_ON = "2026-10-14";
+export const PRIVACY_POLICY_UPDATED_ON = "2026-11-02";
 
 export interface PolicySection {
   title: string;
@@ -62,8 +62,23 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
   {
     title: "Cópias de segurança",
     paragraphs: [
-      "Todos os dias o Contaí faz uma cópia de segurança dos dados, para poder recuperá-los se algo der errado. Cada cópia é guardada por 14 dias e depois é apagada.",
+      "Todos os dias o Contaí faz uma cópia de segurança dos dados, para poder recuperá-los se algo der errado. A cópia é cifrada antes de ser guardada: sem a chave, que fica em outro lugar, ninguém consegue lê-la. Cada cópia é guardada por 14 dias e depois é apagada. Os arquivos enviados para importar não entram nas cópias.",
       "Por isso, depois que uma conta é excluída de vez, os dados dela ainda podem existir nas cópias de segurança por até 14 dias. Passado esse prazo, não existem mais em lugar nenhum.",
+    ],
+  },
+  {
+    title: "Onde os dados ficam",
+    paragraphs: [
+      "Seus dados ficam fora do Brasil: o servidor, o banco de dados e as cópias de segurança do Contaí ficam nos Estados Unidos, e o serviço de IA também é de uma empresa de fora do país. A Lei Geral de Proteção de Dados (LGPD) chama isso de transferência internacional de dados.",
+      "Os dados sempre viajam por conexões cifradas, entre o seu aparelho e esses serviços e entre um serviço e outro.",
+      "O Contaí funciona sobre serviços de outras empresas. Cada uma recebe só o que precisa para a sua parte:",
+    ],
+    items: [
+      "Vercel: entrega as páginas do app e repassa os seus pedidos ao servidor do Contaí;",
+      "Render: roda o servidor do Contaí, que lê e grava os seus dados;",
+      "Neon: guarda o banco de dados, com todos os dados listados no começo desta política;",
+      "Brevo: entrega os e-mails do Contaí, como o de confirmação da conta e o de nova senha. Para isso, recebe seu nome, seu e-mail e o texto de cada mensagem;",
+      "GitHub: dispara as tarefas automáticas do Contaí e guarda as cópias de segurança, cifradas, por 14 dias, num repositório privado.",
     ],
   },
 ];

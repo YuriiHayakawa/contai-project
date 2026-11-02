@@ -1,6 +1,7 @@
 """Erros de domínio da autenticação, com os códigos de contracts/rest-api.md."""
 
 from app.core.errors import Conflict, DomainError, Forbidden, ValidationFailed
+from app.modules.auth.emails import SPAM_REMINDER
 
 
 class InvalidCredentials(DomainError):
@@ -35,7 +36,8 @@ class InvalidOrExpiredToken(DomainError):
 class EmailNotVerified(Forbidden):
     code = "email_not_verified"
     message = (
-        "Confirme seu e-mail para continuar. Abra o link que enviamos para você ou peça um novo."
+        "Confirme seu e-mail para continuar. Abra o link que enviamos para você ou peça um novo. "
+        f"{SPAM_REMINDER}"
     )
 
 

@@ -41,7 +41,8 @@ export function TwoFactorResetConfirmPage() {
         <Notice kind="success">
           Tudo certo. A verificação em duas etapas será desativada em{" "}
           <strong>{formatDate(confirm.data.effective_at)}</strong>. Até lá, a entrada continua
-          pedindo o código. Enviamos um e-mail com um link para cancelar, caso tenha sido engano.
+          pedindo o código. Enviamos um e-mail com um link para cancelar, caso tenha sido engano. Se
+          não encontrar o e-mail, confira também a caixa de spam.
         </Notice>
       ) : (
         <Card>
