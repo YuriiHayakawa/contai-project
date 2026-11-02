@@ -1,7 +1,9 @@
-"""Modelos da importação: a importação, as transações propostas e os modelos de colunas.
+"""Modelos da importação: a importação, o arquivo enviado, as transações propostas e os modelos
+de colunas.
 
 As transações propostas (`import_items`) só existem entre o processamento e a confirmação:
-nada vira transação sem o usuário confirmar (FR-046).
+nada vira transação sem o usuário confirmar (FR-046). O arquivo enviado (`import_files`) só
+existe até o processamento (FR-053).
 """
 
 import datetime as dt
@@ -18,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     text,
@@ -25,7 +28,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database import Base, Timestamps, UUIDPrimaryKey
+from app.core.database import Base, CreatedAt, Timestamps, UUIDPrimaryKey
 from app.modules.transactions.models import TransactionType, TransferDirection
 
 
@@ -111,8 +114,6 @@ class Import(UUIDPrimaryKey, Timestamps, Base):
     original_filename: Mapped[str] = mapped_column(String(255))
     # SHA-256 do arquivo: avisa quando o mesmo arquivo já foi importado.
     file_hash: Mapped[str] = mapped_column(String(64))
-    # Nome gerado no volume privado; nulo depois que o arquivo é apagado (FR-053).
-    stored_filename: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[ImportStatus] = mapped_column(
         String(20), server_default=ImportStatus.QUEUED.value
     )
@@ -133,6 +134,23 @@ class Import(UUIDPrimaryKey, Timestamps, Base):
     waiting_since: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     undone_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ImportFile(CreatedAt, Base):
+    """O arquivo enviado, guardado só até o processamento (FR-053, ADR 0011).
+
+    Fica no banco porque o serviço da API não tem disco permanente. As cópias de segurança levam
+    a tabela sem os dados (`pg_dump --exclude-table-data=import_files`).
+    """
+
+    __tablename__ = "import_files"
+    __table_args__ = (Index("ix_import_files_user_id", "user_id"),)
+
+    import_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("imports.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
 
 
 class ImportItem(UUIDPrimaryKey, Base):

@@ -12,7 +12,7 @@ primeira pintura, e bibliotecas (Motion, Recharts) que aplicam estilos pelo atri
 
 ## Decisão
 
-- **CSP do frontend** (servida pelo Caddy): `default-src 'self'`, com `script-src 'self'`,
+- **CSP do frontend** (servida pela Vercel, `frontend/vercel.json`; antes, pelo Caddy): `default-src 'self'`, com `script-src 'self'`,
   `style-src 'self'`, `font-src 'self'`, `img-src 'self' data:`, `connect-src 'self'`,
   `frame-ancestors 'none'`, `base-uri 'self'` e `form-action 'self'`. A **única concessão** é
   `style-src-attr 'unsafe-inline'`, porque o Motion e o Recharts aplicam estilos pelo atributo
@@ -25,7 +25,7 @@ primeira pintura, e bibliotecas (Motion, Recharts) que aplicam estilos pelo atri
 - Em produção, `/api/docs` e `/api/openapi.json` ficam desligados, porque a documentação
   interativa carrega scripts de fora da origem.
 - Os cabeçalhos de segurança (CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`) são
-  definidos no Caddy para tudo e repetidos pela API nas respostas dela.
+  definidos na Vercel para as páginas e repetidos pela API nas respostas dela.
 
 ## Alternativas rejeitadas
 
@@ -41,5 +41,6 @@ primeira pintura, e bibliotecas (Motion, Recharts) que aplicam estilos pelo atri
   constituição; `script-src` continua sem `unsafe-inline` nem `unsafe-eval`.
 - Trocar Motion ou Recharts por algo que não use o atributo `style` permitiria remover a
   concessão no futuro.
-- A CSP do frontend vive na configuração do Caddy (`infra/Caddyfile`), que é tarefa de
-  infraestrutura; a CSP da API vive em `backend/app/main.py` e é coberta por teste.
+- A CSP do frontend vive em `frontend/vercel.json` (revisão de 2026-11-02, ADR 0010; conferida
+  no ar na validação do deploy); a CSP da API vive em `backend/app/main.py` e é coberta por
+  teste.

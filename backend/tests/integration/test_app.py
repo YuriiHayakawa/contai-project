@@ -154,6 +154,7 @@ def _production_settings(**overrides: str) -> Settings:
         "jwt_secret": "x" * 64,
         "totp_encryption_key": "chave",
         "proxy_shared_secret": PROXY_SECRET,
+        "scheduler_token": "t" * 64,
         "smtp_host": "smtp.example",
         "email_from": "Contaí <nao-responda@contai.example>",
         **overrides,

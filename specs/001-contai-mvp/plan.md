@@ -2,7 +2,8 @@
 
 **Branch**: `001-contai-mvp` | **Date**: 2026-10-01 | **Spec**: [spec.md](./spec.md)
 
-**Revisão**: atualizado em 2026-10-01, depois da aprovação do `design-system.md`.
+**Revisão**: atualizado em 2026-10-01, depois da aprovação do `design-system.md`, e em
+2026-11-02, com a hospedagem em planos gratuitos (constituição 2.0.0, ADRs 0010 e 0011).
 
 **Input**: Feature specification from `/specs/001-contai-mvp/spec.md`
 
@@ -15,9 +16,10 @@ categorias, lança transações à mão ou importando documentos de qualquer ban
 painel mensal e faz perguntas em português a um assistente de IA.
 
 A abordagem técnica é uma API FastAPI organizada por domínio (router → service → repository),
-um worker que consome uma fila em tabela do PostgreSQL para importações, e-mails e tarefas
-agendadas, e um frontend React servido como build estático, todos atrás de um Caddy na mesma
-origem. Três decisões sustentam os requisitos mais difíceis:
+um worker embutido no processo da API que consome uma fila em tabela do PostgreSQL para
+importações, e-mails e tarefas agendadas, e um frontend React servido como build estático, na
+mesma origem que a API. Em produção, o site fica na Vercel, que repassa `/api` à API no Render;
+no ambiente local, um Caddy faz esse papel. Três decisões sustentam os requisitos mais difíceis:
 
 - **Números corretos**: dinheiro em centavos inteiros, saldos e faturas sempre calculados por
   consulta, e um único serviço de relatórios usado pelo painel e pelas ferramentas do assistente.
@@ -43,16 +45,18 @@ Os detalhes estão em [research.md](./research.md), [data-model.md](./data-model
   Zod, Recharts, lucide-react, Motion, qrcode.react; fontes Besley e Atkinson Hyperlegible Next
   servidas pelo próprio app
 
-**Storage**: PostgreSQL (dados e fila de jobs); volume privado para arquivos enviados, que são
-temporários; armazenamento de objetos externo apenas para backups cifrados
+**Storage**: PostgreSQL (dados, fila de jobs e, até o processamento, os arquivos enviados, que
+ficam fora do backup); backups cifrados guardados como artifacts num repositório privado do
+GitHub
 
 **Testing**: pytest, pytest-asyncio, httpx e pytest-cov, com PostgreSQL real em contêiner;
 Vitest e Testing Library no frontend; `FakeLLMProvider` no lugar da IA
 
-**Target Platform**: VPS Linux com Docker Compose, atrás do Caddy com HTTPS automático;
-navegadores atuais, no celular e no computador
+**Target Platform**: produção em planos gratuitos, sem cartão: Vercel (build estático e
+repasse de `/api`), Render (API em contêiner, em Ohio) e Neon (PostgreSQL, em Ohio); ambiente
+local com Docker Compose atrás do Caddy; navegadores atuais, no celular e no computador
 
-**Project Type**: aplicação web (backend, worker e frontend)
+**Project Type**: aplicação web (backend com o worker embutido, e frontend)
 
 **Performance Goals**: painel em até 3 segundos com 5.000 transações (SC-013); 90% das perguntas
 ao assistente respondidas em até 10 segundos (SC-014); lançamento manual em menos de 15 segundos
@@ -60,6 +64,8 @@ ao assistente respondidas em até 10 segundos (SC-014); lançamento manual em me
 
 **Constraints**: plano gratuito do provedor de IA (cota compartilhada entre todos os usuários);
 API em instância única, com limite de frequência em memória; sem Redis nem broker externo;
+planos gratuitos do Render (512 MB, serviço que dorme depois de 15 minutos sem acesso, sem disco
+permanente e sem SMTP) e do Neon (100 CU-horas por mês, 1 GB);
 arquivos de até 10 MB; telas a partir de 320px; WCAG 2.1 AA; interface em português do Brasil
 
 **Scale/Scope**: dezenas de usuários, cada um com alguns milhares de transações por ano; 10
@@ -74,16 +80,16 @@ frontend
 |-----------|---------------------|----------|
 | I. Qualidade de código — backend | mypy strict e Ruff no CI; schemas `Create`/`Update`/`Read` por módulo; rotas só validam, chamam o serviço e formatam; exceções de domínio convertidas em `core/errors.py` | Passa |
 | II. Qualidade de código — frontend | `strict: true`; componentes funcionais; `types.ts` por feature; HTTP só em `services/`, consumido por hooks do TanStack Query; formulários com Zod; ESLint e Prettier no CI | Passa |
-| III. Arquitetura — backend | módulos por domínio com `router/service/repository/models/schemas`; todo repositório exige `user_id`; importadores plugáveis ([contracts/internal-interfaces.md](./contracts/internal-interfaces.md)); fila em tabela `jobs` com worker; configurações por `pydantic-settings` | Passa, com um desvio registrado (módulo `categorization`) |
+| III. Arquitetura — backend | módulos por domínio com `router/service/repository/models/schemas`; todo repositório exige `user_id`; importadores plugáveis ([contracts/internal-interfaces.md](./contracts/internal-interfaces.md)); fila em tabela `jobs` com worker embutido na API; configurações por `pydantic-settings` | Passa, com um desvio registrado (módulo `categorization`) |
 | IV. Arquitetura — frontend | `src/features/<feature>/` com `components`, `hooks`, `services`, `types.ts`; `src/components/ui`; um único guard de rotas | Passa |
 | V. Segurança | Argon2id e lista de senhas comuns; JWT de 15 min em memória; refresh em cookie `httpOnly`, `Secure`, `SameSite=Strict`, com rotação e detecção de reutilização; CSRF no refresh; confirmação de e-mail; TOTP com códigos de recuperação; bloqueio e limite de frequência; uploads validados e descartados; logs por lista permitida; cabeçalhos e CORS; `pip-audit` e `npm audit` | Passa |
 | VI. Inteligência artificial | ferramentas somente leitura com schemas Pydantic; sem SQL gerado; `user_id` injetado; propostas confirmadas pelo usuário; conferência de totais; dados delimitados; `LLMProvider`; prompts em arquivos; `ai_usage` e limites; backoff | Passa |
-| VII. Privacidade e LGPD | OFX, CSV e planilhas lidos por código; só descrições vão à IA para categoria; aviso antes do primeiro PDF ou imagem; exportação e exclusão com cascata; backups fora do volume de uploads | Passa |
+| VII. Privacidade e LGPD | OFX, CSV e planilhas lidos por código; só descrições vão à IA para categoria; aviso antes do primeiro PDF ou imagem; exportação e exclusão com cascata; backups sem os arquivos enviados; dados nos EUA informados na política de privacidade | Passa |
 | VIII. Dados financeiros | `BIGINT` em centavos em todas as camadas; formatação só na exibição; `DATE` e `timestamptz`; fuso `America/Sao_Paulo`; idempotência por identificador externo e impressão digital; transferências fora dos totais; confirmação e desfazer em transação única | Passa |
 | IX. Design e UX | mobile-first desde 320px; tokens em `globals.css`; claro e escuro; estados de carregamento, erro e vazio; confirmação em ações destrutivas | Passa: `design-system.md` foi criado e aprovado em 2026-10-01, depois de uma prévia estática em `design-preview/` |
 | X. Testes | pytest com PostgreSQL real; testes obrigatórios listados; IA sempre falsa; cobertura de 80% imposta no CI; Vitest para hooks e componentes com lógica | Passa |
 | XI. Observabilidade | logs JSON com id da requisição; `/health` e `/health/worker`; erros inesperados com pilha e sem dados sensíveis | Passa |
-| XII. Deploy e infraestrutura | Compose em dev e produção; Caddy; build estático; migrações automáticas; backup diário cifrado com retenção de 14 dias e restauração testada; deploy dependente do CI | Passa |
+| XII. Deploy e infraestrutura | Compose no ambiente local; produção na Vercel, no Render e no Neon, com uma única origem, a API atrás do proxy com segredo e a mesma imagem Docker; build estático; migrações automáticas; tarefas agendadas por disparo externo; backup diário cifrado fora do Neon, com retenção de 14 dias e restauração testada; deploy dependente do CI | Passa (constituição 2.0.0) |
 | XIII. Documentação | README, ADRs em `docs/adr/` e OpenAPI automático previstos | Passa |
 | Stack e dependências | stack da constituição mantida; cada dependência adicional está justificada na seção 25 de [research.md](./research.md) | Passa |
 | Processo | spec aprovada e esclarecida; abstrações limitadas às exigidas pela constituição | Passa |
@@ -106,11 +112,25 @@ conferidos de novo contra a constituição:
   folhas de estilo continuam restritos à própria origem. Como é uma concessão de segurança, o
   Princípio V exige que seja documentada e justificada em ADR, e ela está na lista abaixo.
 
+**Reavaliação em 2026-11-02 (constituição 2.0.0)**: aprovado. A hospedagem em planos gratuitos
+(ADR 0010) mudou o Princípio XII e o worker do Princípio III, por emenda. Pontos conferidos:
+
+- A API recusa o que não chega pela Vercel, e o IP do visitante, usado nos limites de
+  frequência, vem da primeira entrada do `X-Forwarded-For`, que a Vercel substitui. Isso foi
+  validado no Render (seção 29 de [research.md](./research.md)).
+- Os arquivos enviados ficam no banco até o processamento, fora do backup (ADR 0011). O
+  Princípio V continua atendido: fora de pasta pública, apagados depois do processamento.
+- Os limites de frequência em memória zeram também quando o serviço dorme; o bloqueio de login
+  continua no banco.
+- As tarefas com prazo atrasam até 3 horas, como a spec passou a admitir (FR-013, FR-017 e
+  SC-011).
+
 **ADRs a escrever durante a implementação** (Princípio XIII): fila de jobs no PostgreSQL; modelo
 de sessão e tokens; camada de IA e garantia numérica do assistente; dinheiro em centavos e saldo
 calculado; importadores plugáveis e detecção de duplicatas; arquivos enviados em volume privado;
 backup cifrado e restauração; política de segurança de conteúdo e a concessão para estilos no
-atributo `style`.
+atributo `style`. Depois, em 2026-11-02: hospedagem em planos gratuitos (0010) e arquivos
+enviados no banco (0011, que substitui o 0006).
 
 ## Project Structure
 
@@ -168,9 +188,9 @@ backend/
 │   │       └── prompts/         # prompts de sistema versionados
 │   ├── ai/                      # provider.py (LLMProvider), gemini.py, fake.py, factory.py,
 │   │                            # models.py, repository.py e usage.py (uso e limites)
-│   ├── email/                   # envio por SMTP e modelos de texto
+│   ├── email/                   # envio por SMTP (local) ou pela API do Brevo (produção) e modelos de texto
 │   └── worker/
-│       ├── main.py              # laço do worker e batimento
+│       ├── main.py              # laço do worker (embutido na API) e batimento
 │       ├── models.py            # Job e WorkerHeartbeat
 │       ├── repository.py        # único acesso às tabelas da fila e do batimento
 │       ├── queue.py             # regras da fila: backoff e jobs travados
@@ -183,8 +203,8 @@ backend/
 
 frontend/
 ├── package.json
-├── Dockerfile                  # estágios dev e prod
-├── Caddyfile                   # servidor de arquivos da imagem de produção
+├── Dockerfile                  # ambiente local (servidor do Vite)
+├── vercel.json                 # produção: repasse de /api, cabeçalhos de segurança e cache
 ├── public/
 │   └── theme-init.js            # define o tema antes da primeira pintura
 └── src/
@@ -209,16 +229,16 @@ frontend/
         └── globals.css          # tokens de design e temas claro e escuro
 
 infra/
-├── Caddyfile                    # produção
-├── Caddyfile.dev                # desenvolvimento
+├── Caddyfile.dev                # ambiente local: uma única origem, como a Vercel em produção
 ├── postgres/                    # init-test-db.sql (banco de testes)
-├── deploy.sh
-└── backup/                      # backup.sh, restore.sh e instruções
+└── backup/                      # restore.sh, backup.yml de referência e instruções (o backup
+                                 # roda no repositório privado contai-backups)
 
 docs/adr/
-.github/workflows/ci.yml
-docker-compose.yml               # desenvolvimento (inclui mailpit)
-docker-compose.prod.yml          # produção (inclui backup)
+.github/workflows/
+├── ci.yml                       # CI e, na main, o deploy pelos deploy hooks
+└── scheduled-tasks.yml          # disparo das tarefas agendadas a cada 3 horas
+docker-compose.yml               # ambiente local (inclui mailpit)
 .env.example
 design-system.md
 design-preview/                  # prévia estática do design; fora do build e do deploy
@@ -227,9 +247,10 @@ README.md
 
 **Structure Decision**: aplicação web com `backend/` e `frontend/` na raiz do repositório,
 seguindo a árvore fornecida na entrada do plano. O backend é um único pacote Python que gera
-dois processos, API e worker, a partir da mesma imagem. Foram acrescentados à árvore fornecida
+a API com o worker embutido, a partir da mesma imagem no ambiente local e em produção; o worker
+ainda pode rodar sozinho (`python -m app.worker.main`). Foram acrescentados à árvore fornecida
 `core/money.py` e `core/clock.py` (regras de centavos e de fuso em um só lugar), a separação de
-`tests/` em `unit`, `integration`, `isolation` e `fixtures`, os `Dockerfile` e `infra/deploy.sh`.
+`tests/` em `unit`, `integration`, `isolation` e `fixtures` e os `Dockerfile`.
 O design system aprovado acrescentou `frontend/public/theme-init.js`,
 `frontend/src/assets/fonts/` e `frontend/src/lib/motion.ts` (seção 26 de
 [research.md](./research.md)).

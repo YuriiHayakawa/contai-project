@@ -1,7 +1,6 @@
 """Configurações da aplicação, lidas exclusivamente de variáveis de ambiente."""
 
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import SecretStr, model_validator
@@ -30,12 +29,21 @@ class Settings(BaseSettings):
     # Segredo que a Vercel acrescenta a cada requisição repassada; vazio desliga a checagem.
     proxy_shared_secret: SecretStr = SecretStr("")
 
-    # E-mail
-    smtp_host: str
+    # Worker: roda dentro do processo da API (ADR 0010). Desligado, a fila só anda com
+    # `python -m app.worker.main` rodando à parte.
+    worker_embedded: bool = True
+    # Token do disparo externo das tarefas agendadas; vazio desliga o endpoint interno.
+    scheduler_token: SecretStr = SecretStr("")
+
+    # E-mail: "smtp" (ambiente local, com o Mailpit) ou "brevo" (produção: o Render gratuito
+    # fecha as portas de SMTP).
+    email_backend: Literal["smtp", "brevo"] = "smtp"
+    smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""
     smtp_password: SecretStr = SecretStr("")
     smtp_use_tls: bool = True
+    brevo_api_key: SecretStr = SecretStr("")
     email_from: str
 
     # Inteligência artificial
@@ -58,7 +66,6 @@ class Settings(BaseSettings):
 
     # Uploads
     upload_max_bytes: int = 10 * 1024 * 1024
-    upload_dir: Path = Path("/data/uploads")
 
     @property
     def is_production(self) -> bool:
@@ -67,6 +74,14 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @model_validator(mode="after")
+    def _require_the_email_transport(self) -> Self:
+        if self.email_backend == "smtp" and not self.smtp_host:
+            raise ValueError("SMTP_HOST é obrigatório com EMAIL_BACKEND=smtp")
+        if self.email_backend == "brevo" and not self.brevo_api_key.get_secret_value():
+            raise ValueError("BREVO_API_KEY é obrigatória com EMAIL_BACKEND=brevo")
+        return self
 
     @model_validator(mode="after")
     def _require_real_secrets_in_production(self) -> Self:
@@ -82,6 +97,10 @@ class Settings(BaseSettings):
         if len(self.proxy_shared_secret.get_secret_value()) < MIN_JWT_SECRET_LENGTH:
             raise ValueError(
                 "PROXY_SHARED_SECRET precisa ser gerado para produção (mínimo de 32 caracteres)"
+            )
+        if len(self.scheduler_token.get_secret_value()) < MIN_JWT_SECRET_LENGTH:
+            raise ValueError(
+                "SCHEDULER_TOKEN precisa ser gerado para produção (mínimo de 32 caracteres)"
             )
         if self.ai_provider == "gemini" and not self.ai_api_key.get_secret_value():
             raise ValueError("AI_API_KEY é obrigatória com AI_PROVIDER=gemini")

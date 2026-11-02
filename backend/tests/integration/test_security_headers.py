@@ -31,6 +31,7 @@ async def test_hsts_is_added_in_production() -> None:
         environment="production",
         totp_encryption_key="chave-de-teste-producao",
         proxy_shared_secret="p" * 64,
+        scheduler_token="t" * 64,
     )
     production_app = create_app(settings)
     transport = ASGITransport(app=production_app)

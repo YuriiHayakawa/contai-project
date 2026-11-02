@@ -20,6 +20,7 @@ BASE = {
     "jwt_secret": "x" * 64,
     "totp_encryption_key": "chave",
     "proxy_shared_secret": "p" * 64,
+    "scheduler_token": "t" * 64,
     "smtp_host": "smtp.example",
     "email_from": "Contaí <nao-responda@contai.example>",
 }
@@ -57,6 +58,8 @@ def test_cors_origins_are_parsed_from_a_comma_separated_list() -> None:
         {"totp_encryption_key": ""},
         {"proxy_shared_secret": ""},
         {"proxy_shared_secret": "curto"},
+        {"scheduler_token": ""},
+        {"scheduler_token": "curto"},
         {"ai_provider": "gemini", "ai_api_key": ""},
     ],
 )
@@ -70,6 +73,24 @@ def test_production_accepts_real_secrets_and_development_is_lenient() -> None:
     assert (
         _settings(jwt_secret=JWT_SECRET_PLACEHOLDER, totp_encryption_key="").is_production is False
     )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"email_backend": "smtp", "smtp_host": ""},
+        {"email_backend": "brevo", "brevo_api_key": ""},
+    ],
+)
+def test_the_chosen_email_transport_must_be_configured(overrides: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        _settings(**overrides)
+
+
+def test_brevo_does_not_need_an_smtp_server() -> None:
+    settings = _settings(email_backend="brevo", brevo_api_key="chave", smtp_host="")
+
+    assert settings.email_backend == "brevo"
 
 
 def test_secrets_have_no_default_value(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -6,17 +6,16 @@ confirmação, que vem depois, nada vira transação.
 
 import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.modules.imports import storage
-from app.modules.imports.models import ImportStatus
+from app.modules.imports.models import ImportFile, ImportStatus
 from app.modules.imports.repository import ImportRepository
 from app.modules.users.models import User
 from app.worker import queue
@@ -41,7 +40,7 @@ from tests.imports import (
 
 Json = dict[str, Any]
 
-pytestmark = pytest.mark.usefixtures("frozen_time", "upload_dir")
+pytestmark = pytest.mark.usefixtures("frozen_time")
 
 # Data, histórico e valor do `extrato_ponto_e_virgula.csv`.
 CSV_MAPPING = {
@@ -97,7 +96,7 @@ def _lines(record: Json) -> list[tuple[str, str, int, str]]:
 
 
 async def test_upload_stores_the_file_and_queues_the_processing(
-    client_a: AsyncClient, checking: Json, upload_dir: Path, run_jobs: JobRunner
+    client_a: AsyncClient, checking: Json, session: AsyncSession, run_jobs: JobRunner
 ) -> None:
     response = await send_file(client_a, checking, "banco_azul.ofx")
 
@@ -108,10 +107,8 @@ async def test_upload_stores_the_file_and_queues_the_processing(
     assert (record["kind"], record["format"]) == ("statement", "ofx")
     assert record["original_filename"] == "banco_azul.ofx"
     assert (record["items"], record["mapping_preview"], record["expires_at"]) == (None, None, None)
-    # O arquivo fica no volume privado com um nome gerado, até o worker ler.
-    [stored] = stored_files(upload_dir)
-    assert stored.name != "banco_azul.ofx"
-    assert stored.read_bytes() == fixture_bytes("banco_azul.ofx")
+    # O arquivo fica guardado no banco até o worker ler.
+    assert await stored_files(session) == [fixture_bytes("banco_azul.ofx")]
     assert await run_jobs() == 1
 
 
@@ -142,7 +139,7 @@ async def test_the_type_comes_from_the_content_and_not_from_the_name(
     ids=["imagem que não é jpg nem png", "executável", "vazio", "xls antigo"],
 )
 async def test_a_file_that_is_not_accepted_is_refused_with_what_to_do(
-    client_a: AsyncClient, checking: Json, upload_dir: Path, content: bytes, message: str
+    client_a: AsyncClient, checking: Json, session: AsyncSession, content: bytes, message: str
 ) -> None:
     # A extensão diz que é um extrato; o conteúdo é que vale.
     response = await send_file(client_a, checking, "extrato.ofx", content)
@@ -150,11 +147,11 @@ async def test_a_file_that_is_not_accepted_is_refused_with_what_to_do(
     assert response.status_code == 415, response.text
     assert response.json()["error"]["code"] == "unsupported_file"
     assert message in response.json()["error"]["message"]
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_a_file_above_the_limit_is_refused(
-    client_a: AsyncClient, checking: Json, upload_dir: Path, monkeypatch: pytest.MonkeyPatch
+    client_a: AsyncClient, checking: Json, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(get_settings(), "upload_max_bytes", 1_000)
 
@@ -162,11 +159,11 @@ async def test_a_file_above_the_limit_is_refused(
 
     assert response.status_code == 413, response.text
     assert response.json()["error"]["code"] == "payload_too_large"
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_the_destination_account_must_be_an_active_account_of_the_user(
-    client_a: AsyncClient, checking: Json, upload_dir: Path
+    client_a: AsyncClient, checking: Json, session: AsyncSession
 ) -> None:
     unknown = {"id": "00000000-0000-4000-8000-000000000000"}
     await client_a.post(f"{ACCOUNTS}/{checking['id']}/archive")
@@ -174,7 +171,7 @@ async def test_the_destination_account_must_be_an_active_account_of_the_user(
     for account in (unknown, checking):
         fields = _field_errors(await send_file(client_a, account, "banco_azul.ofx"))
         assert set(fields) == {"account_id"}
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_upload_needs_the_file_and_the_account(client_a: AsyncClient, checking: Json) -> None:
@@ -237,7 +234,7 @@ async def test_an_unknown_import_is_not_found(client_a: AsyncClient) -> None:
 async def test_an_ofx_goes_to_review_without_saving_any_transaction(
     client_a: AsyncClient,
     checking: Json,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     frozen_time: datetime,
 ) -> None:
@@ -264,7 +261,7 @@ async def test_an_ofx_goes_to_review_without_saving_any_transaction(
     assert (await list_transactions(client_a))["total_count"] == 0
     assert await balance_of(client_a, checking) == 100_000
     # O arquivo original é apagado assim que é lido (FR-053).
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_an_ofx_out_of_the_standard_is_imported_without_any_setup(
@@ -395,7 +392,7 @@ async def test_transactions_of_another_account_are_not_duplicates(
 async def test_an_unknown_csv_waits_for_the_column_mapping(
     client_a: AsyncClient,
     checking: Json,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     frozen_time: datetime,
 ) -> None:
@@ -410,12 +407,12 @@ async def test_an_unknown_csv_waits_for_the_column_mapping(
     assert preview["rows"][1] == ["10/09/2026", "PADARIA SÃO JOÃO", "000124", "-45,90", "5.904,10"]
     assert preview["suggestion"] == {**CSV_MAPPING, "income_column": None, "expense_column": None}
     # O arquivo fica guardado até o usuário mapear, por no máximo 24 horas (FR-083).
-    assert len(stored_files(upload_dir)) == 1
+    assert len(await stored_files(session)) == 1
     assert datetime.fromisoformat(record["expires_at"]) == frozen_time + timedelta(hours=24)
 
 
 async def test_mapping_the_columns_once_serves_the_next_files_with_the_same_structure(
-    client_a: AsyncClient, checking: Json, upload_dir: Path, run_jobs: JobRunner
+    client_a: AsyncClient, checking: Json, session: AsyncSession, run_jobs: JobRunner
 ) -> None:
     first = await _processed(
         client_a, run_jobs, await upload(client_a, checking, "extrato_ponto_e_virgula.csv")
@@ -434,7 +431,7 @@ async def test_mapping_the_columns_once_serves_the_next_files_with_the_same_stru
         ("2026-09-15", "expense", 18_937, "SUPERMERCADO BOM PREÇO; LOJA 2"),
         ("2026-09-20", "expense", 120_000, "PIX ENVIADO JOÃO"),
     ]
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
     # Outro arquivo, do mês seguinte, com as mesmas colunas: o sistema não pergunta de novo.
     october = (
@@ -497,7 +494,7 @@ async def test_a_spreadsheet_and_separate_income_and_expense_columns(
 
 
 async def test_a_mapping_that_cannot_read_the_file_asks_again_without_a_new_upload(
-    client_a: AsyncClient, checking: Json, upload_dir: Path, run_jobs: JobRunner
+    client_a: AsyncClient, checking: Json, session: AsyncSession, run_jobs: JobRunner
 ) -> None:
     record = await _processed(
         client_a, run_jobs, await upload(client_a, checking, "extrato_ponto_e_virgula.csv")
@@ -512,7 +509,7 @@ async def test_a_mapping_that_cannot_read_the_file_asks_again_without_a_new_uplo
     assert "formato da data" in record["error_message"]
     assert record["mapping_preview"]["columns"][0] == "Data"
     assert record["items"] is None
-    assert len(stored_files(upload_dir)) == 1
+    assert len(await stored_files(session)) == 1
     assert (await list_transactions(client_a))["total_count"] == 0
 
     # Com o formato certo, a mesma importação segue, e o erro some.
@@ -609,7 +606,7 @@ async def test_mapping_is_only_accepted_while_the_import_waits_for_it(
 async def test_a_file_that_cannot_be_read_fails_and_saves_nothing(
     client_a: AsyncClient,
     checking: Json,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     name: str,
     content: bytes,
@@ -623,7 +620,7 @@ async def test_a_file_that_cannot_be_read_fails_and_saves_nothing(
     assert message in record["error_message"]
     assert (record["items"], record["item_count"], record["expires_at"]) == (None, 0, None)
     assert (await list_transactions(client_a))["total_count"] == 0
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_a_crash_while_reading_fails_the_import_and_leaves_no_proposed_lines(
@@ -631,22 +628,23 @@ async def test_a_crash_while_reading_fails_the_import_and_leaves_no_proposed_lin
     checking: Json,
     session: AsyncSession,
     user_a: User,
-    upload_dir: Path,
     run_jobs: JobRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Falha depois de as linhas propostas já terem sido gravadas: ao apagar o arquivo lido.
-    delete = storage.delete
+    delete_file = ImportRepository.delete_file
     calls = 0
 
-    async def crash_once(stored_filename: str) -> None:
+    async def crash_once(
+        repository: ImportRepository, user_id: uuid.UUID, import_id: uuid.UUID
+    ) -> None:
         nonlocal calls
         calls += 1
         if calls == 1:
             raise RuntimeError("detalhe que não pode chegar ao usuário")
-        await delete(stored_filename)
+        await delete_file(repository, user_id, import_id)
 
-    monkeypatch.setattr(storage, "delete", crash_once)
+    monkeypatch.setattr(ImportRepository, "delete_file", crash_once)
     sent = await upload(client_a, checking, "banco_azul.ofx")
 
     await run_jobs()
@@ -656,35 +654,15 @@ async def test_a_crash_while_reading_fails_the_import_and_leaves_no_proposed_lin
     assert "Nada foi salvo" in record["error_message"]
     assert "detalhe" not in str(record)
     assert await ImportRepository(session).list_items(user_a.id, uuid.UUID(sent["id"])) == []
-    assert stored_files(upload_dir) == []
-
-
-async def test_a_failure_is_recorded_even_if_the_file_cannot_be_deleted(
-    client_a: AsyncClient,
-    checking: Json,
-    upload_dir: Path,
-    run_jobs: JobRunner,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    async def disk_error(stored_filename: str) -> None:
-        raise PermissionError("disco só para leitura")
-
-    monkeypatch.setattr(storage, "delete", disk_error)
-    sent = await upload(client_a, checking, "vazio.ofx", b"<OFX><STMTRS></STMTRS></OFX>")
-
-    record = await _processed(client_a, run_jobs, sent)
-
-    # O usuário fica sabendo da falha; o arquivo que sobrou sai depois, na limpeza periódica.
-    assert (record["status"], record["error_code"]) == ("failed", "no_transactions")
-    assert len(stored_files(upload_dir)) == 1
+    assert await stored_files(session) == []
 
 
 async def test_a_file_that_disappeared_fails_with_what_to_do(
-    client_a: AsyncClient, checking: Json, upload_dir: Path, run_jobs: JobRunner
+    client_a: AsyncClient, checking: Json, session: AsyncSession, run_jobs: JobRunner
 ) -> None:
     sent = await upload(client_a, checking, "banco_azul.ofx")
-    for stored in stored_files(upload_dir):
-        stored.unlink()
+    await session.execute(delete(ImportFile))
+    await session.commit()
 
     record = await _processed(client_a, run_jobs, sent)
 

@@ -17,7 +17,10 @@ from app.core.database import Base
 
 config = context.config
 
-if config.config_file_name is not None:
+# Pela linha de comando, o log segue o alembic.ini. Quem chama as migrações de dentro de um
+# processo que já configurou o próprio log (os testes) desliga isso, senão o alembic.ini troca o
+# nível e a saída do log de todo o processo.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata

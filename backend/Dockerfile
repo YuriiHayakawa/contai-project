@@ -1,4 +1,5 @@
-# Imagem do backend: a API e o worker usam a mesma imagem, com comandos diferentes.
+# Imagem do backend: a API, que roda também o worker da fila (WORKER_EMBEDDED); o worker pode
+# rodar sozinho com `python -m app.worker.main`.
 
 FROM python:3.12-slim AS base
 
@@ -10,10 +11,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.9 /uv /bin/uv
 
-# Usuário sem privilégios e diretório de uploads fora de qualquer pasta servida.
+# Usuário sem privilégios.
 RUN useradd --create-home --uid 1000 app \
-    && mkdir -p /data/uploads /opt/venv \
-    && chown -R app:app /data /opt/venv
+    && mkdir -p /opt/venv \
+    && chown -R app:app /opt/venv
 
 WORKDIR /app
 COPY --chown=app:app pyproject.toml uv.lock ./

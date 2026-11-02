@@ -6,7 +6,6 @@ formatos.
 """
 
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -41,7 +40,7 @@ from tests.imports import (
 
 Json = dict[str, Any]
 
-pytestmark = pytest.mark.usefixtures("frozen_time", "upload_dir")
+pytestmark = pytest.mark.usefixtures("frozen_time")
 
 CONSENT = "/api/v1/users/me/consents/ai-documents"
 PROFILE = "/api/v1/users/me"
@@ -128,7 +127,7 @@ def _documents_sent(fake_llm: FakeLLMProvider) -> list[tuple[str, str, bytes]]:
 async def test_a_pdf_or_a_picture_is_refused_without_the_consent(
     client_a: AsyncClient,
     card: Json,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
     content: bytes,
@@ -142,7 +141,7 @@ async def test_a_pdf_or_a_picture_is_refused_without_the_consent(
     assert "serviço de IA externo" in error["message"]
     assert "melhorar seus modelos" in error["message"]
     # Nada foi guardado, enfileirado nem enviado ao serviço de IA.
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
     assert await run_jobs() == 0
     assert fake_llm.calls == []
 
@@ -181,7 +180,7 @@ async def test_files_read_without_ai_do_not_ask_for_the_consent(
 
 
 async def test_after_the_consent_the_document_is_stored_and_queued(
-    client_a: AsyncClient, card: Json, consent: None, upload_dir: Path
+    client_a: AsyncClient, card: Json, consent: None, session: AsyncSession
 ) -> None:
     statement = await upload(client_a, card, "fatura.pdf", PDF)
     receipt = (await send_file(client_a, card, "recibo.png", PNG, kind="receipt")).json()
@@ -192,14 +191,14 @@ async def test_after_the_consent_the_document_is_stored_and_queued(
         "pdf",
     )
     assert (receipt["status"], receipt["kind"], receipt["format"]) == ("queued", "receipt", "image")
-    assert sorted(path.read_bytes() for path in stored_files(upload_dir)) == sorted([PDF, PNG])
+    assert await stored_files(session) == sorted([PDF, PNG])
 
 
 # ---------- o que não é aceito
 
 
 async def test_a_pdf_with_a_password_is_refused_with_what_to_do(
-    client_a: AsyncClient, card: Json, consent: None, upload_dir: Path
+    client_a: AsyncClient, card: Json, consent: None, session: AsyncSession
 ) -> None:
     response = await send_file(client_a, card, "fatura.pdf", ENCRYPTED_PDF)
 
@@ -208,11 +207,11 @@ async def test_a_pdf_with_a_password_is_refused_with_what_to_do(
     assert error["code"] == "unsupported_file"
     assert "protegido por senha" in error["message"]
     assert "cópia sem senha" in error["message"]
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_a_picture_is_only_read_as_a_receipt(
-    client_a: AsyncClient, card: Json, consent: None, upload_dir: Path
+    client_a: AsyncClient, card: Json, consent: None, session: AsyncSession
 ) -> None:
     response = await send_file(client_a, card, "extrato.png", PNG)
 
@@ -220,7 +219,7 @@ async def test_a_picture_is_only_read_as_a_receipt(
     fields = response.json()["error"]["details"]["fields"]
     assert set(fields) == {"kind"}
     assert "Comprovante" in fields["kind"]
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 # ---------- limite diário de extrações (FR-071)
@@ -230,7 +229,7 @@ async def test_the_daily_limit_counts_what_was_read_and_what_is_in_the_queue(
     client_a: AsyncClient,
     card: Json,
     consent: None,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
     frozen_time: datetime,
@@ -252,7 +251,7 @@ async def test_the_daily_limit_counts_what_was_read_and_what_is_in_the_queue(
     assert datetime.fromisoformat(error["details"]["resets_at"]) == datetime.fromisoformat(
         "2026-10-02T00:00:00-03:00"
     )
-    assert len(stored_files(upload_dir)) == 1
+    assert len(await stored_files(session)) == 1
     # O resto do app continua: um OFX não usa IA e não conta no limite.
     assert (await send_file(client_a, card, "cartao_verde.ofx")).status_code == 202
 
@@ -281,7 +280,6 @@ async def test_a_pdf_statement_goes_to_the_same_review_with_the_total_checked(
     card: Json,
     consent: None,
     session: AsyncSession,
-    upload_dir: Path,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
 ) -> None:
@@ -322,7 +320,7 @@ async def test_a_pdf_statement_goes_to_the_same_review_with_the_total_checked(
     ]
     # Nada virou lançamento, e o original foi descartado.
     assert (await list_transactions(client_a))["total_count"] == 0
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_a_sum_that_differs_from_the_total_is_shown_with_both_values(
@@ -372,7 +370,6 @@ async def test_a_receipt_becomes_a_single_line_that_the_user_confirms(
     card: Json,
     consent: None,
     session: AsyncSession,
-    upload_dir: Path,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
     content: bytes,
@@ -400,7 +397,7 @@ async def test_a_receipt_becomes_a_single_line_that_the_user_confirms(
     assert _documents_sent(fake_llm) == [("principal", media_type, content)]
     assert await _usage(session) == [(AiTask.RECEIPT_EXTRACTION, "principal", True)]
     assert (await list_transactions(client_a))["total_count"] == 0
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
     # A mesma confirmação das outras importações: só agora a linha vira lançamento.
     food = await create_category(client_a)
@@ -424,7 +421,6 @@ async def test_a_busy_model_puts_the_import_back_in_the_queue_without_a_new_uplo
     card: Json,
     consent: None,
     session: AsyncSession,
-    upload_dir: Path,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
     frozen_time: datetime,
@@ -438,7 +434,7 @@ async def test_a_busy_model_puts_the_import_back_in_the_queue_without_a_new_uplo
     # A importação não falhou: voltou para a fila, e quem acompanha lê o motivo da espera.
     assert (waiting["status"], waiting["error_code"]) == ("queued", "ai_busy")
     assert "sem você precisar reenviar" in waiting["error_message"]
-    assert [path.read_bytes() for path in stored_files(upload_dir)] == [PDF]
+    assert await stored_files(session) == [PDF]
     job = await _job(session)
     assert (job.status, job.attempts, job.last_error_code) == (
         JobStatus.QUEUED,
@@ -458,7 +454,7 @@ async def test_a_busy_model_puts_the_import_back_in_the_queue_without_a_new_uplo
         None,
         3,
     )
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
     assert (await _job(session)).status == JobStatus.SUCCEEDED
     assert await _usage(session) == [(AiTask.STATEMENT_EXTRACTION, "principal", True)]
 
@@ -494,7 +490,6 @@ async def test_the_daily_quota_over_in_both_models_fails_without_new_attempts(
     card: Json,
     consent: None,
     session: AsyncSession,
-    upload_dir: Path,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
     frozen_time: datetime,
@@ -516,7 +511,7 @@ async def test_the_daily_quota_over_in_both_models_fails_without_new_attempts(
     clock.set_fixed_time(frozen_time + timedelta(minutes=10))
     assert await run_jobs() == 0
     assert len(_documents_sent(fake_llm)) == 2
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
     assert await _usage(session) == []
     assert (await list_transactions(client_a))["total_count"] == 0
 
@@ -526,7 +521,6 @@ async def test_a_model_that_never_answers_fails_the_import_after_the_attempts(
     card: Json,
     consent: None,
     session: AsyncSession,
-    upload_dir: Path,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
     frozen_time: datetime,
@@ -551,7 +545,7 @@ async def test_a_model_that_never_answers_fails_the_import_after_the_attempts(
         "ai_unavailable",
     )
     assert len(_documents_sent(fake_llm)) == 6
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
     assert await _usage(session) == []
 
 
@@ -572,7 +566,6 @@ async def test_a_document_that_cannot_be_read_fails_and_saves_nothing(
     card: Json,
     consent: None,
     session: AsyncSession,
-    upload_dir: Path,
     run_jobs: JobRunner,
     fake_llm: FakeLLMProvider,
     answer: Json,
@@ -588,7 +581,7 @@ async def test_a_document_that_cannot_be_read_fails_and_saves_nothing(
     assert "inteiro e nítido" in record["error_message"]
     assert (record["items"], record["item_count"], record["total_check"]) == (None, 0, None)
     assert (await list_transactions(client_a))["total_count"] == 0
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
     # Não há nova tentativa, e a leitura feita conta no limite do dia mesmo sem resultado.
     assert (await _job(session)).status == JobStatus.SUCCEEDED
     assert len(await _usage(session)) == extractions_counted

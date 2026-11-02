@@ -29,8 +29,6 @@ from app.modules.imports.service import extracted_total_cents
 from app.modules.transactions.models import TransactionType
 from tests.imports import stored_file
 
-pytestmark = pytest.mark.usefixtures("upload_dir")
-
 EXPENSE, INCOME = TransactionType.EXPENSE, TransactionType.INCOME
 TODAY = date(2026, 10, 1)
 CONTEXT = ImportContext(account_type=AccountType.CREDIT_CARD, today=TODAY)

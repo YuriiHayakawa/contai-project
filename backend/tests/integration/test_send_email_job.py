@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import SessionFactory
 from app.core.security import hash_token
 from app.email import templates
+from app.email.sender import EmailRejected
 from app.email.templates import EmailType, register_email_type
 from app.modules.auth.models import EmailToken, EmailTokenType
 from app.modules.auth.repository import AuthRepository
@@ -130,6 +131,28 @@ async def test_smtp_failure_is_retried_and_issues_a_new_link(
     ).scalars()
     # A tentativa que falhou não deixou token válido para trás: só existe o do e-mail enviado.
     assert len([token for token in tokens if token.used_at is None]) == 1
+
+
+async def test_a_refusal_by_the_email_provider_fails_without_retrying(
+    session: AsyncSession,
+    session_factory: SessionFactory,
+    user_a: User,
+    frozen_time: datetime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def refuse(*, to: str, subject: str, body: str) -> None:
+        raise EmailRejected("brevo_400")
+
+    monkeypatch.setattr("app.worker.jobs.send_email.send_email", refuse)
+    job = await enqueue_email(
+        session, user_id=user_a.id, email_type="test_link", context={"reason": "teste"}
+    )
+    await session.commit()
+
+    await _run(session_factory)
+    await session.refresh(job)
+
+    assert (job.status, job.last_error_code) == (JobStatus.FAILED, "brevo_400")
 
 
 async def test_new_link_invalidates_the_previous_one(

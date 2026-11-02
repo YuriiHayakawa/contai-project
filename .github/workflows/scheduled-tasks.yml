@@ -1,0 +1,58 @@
+# Disparo externo das tarefas agendadas (ADR 0010, research.md seção 8).
+# O serviço da API dorme sem acessos, e o laço do worker dorme junto: as tarefas com prazo
+# (exclusão de conta, desativação das duas etapas e seus avisos, limpezas) rodam por este
+# disparo, a cada 3 horas, além de sempre que o serviço está acordado.
+#
+# Precisa, nas configurações do repositório (Settings → Secrets and variables → Actions):
+#   - variável APP_URL: o endereço do site na Vercel, sem barra no fim;
+#   - segredo SCHEDULER_TOKEN: o mesmo valor do SCHEDULER_TOKEN do Render.
+name: Tarefas agendadas
+
+on:
+  schedule:
+    # A cada 3 horas, em UTC. O GitHub pode atrasar o disparo em alguns minutos.
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-tasks
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Disparar as tarefas agendadas
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Chamar o endpoint interno pela Vercel
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$SCHEDULER_TOKEN" ]; then
+            echo "::error::Configure a variável APP_URL e o segredo SCHEDULER_TOKEN do repositório."
+            exit 1
+          fi
+          # O serviço pode estar dormindo: a primeira resposta leva cerca de 1 minuto, e a
+          # Vercel desiste em 120 s. Sem resposta ou com erro de passagem (502, 504), tenta de
+          # novo; 200, 503 (alguma tarefa falhou) e 4xx encerram.
+          for attempt in 1 2 3; do
+            status=$(curl --silent --show-error --output response.json --write-out "%{http_code}" \
+              --max-time 130 --request POST \
+              --header "Authorization: Bearer $SCHEDULER_TOKEN" \
+              "$APP_URL/api/v1/internal/scheduled-tasks") || status=000
+            echo "Tentativa $attempt: HTTP $status"
+            case "$status" in
+              200|503|4*) break ;;
+            esac
+            sleep 30
+          done
+          cat response.json 2>/dev/null || true
+          echo
+          if [ "$status" != "200" ]; then
+            echo "::error::As tarefas agendadas não rodaram por inteiro (HTTP $status)."
+            exit 1
+          fi

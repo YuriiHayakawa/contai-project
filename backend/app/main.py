@@ -1,7 +1,7 @@
 """Fábrica do app: middlewares, cabeçalhos de segurança, tratamento de erros e routers."""
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,9 @@ from app.modules.dashboard.router import router as dashboard_router
 from app.modules.imports.router import router as imports_router
 from app.modules.transactions.router import router as transactions_router
 from app.modules.users.router import router as users_router
+from app.worker.embedded import embedded_worker
+from app.worker.main import build_worker
+from app.worker.router import router as worker_router
 
 DOCS_PATHS = ("/api/docs", "/api/openapi.json")
 
@@ -65,10 +68,21 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
-@asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    yield
-    await get_engine().dispose()
+def _lifespan_for(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+    """Ciclo de vida do app: o worker embutido, quando ligado, e o pool do banco no fim."""
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        try:
+            if settings.worker_embedded:
+                async with embedded_worker(build_worker()):
+                    yield
+            else:
+                yield
+        finally:
+            await get_engine().dispose()
+
+    return lifespan
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -81,7 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None if settings.is_production else "/api/docs",
         redoc_url=None,
         openapi_url=None if settings.is_production else "/api/openapi.json",
-        lifespan=_lifespan,
+        lifespan=_lifespan_for(settings),
     )
 
     # A ordem importa: o último middleware adicionado é o primeiro a receber a requisição.
@@ -114,6 +128,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(imports_router)
     app.include_router(assistant_router)
     app.include_router(dashboard_router)
+    app.include_router(worker_router)
     return app
 
 

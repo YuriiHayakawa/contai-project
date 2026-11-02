@@ -125,8 +125,6 @@ _FILE_STILL_NEEDED = (
     ImportStatus.AWAITING_MAPPING,
 )
 _CONFIRMED = (ImportStatus.COMPLETED, ImportStatus.UNDONE)
-# Um arquivo sem importação pode ser o de um envio que ainda não terminou de gravar.
-ORPHAN_FILE_AGE = dt.timedelta(hours=1)
 _CURSOR_SEPARATOR = "|"
 
 RECEIPT_NEEDS_PICTURE = (
@@ -493,7 +491,7 @@ class ImportService:
         if received.format in AI_FORMATS:
             await self._check_ai_allowed(user_id)
 
-        stored_filename = await storage.store(received.content)
+        now = clock.utcnow()
         record = await self._imports.create(
             user_id,
             account_id=account.id,
@@ -501,9 +499,9 @@ class ImportService:
             file_format=received.format,
             original_filename=_safe_filename(filename),
             file_hash=received.file_hash,
-            stored_filename=stored_filename,
-            created_at=clock.utcnow(),
+            created_at=now,
         )
+        await self._imports.save_file(user_id, record.id, received.content, created_at=now)
         await self._enqueue(record)
         return await self._read(record)
 
@@ -943,31 +941,23 @@ class ImportService:
         record.mapping_preview = None
         record.waiting_since = None
         record.item_count = 0
-        try:
-            await self._discard_file(record)
-        except OSError:
-            # A falha fica registrada mesmo assim; o arquivo que sobrou sai na limpeza periódica.
-            logger.warning("import file not deleted", extra={"import_id": str(record.id)})
+        await self._discard_file(record)
         await self._imports.save(record.user_id, record)
 
     async def _discard_file(self, record: Import) -> None:
         """O original não fica guardado depois do processamento (FR-053)."""
-        if record.stored_filename is not None:
-            await storage.delete(record.stored_filename)
-            record.stored_filename = None
+        await self._imports.delete_file(record.user_id, record.id)
 
     async def _prepare_review(self, record: Import, ai_calls: list[AiCall]) -> None:
-        if record.stored_filename is None:
+        content = await self._imports.read_file(record.user_id, record.id)
+        if content is None:
             raise ImportFailed(FILE_MISSING)
         file = storage.StoredFile(
-            stored_filename=record.stored_filename,
+            content=content,
             format=ImportFormat(record.format),
             original_filename=record.original_filename,
         )
-        try:
-            head = (await file.read())[: storage.SNIFF_BYTES]
-        except FileNotFoundError as error:
-            raise ImportFailed(FILE_MISSING) from error
+        head = content[: storage.SNIFF_BYTES]
         importer = find_importer(head, file.original_filename, file.format, ImportKind(record.kind))
         if importer is None:
             raise ImportFailed(UNREADABLE)
@@ -1198,17 +1188,14 @@ class ImportService:
                 await self._imports.delete_items(record.user_id, record.id)
                 await self._fail(record, EXPIRED_CODES[status])
                 expired += 1
-        await self._remove_leftover_files(now)
+        await self._remove_leftover_files()
         return expired
 
-    async def _remove_leftover_files(self, now: dt.datetime) -> None:
-        """Apaga o arquivo de quem já não precisa dele e os arquivos sem importação nenhuma."""
+    async def _remove_leftover_files(self) -> None:
+        """Apaga o arquivo das importações que já não precisam dele.
+
+        Arquivo sem importação não existe: a exclusão da importação apaga o dela em cascata.
+        """
         finished = [status for status in ImportStatus if status not in _FILE_STILL_NEEDED]
         for record in await self._imports.with_file_in(finished):
             await self._discard_file(record)
-            await self._imports.save(record.user_id, record)
-
-        kept = await self._imports.stored_filenames()
-        for stored_filename in await storage.stored_before(now - ORPHAN_FILE_AGE):
-            if stored_filename not in kept:
-                await storage.delete(stored_filename)

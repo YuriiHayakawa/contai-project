@@ -8,7 +8,6 @@ apaga o usuário e, em cascata, todos os seus dados e arquivos; depois, não é 
 
 import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pyotp
 from httpx import AsyncClient
@@ -21,8 +20,7 @@ from app.modules.accounts.models import Account, AccountType
 from app.modules.accounts.repository import AccountRepository
 from app.modules.categories.models import CategoryColor, CategoryKind
 from app.modules.categories.repository import CategoryRepository
-from app.modules.imports import storage
-from app.modules.imports.models import Import, ImportFormat, ImportKind
+from app.modules.imports.models import Import, ImportFile, ImportFormat, ImportKind
 from app.modules.imports.repository import ImportRepository
 from app.modules.transactions.models import Transaction, TransactionType
 from app.modules.transactions.repository import TransactionRepository
@@ -137,8 +135,8 @@ async def test_login_still_works_during_grace(
 
 
 async def _seed_account_with_transaction_and_file(
-    session: AsyncSession, user: User, when: datetime, upload_dir: Path
-) -> tuple[Account, str]:
+    session: AsyncSession, user: User, when: datetime
+) -> Account:
     accounts = AccountRepository(session)
     categories = CategoryRepository(session)
     transactions = TransactionRepository(session)
@@ -174,19 +172,17 @@ async def _seed_account_with_transaction_and_file(
         created_at=when,
         category_id=category.id,
     )
-    stored_filename = await storage.store(b"conteudo do arquivo")
-    await imports.create(
+    record = await imports.create(
         user.id,
         account_id=account.id,
         kind=ImportKind.STATEMENT,
         file_format=ImportFormat.OFX,
         original_filename="extrato.ofx",
         file_hash=uuid.uuid4().hex,
-        stored_filename=stored_filename,
         created_at=when,
     )
-    assert (upload_dir / stored_filename).exists()
-    return account, stored_filename
+    await imports.save_file(user.id, record.id, b"conteudo do arquivo", created_at=when)
+    return account
 
 
 async def test_worker_purges_at_the_deadline_and_no_data_remains(
@@ -195,11 +191,8 @@ async def test_worker_purges_at_the_deadline_and_no_data_remains(
     frozen_time: datetime,
     session_factory: SessionFactory,
     session: AsyncSession,
-    upload_dir: Path,
 ) -> None:
-    _, stored_filename = await _seed_account_with_transaction_and_file(
-        session, user_a, frozen_time, upload_dir
-    )
+    await _seed_account_with_transaction_and_file(session, user_a, frozen_time)
     requester = await client_for(user_a)
     assert (await requester.post(DELETION, json={"password": TEST_PASSWORD})).status_code == 202
 
@@ -212,15 +205,14 @@ async def test_worker_purges_at_the_deadline_and_no_data_remains(
     clock.set_fixed_time(frozen_time + timedelta(days=7, seconds=1))
     assert await run_purge(session_factory) == 1
 
-    # Não sobra nada: nem o usuário, nem seus dados, nem o arquivo no disco.
+    # Não sobra nada: nem o usuário, nem seus dados, nem o arquivo enviado.
     assert await reload_user(session_factory, user_a.id) is None
     async with session_factory() as check:
-        for model in (Account, Transaction, Import):
+        for model in (Account, Transaction, Import, ImportFile):
             count = await check.execute(
                 select(func.count()).select_from(model).where(model.user_id == user_a.id)
             )
             assert count.scalar_one() == 0
-    assert not (upload_dir / stored_filename).exists()
 
 
 async def test_two_factor_code_is_required_when_enabled(

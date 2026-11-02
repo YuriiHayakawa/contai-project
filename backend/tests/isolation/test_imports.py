@@ -54,7 +54,6 @@ async def _import_of_a_awaiting_mapping(context: IsolationContext) -> Json:
         file_format=ImportFormat.CSV,
         original_filename="extrato.csv",
         file_hash="0" * 64,
-        stored_filename=uuid.uuid4().hex,
         created_at=clock.utcnow(),
     )
     record.status = ImportStatus.AWAITING_MAPPING
@@ -80,7 +79,6 @@ async def _import_in_review(context: IsolationContext, user: User, client: Async
         file_format=ImportFormat.OFX,
         original_filename="extrato.ofx",
         file_hash=uuid.uuid4().hex * 2,
-        stored_filename=uuid.uuid4().hex,
         created_at=clock.utcnow(),
     )
     await imports.add_items(
@@ -103,7 +101,6 @@ async def _import_in_review(context: IsolationContext, user: User, client: Async
         ],
     )
     record.status = ImportStatus.AWAITING_REVIEW
-    record.stored_filename = None
     record.waiting_since = clock.utcnow()
     record.item_count = 1
     await context.session.commit()

@@ -23,7 +23,8 @@ users ─┬─ sessions
        ├─ accounts ──────────────┐
        ├─ categories (pai/filha) │
        ├─ transactions ──────────┤ account_id, category_id, import_id
-       ├─ imports ── import_items┘
+       ├─ imports ─┬ import_items┘
+       │           └ import_files (só até o processamento)
        ├─ import_templates
        ├─ categorization_rules
        ├─ conversations ── chat_messages
@@ -239,7 +240,6 @@ Arquivar uma categoria mãe arquiva as filhas.
 | `format` | enum | `ofx`, `csv`, `xlsx`, `pdf`, `image` |
 | `original_filename` | texto | só para o histórico; nunca vai para logs |
 | `file_hash` | texto | SHA-256 do arquivo; avisa reimportação |
-| `stored_filename` | texto | nome gerado no volume privado; nulo depois de apagado (FR-053) |
 | `status` | enum | `queued`, `processing`, `awaiting_mapping`, `awaiting_review`, `completed`, `undone`, `failed` |
 | `error_code` | texto | motivo da falha, em código: `unreadable`, `no_transactions`, `multiple_accounts`, `too_many_rows`, `file_missing`, `processing_error`, `mapping_expired`, `review_expired` e, em PDF e imagem, `document_unreadable`, `ai_unavailable`, `ai_quota_exhausted`. Em `awaiting_mapping`, `mapping_mismatch` diz que o modelo enviado não leu o arquivo. Em `queued` e `processing`, `ai_busy` diz que o serviço de IA está ocupado e que a leitura será tentada de novo |
 | `template_id` | UUID | FK para `import_templates`; modelo aplicado |
@@ -268,6 +268,23 @@ awaiting_review → failed (review_expired, após 7 dias sem confirmação)
 A divergência de total é `document_total_cents != extracted_total_cents`. A divergência de saldo
 é calculada na leitura, comparando `bank_balance_cents` com o saldo da conta em
 `bank_balance_date`; não é feita se essa data for anterior à data de referência da conta.
+
+### import_files
+
+O arquivo enviado, guardado só até o processamento (ADR 0011). Substitui o volume privado de
+uploads e a coluna `imports.stored_filename` (revisão de 2026-11-02).
+
+| Campo | Tipo | Regras |
+|-------|------|--------|
+| `import_id` | UUID | PK; FK para `imports`, `ON DELETE CASCADE` |
+| `user_id` | UUID | FK para `users`, `ON DELETE CASCADE`; filtro obrigatório do repositório |
+| `content` | BYTEA | o conteúdo do arquivo, até 10 MB |
+| `created_at` | timestamptz | base da limpeza das linhas que sobrarem |
+
+- A linha é apagada quando a importação chega a `awaiting_review` ou `failed` (FR-053); em
+  `awaiting_mapping`, fica no máximo 24 horas. Uma importação cuja linha não existe mais falha
+  com `file_missing`.
+- O backup leva a estrutura da tabela, mas não os dados (`--exclude-table-data=import_files`).
 
 ### import_items
 

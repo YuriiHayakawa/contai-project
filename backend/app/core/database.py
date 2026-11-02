@@ -77,6 +77,12 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+def get_session_factory() -> SessionFactory:
+    """Dependência do FastAPI para quem precisa de várias unidades de trabalho na mesma
+    requisição, como o disparo das tarefas agendadas (uma por tarefa)."""
+    return session_scope
+
+
 async def ping(session: AsyncSession) -> bool:
     """Checagem de conexão usada pelo endpoint de saúde."""
     try:

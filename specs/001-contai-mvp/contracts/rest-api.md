@@ -18,6 +18,9 @@ testes de integração e o frontend assumem.
 - Conta com e-mail não confirmado: `403 email_not_verified` em qualquer rota autenticada.
 - Conta em exclusão: `403 account_pending_deletion` em tudo, exceto `GET /users/me` e
   `DELETE /users/me/deletion`.
+- Em produção, a API só atende o que chega pelo proxy da Vercel, com o cabeçalho
+  `x-contai-proxy-secret`; sem ele, toda rota responde `403 forbidden`, menos as de saúde.
+- Toda resposta leva `Cache-Control: no-store`.
 
 ### Formato de erro
 
@@ -238,3 +241,13 @@ proposta: o assistente pergunta o valor (`clarification`).
 |---------------|----------|
 | `GET /health` | `200` se a API e o banco respondem; `503` caso contrário |
 | `GET /health/worker` | `200` se o último batimento do worker tem menos de 60 s; `503` caso contrário |
+
+## Interna (disparo das tarefas agendadas)
+
+Chamada pelo workflow `scheduled-tasks.yml` a cada 3 horas (seção 8 de
+[research.md](../research.md)). Não usa o access token de usuário e não lida com os dados de um
+usuário específico; por isso fica fora do teste de acesso cruzado entre usuários.
+
+| Método e rota | Resposta |
+|---------------|----------|
+| `POST /internal/scheduled-tasks` | Exige `Authorization: Bearer <SCHEDULER_TOKEN>`, conferido em tempo constante; sem ele ou com outro valor, `401 unauthenticated`. Roda as tarefas periódicas, cada uma sob a trava dela, e responde `{ "tasks": [{ "name": "purge_account_deletions", "status": "ok" }, ...] }`, com `status` em `ok`, `skipped` (a trava estava com o laço do worker) ou `failed`. `200` se nenhuma falhou; `503`, com o mesmo corpo, se alguma falhou. Limite de 10 chamadas por hora por IP |

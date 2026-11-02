@@ -1,6 +1,49 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 1.0.1 → 2.0.0
+Bump rationale: MAJOR. O Princípio XII é redefinido de forma incompatível: a produção deixa de
+ser uma VPS com Docker Compose atrás do Caddy e passa a usar serviços gerenciados. A seção Stack
+e Dependências acompanha ("Ambientes"), e o Princípio III passa a aceitar o worker embutido no
+processo da API.
+
+Justificativa: o mantenedor decidiu (2026-10-29) publicar só em planos gratuitos e sem cartão —
+frontend na Vercel, API no Render e banco no Neon. O plano gratuito do Render não tem worker,
+cron nem disco permanente, e o serviço dorme depois de 15 minutos sem acesso. A validação do
+deploy (research.md, seção 29) confirmou o desenho: uma única origem pela Vercel, a API recusando
+o que não traz o segredo do proxy, o cookie de refresh intacto, upload de 10 MB, partida a frio
+de cerca de 1 minuto e o IP do visitante pela primeira entrada do X-Forwarded-For.
+
+Modified principles:
+  - III. Arquitetura — Backend: o worker da fila PODE rodar em processo próprio ou embutido no
+    processo da API (antes, "um processo worker").
+  - XII. Deploy e Infraestrutura: o Docker Compose fica para o ambiente local; a produção PODE
+    usar serviços gerenciados, com uma única origem, a API atrás de um proxy com segredo, HTTPS
+    do provedor, cabeçalhos de segurança nas duas camadas e a mesma imagem da API; o backup fica
+    fora do provedor do banco; as tarefas agendadas PODEM ter disparo externo.
+
+Added sections: nenhuma.
+
+Removed sections: nenhuma.
+
+Templates: não modificados. Os templates e comandos dependentes leem esta constituição em tempo
+de execução.
+
+ADR: docs/adr/0010-hospedagem-em-planos-gratuitos.md acompanha esta emenda, como a seção de
+governança pede para emendas que tocam arquitetura e segurança. O ADR 0011 substitui o 0006
+(arquivos enviados no banco), e o 0007 foi revisto (backup por GitHub Actions).
+
+Plano de adequação (Governance): o código que a emenda deixa fora do desenho — volume de uploads,
+worker em contêiner próprio, envio por SMTP em produção, tarefas periódicas só no laço do worker —
+é adaptado pelas tarefas T258 a T264 e T216 a T218 de specs/001-contai-mvp/tasks.md.
+
+Follow-up TODOs:
+  - Continuam valendo as pendências externas da versão 1.0.0 que ainda estão abertas (valores
+    numéricos deixados para specs e ADRs).
+
+HISTÓRICO
+---------
+1.0.1 (2026-10-01)
 Version change: 1.0.0 → 1.0.1
 Bump rationale: PATCH. A lista de domínios do Princípio III ganha o módulo `categorization`. É um
 ajuste da lista, sem mudança de regra: o módulo segue a mesma estrutura dos demais (router →
@@ -32,8 +75,6 @@ Follow-up TODOs:
   - Continuam valendo as pendências externas da versão 1.0.0 que ainda estão abertas (valores
     numéricos deixados para specs e ADRs).
 
-HISTÓRICO
----------
 1.0.0 (2026-10-01)
 Version change: (template não preenchido) → 1.0.0
 Bump rationale: ratificação inicial da constituição; primeira versão com princípios concretos.
@@ -128,7 +169,8 @@ componentes sejam previsíveis e testáveis.
   detectar formato → extrair → normalizar para transações propostas. Adicionar um banco ou
   formato novo NÃO DEVE alterar o núcleo.
 - O processamento de importações DEVE ser assíncrono, usando uma fila baseada em tabela de jobs
-  no PostgreSQL e um processo worker. Redis ou broker externo NÃO DEVEM ser usados no MVP.
+  no PostgreSQL e um worker, que PODE rodar em processo próprio ou embutido no processo da API.
+  Redis ou broker externo NÃO DEVEM ser usados no MVP.
 - Configurações DEVEM vir exclusivamente de variáveis de ambiente, lidas por uma classe de
   settings do Pydantic.
 
@@ -288,20 +330,28 @@ pode se tornar ele mesmo um vazamento de dados.
 
 ### XII. Deploy e Infraestrutura
 
-- Toda a aplicação DEVE subir com Docker Compose (frontend, API, worker, PostgreSQL e proxy
-  reverso), tanto no ambiente local quanto em produção.
-- O alvo de deploy DEVE ser uma VPS com Docker, atrás de proxy reverso com HTTPS automático (por
-  exemplo, Caddy).
+- O ambiente local DEVE subir com Docker Compose (frontend, API com o worker, PostgreSQL e proxy
+  reverso) com um único comando.
+- A produção PODE usar serviços gerenciados (hospedagem do build estático, da API em contêiner e
+  do PostgreSQL), desde que:
+  - o navegador veja uma única origem, com as chamadas `/api` repassadas à API por um proxy;
+  - a API recuse o que não chega pelo proxy, conferindo um segredo compartilhado;
+  - o HTTPS seja obrigatório e os cabeçalhos de segurança venham das duas camadas: o proxy nas
+    páginas e a API nas respostas dela;
+  - a API rode da mesma imagem Docker usada no ambiente local.
 - O frontend DEVE ser servido como build estático do Vite.
 - Migrações Alembic DEVEM ser aplicadas automaticamente no deploy. Alterações manuais no banco de
   produção são proibidas.
-- DEVE existir backup diário automático do PostgreSQL, com retenção definida e procedimento de
-  restauração documentado e testado.
+- Quando a hospedagem não mantém um processo contínuo, as tarefas agendadas PODEM ser disparadas
+  por um agendador externo, que chama um endpoint interno protegido por token.
+- DEVE existir backup diário automático do PostgreSQL, guardado fora do provedor do banco, com
+  retenção definida e procedimento de restauração documentado e testado.
 - O CI no GitHub Actions DEVE executar lint, type check, testes e auditoria de dependências a
   cada push. O deploy só PODE acontecer com o CI verde.
 
-**Rationale**: o mesmo Compose em todos os ambientes elimina o "funciona na minha máquina", e um
-backup que nunca foi restaurado não é um backup.
+**Rationale**: a mesma imagem e o mesmo desenho de rotas (uma única origem, `/api` repassado)
+em todos os ambientes eliminam o "funciona na minha máquina" sem obrigar a um servidor próprio; e
+um backup que nunca foi restaurado não é um backup.
 
 ### XIII. Documentação
 
@@ -323,7 +373,8 @@ A stack abaixo é obrigatória. Substituir qualquer item exige emenda desta cons
   estado de servidor, React Hook Form + Zod para formulários, Recharts para gráficos e
   lucide-react para ícones.
 - **Banco de dados**: PostgreSQL.
-- **Ambientes**: local e produção via Docker Compose.
+- **Ambientes**: local via Docker Compose; produção em serviços gerenciados, com a mesma imagem
+  da API (ver Princípio XII).
 - **IA**: Google Gemini (plano gratuito no início), sempre acessado por uma camada de abstração
   própria (ver Princípio VI).
 
@@ -362,4 +413,4 @@ constituição antes da implementação, e toda revisão de código DEVE verific
 princípios. Um desvio só é aceito quando documentado com justificativa e com a alternativa mais
 simples que foi rejeitada; desvios que enfraquecem a segurança seguem o Princípio V.
 
-**Version**: 1.0.1 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-10-01
+**Version**: 2.0.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-11-02
