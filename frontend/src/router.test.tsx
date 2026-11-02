@@ -2,9 +2,10 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
-import { RouterProvider, createMemoryRouter } from "react-router";
+import { RouterProvider, createMemoryRouter, type InitialEntry } from "react-router";
 
 import { ToastProvider } from "./components/ui/Toast";
+import { WAKING_SERVER_NOTICE } from "./features/auth/components/RestoringSessionScreen";
 import { AuthProvider, useAuth, type AuthContextValue } from "./features/auth/hooks/useAuth";
 import type { CurrentUser } from "./features/auth/types";
 import { SESSION_EXPIRED_MESSAGE, api, setAccessToken } from "./lib/api-client";
@@ -25,7 +26,8 @@ const marina: CurrentUser = {
 // Marina ainda não tem lançamentos: a tela inicial mostra as boas-vindas.
 const HOME_HEADING = "Boas-vindas, Marina";
 
-type Server = "session" | "no-session" | "offline";
+/** `asleep`: o servidor dorme e nenhuma chamada responde enquanto o teste dura. */
+type Server = "session" | "no-session" | "offline" | "asleep";
 
 let server: Server;
 let auth: AuthContextValue;
@@ -85,6 +87,12 @@ function fakeAuthRoute(path: string, body: Record<string, unknown> | null): Resp
       return json(202, { message: "Se houver conta esperando confirmação, enviamos o link." });
     case "/auth/password/forgot":
       return json(202, { message: "Se este e-mail tiver uma conta, enviamos um link." });
+    case "/auth/2fa/reset/request":
+      return json(202, { message: "Se a verificação estiver ativa, enviamos um link." });
+    case "/auth/2fa/reset/confirm":
+      return body?.token === "valido"
+        ? json(200, { effective_at: "2026-11-05T15:00:00Z" })
+        : invalidToken();
     case "/auth/verify-email":
     case "/auth/password/reset":
       return body?.token === "valido" ? new Response(null, { status: 204 }) : invalidToken();
@@ -165,6 +173,7 @@ function fakeFetch(url: string, init: RequestInit): Promise<Response> {
     authorized: new Headers(init.headers).has("Authorization"),
   });
   if (server === "offline") return Promise.reject(new TypeError("Failed to fetch"));
+  if (server === "asleep") return new Promise<Response>(() => undefined);
   const authResponse = fakeAuthRoute(path, body);
   if (authResponse) return Promise.resolve(authResponse);
   if (server === "no-session") return Promise.resolve(unauthenticated());
@@ -184,8 +193,8 @@ function AuthCapture() {
   return null;
 }
 
-function renderApp(initialPath: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [initialPath] });
+function renderApp(initialEntry: InitialEntry) {
+  const router = createMemoryRouter(routes, { initialEntries: [initialEntry] });
   render(
     <QueryClientProvider client={createQueryClient()}>
       <ToastProvider>
@@ -238,6 +247,43 @@ describe("RequireAuth", () => {
     renderApp(paths.home);
 
     expect(screen.getByRole("status")).toHaveTextContent("Carregando…");
+  });
+
+  describe("com o servidor dormindo", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      server = "asleep";
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("depois de 5 segundos sem resposta, avisa que o servidor está acordando", () => {
+      renderApp(paths.home);
+      const status = screen.getByRole("status");
+      expect(status).toHaveAttribute("aria-live", "polite");
+
+      act(() => vi.advanceTimersByTime(4999));
+      expect(screen.queryByText(WAKING_SERVER_NOTICE)).not.toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(1));
+      expect(status).toHaveTextContent(WAKING_SERVER_NOTICE);
+    });
+
+    it("a tela de entrada também avisa enquanto espera a primeira resposta", () => {
+      renderApp(paths.login);
+
+      act(() => vi.advanceTimersByTime(5000));
+      expect(screen.getByRole("status")).toHaveTextContent(WAKING_SERVER_NOTICE);
+    });
+  });
+
+  it("quando o servidor responde a tempo, o aviso não aparece", async () => {
+    renderApp(paths.transactions);
+
+    expect(await screen.findByRole("heading", { name: "Lançamentos", level: 1 })).toBeVisible();
+    expect(screen.queryByText(WAKING_SERVER_NOTICE)).not.toBeInTheDocument();
   });
 
   it("com o cookie de refresh válido, recupera a sessão e mostra a casca do app", async () => {
@@ -706,8 +752,37 @@ describe("redefinir a senha", () => {
   });
 });
 
+describe("desativar as duas etapas por e-mail", () => {
+  it("o pedido lembra de olhar a caixa de spam", async () => {
+    const user = userEvent.setup();
+    server = "no-session";
+    renderApp({ pathname: paths.twoFactorResetRequest, state: { challengeToken: "desafio" } });
+
+    await user.click(await screen.findByRole("button", { name: "Enviar o link por e-mail" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Se não encontrar o e-mail, confira também a caixa de spam.",
+    );
+    expect(requestsTo("/auth/2fa/reset/request")[0]?.body).toEqual({
+      challenge_token: "desafio",
+    });
+  });
+
+  it("a confirmação pelo link lembra de olhar a caixa de spam", async () => {
+    const user = userEvent.setup();
+    server = "no-session";
+    renderApp(`${paths.twoFactorResetConfirm}?token=valido`);
+
+    await user.click(await screen.findByRole("button", { name: "Confirmar a desativação" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Se não encontrar o e-mail, confira também a caixa de spam.",
+    );
+  });
+});
+
 describe("política de privacidade", () => {
-  it("é pública e explica dados, IA, uso pelo provedor e cópias de 14 dias", async () => {
+  it("é pública e explica dados, IA, uso pelo provedor, cópias de 14 dias e onde os dados ficam", async () => {
     server = "no-session";
     renderApp(paths.privacy);
 
@@ -720,12 +795,17 @@ describe("política de privacidade", () => {
       "O que é enviado ao serviço de inteligência artificial",
       "Como o serviço de IA pode usar esses dados",
       "Cópias de segurança",
+      "Onde os dados ficam",
     ]) {
       expect(screen.getByRole("heading", { name: title, level: 2 })).toBeInTheDocument();
     }
     expect(screen.getByText(/melhorar os próprios modelos/)).toBeInTheDocument();
     expect(screen.getByText(/guardada por 14 dias/)).toBeInTheDocument();
-    expect(screen.getByText(/Versão 1, de 14 de outubro de 2026/)).toBeInTheDocument();
+    for (const provider of ["Vercel", "Render", "Neon", "Brevo", "GitHub"]) {
+      expect(screen.getByText(new RegExp(`^${provider}:`))).toBeInTheDocument();
+    }
+    expect(screen.getByText(/transferência internacional de dados/)).toBeInTheDocument();
+    expect(screen.getByText(/Versão 2, de 2 de novembro de 2026/)).toBeInTheDocument();
   });
 });
 

@@ -38,7 +38,8 @@ export function TwoFactorResetRequestPage() {
         <Notice kind="success">
           Se a verificação em duas etapas estiver ativa nesta conta, enviamos para o seu e-mail um
           link para desativá-la. Abra o link e confirme: a desativação passa a valer 72 horas
-          depois, e avisaremos você por e-mail antes disso. Se foi engano, é só não abrir o link.
+          depois, e avisaremos você por e-mail antes disso. Se foi engano, é só não abrir o link. Se
+          não encontrar o e-mail, confira também a caixa de spam.
         </Notice>
       ) : (
         <Card>

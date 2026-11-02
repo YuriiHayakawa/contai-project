@@ -39,9 +39,7 @@ export function ForgotPasswordPage() {
     return (
       <AuthLayout title="Confira seu e-mail" footer={footer}>
         <Notice kind="success">{request.data.message}</Notice>
-        <p className="text-body text-ink-muted">
-          O link vale por 1 hora. Se o e-mail não chegar em alguns minutos, confira a caixa de spam.
-        </p>
+        <p className="text-body text-ink-muted">O link vale por 1 hora e só funciona uma vez.</p>
       </AuthLayout>
     );
   }

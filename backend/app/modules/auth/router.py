@@ -11,6 +11,7 @@ from app.core.database import get_session
 from app.core.errors import Unauthenticated
 from app.core.rate_limit import client_ip, limiter
 from app.modules.auth.dependencies import CurrentUserDep
+from app.modules.auth.emails import SPAM_REMINDER
 from app.modules.auth.errors import RefreshNotFromApp
 from app.modules.auth.schemas import (
     ForgotPasswordRequest,
@@ -38,17 +39,20 @@ REFRESH_COOKIE_PATH = "/api/v1/auth/refresh"
 CLIENT_HEADER_VALUE = "web"
 
 REGISTERED_MESSAGE = (
-    "Quase lá! Enviamos um e-mail para você. Abra o link que está nele para confirmar a conta."
+    "Quase lá! Enviamos um e-mail para você. Abra o link que está nele para confirmar a conta. "
+    f"{SPAM_REMINDER}"
 )
 RESENT_MESSAGE = (
-    "Se este e-mail tiver uma conta esperando confirmação, enviamos um novo link para ele."
+    "Se este e-mail tiver uma conta esperando confirmação, enviamos um novo link para ele. "
+    f"{SPAM_REMINDER}"
 )
 FORGOT_MESSAGE = (
-    "Se este e-mail tiver uma conta no Contaí, enviamos um link para criar uma nova senha."
+    "Se este e-mail tiver uma conta no Contaí, enviamos um link para criar uma nova senha. "
+    f"{SPAM_REMINDER}"
 )
 TWO_FACTOR_RESET_REQUESTED_MESSAGE = (
     "Se a verificação em duas etapas estiver ativa nesta conta, enviamos para o seu e-mail um "
-    "link para desativá-la."
+    f"link para desativá-la. {SPAM_REMINDER}"
 )
 
 
