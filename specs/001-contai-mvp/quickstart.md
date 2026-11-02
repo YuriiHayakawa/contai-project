@@ -26,7 +26,7 @@ docker compose up
 | `http://localhost:8080` | aplicação |
 | `http://localhost:8080/api/docs` | documentação OpenAPI |
 | `http://localhost:8080/api/v1/health` | saúde da API e do banco |
-| `http://localhost:8080/api/v1/health/worker` | saúde do worker |
+| `http://localhost:8080/api/v1/health/worker` | saúde do worker, que roda dentro da API |
 | `http://localhost:8025` | Mailpit: caixa de entrada dos e-mails enviados em desenvolvimento |
 
 As migrações são aplicadas quando a API sobe. Esperado: os dois endpoints de saúde respondem
@@ -211,11 +211,37 @@ conversa do usuário A. Todas respondem `404`.
 
 ## Produção
 
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
+A produção usa só planos gratuitos, sem cartão (ADR 0010): o site na Vercel, a API no Render e o
+banco no Neon, com o Render e o Neon em Ohio. Os segredos ficam só nos painéis dos serviços e nos
+segredos do GitHub Actions; nada vai para o repositório.
 
-Feito pelo job de deploy, só com o CI verde. Depois do deploy, confira os dois endpoints de saúde
-pelo domínio em HTTPS e os cabeçalhos de segurança da resposta. O procedimento de backup e de
-restauração fica documentado em `infra/backup/` e deve ser executado uma vez contra um banco
-temporário antes de o sistema receber usuários reais.
+| Onde | Variáveis |
+|------|-----------|
+| Render (API) | `ENVIRONMENT=production`, `DATABASE_URL` (endpoint direto do Neon, `postgresql+asyncpg://…?ssl=require`), `APP_ORIGIN` (endereço da Vercel), `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `PROXY_SHARED_SECRET`, `SCHEDULER_TOKEN`, `WORKER_EMBEDDED=true`, `EMAIL_BACKEND=brevo`, `BREVO_API_KEY`, `EMAIL_FROM`, `AI_PROVIDER=gemini`, `AI_API_KEY`, `AI_MODEL_*` e os limites |
+| Vercel (site) | `ORIGIN_SECRET`, com o mesmo valor de `PROXY_SHARED_SECRET` |
+| GitHub Actions do repositório principal | `SCHEDULER_TOKEN`, `RENDER_DEPLOY_HOOK_URL`, `VERCEL_DEPLOY_HOOK_URL` e a variável `APP_URL` |
+| GitHub Actions do repositório `contai-backups` (privado) | `BACKUP_DATABASE_URL` (usuário só de leitura) e a variável `BACKUP_AGE_PUBLIC_KEY` |
+| Fora de tudo | a chave privada do `age`, com o mantenedor |
+
+O deploy é feito pelo job de deploy do CI, só em push na `main` e só com o CI verde: ele chama os
+deploy hooks do Render e da Vercel e confere o health check pela Vercel. As migrações rodam
+quando a API sobe.
+
+Depois do deploy, confira pela Vercel (as mesmas verificações da validação, seção 29 de
+[research.md](./research.md)):
+
+1. `GET /api/v1/health` e `GET /api/v1/health/worker` respondem `200`. Se o serviço estava
+   dormindo, a primeira resposta leva cerca de 1 minuto, e o app mostra o aviso de que está
+   acordando o servidor.
+2. Direto no endereço do Render, uma rota que não seja de saúde responde `403`.
+3. As páginas trazem a política de segurança de conteúdo, HSTS, `X-Content-Type-Options` e
+   `Referrer-Policy`; as respostas da API, `Cache-Control: no-store`; os arquivos de `/assets/`,
+   `max-age=31536000, immutable`.
+4. Entre com uma conta: nas ferramentas do navegador (Application → Cookies), o cookie de
+   refresh aparece com `HttpOnly`, `Secure` e `SameSite=Strict`.
+5. Importe um arquivo de até 10 MB e confira que ele é lido e que a revisão aparece.
+6. Rode à mão o workflow `scheduled-tasks.yml` (Actions → Run workflow): ele termina verde, com
+   todas as tarefas em `ok` ou `skipped`.
+7. Rode à mão o `backup.yml` do repositório `contai-backups` e restaure o artifact num banco
+   temporário com `infra/backup/restore.sh`, como descreve `infra/backup/README.md`. Faça isso
+   antes de o sistema receber usuários reais.

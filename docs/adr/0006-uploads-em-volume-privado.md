@@ -1,6 +1,7 @@
 # ADR 0006: uploads em volume privado, fora do banco e do backup
 
-- **Situação**: aceito
+- **Situação**: substituído pelo [[0011-arquivos-enviados-no-banco]] (2026-11-02): o Render
+  gratuito não tem disco permanente
 - **Data**: 2026-10-14
 - **Referência**: `specs/001-contai-mvp/research.md`, seção 9; constituição, Princípio V
 

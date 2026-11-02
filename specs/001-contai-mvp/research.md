@@ -10,13 +10,14 @@ justificativas das dependências novas, como exige a constituição. Não restou
 As decisões não foram conferidas em fontes online; a seção 27 lista o que precisa ser verificado
 no início da implementação.
 
-## 1. Topologia: mesma origem atrás do Caddy
+## 1. Topologia: uma única origem
 
-- **Decision**: o Caddy é a única porta de entrada. `/api/*` vai para a API, e todo o resto vai
-  para o frontend. Em desenvolvimento, o `docker-compose.yml` sobe o Caddy em
-  `http://localhost:8080`, com o frontend rodando o servidor de desenvolvimento do Vite (com
-  recarga automática) por trás dele; em produção, o serviço `frontend` é uma imagem que apenas
-  serve o build estático.
+- **Decision**: o navegador vê uma única origem. `/api/*` vai para a API, e todo o resto é o
+  frontend. Em desenvolvimento, o `docker-compose.yml` sobe o Caddy em `http://localhost:8080`,
+  com o frontend rodando o servidor de desenvolvimento do Vite (com recarga automática) por
+  trás dele. Em produção (revisão de 2026-11-02, ADR 0010), a Vercel serve o build estático e
+  repassa `/api/*` à API no Render, acrescentando o cabeçalho com o segredo do proxy; a API
+  recusa o que chega sem ele. Os detalhes estão na seção 24.
 - **Rationale**: com app e API na mesma origem, o cookie `SameSite=Strict` funciona sem
   exceções, não é preciso liberar CORS para nenhuma outra origem, e dev e produção têm o mesmo
   desenho de rotas. A lista de origens permitidas do CORS fica vazia por padrão e é configurável
@@ -91,8 +92,10 @@ no início da implementação.
     autenticados. Valores iniciais, todos configuráveis: login 10/min por IP; cadastro 5/h por
     IP; pedidos de e-mail (reenvio, recuperação) 5/h por IP; upload 20/h por usuário; mensagens
     ao assistente 10/min por usuário.
-  - O IP do cliente vem do cabeçalho definido pelo Caddy, e a API só confia nele quando a
-    conexão vem da rede interna do Compose.
+  - O IP do cliente: no ambiente local, vem do cabeçalho definido pelo Caddy, e a API só confia
+    nele quando a conexão vem da rede interna do Compose; em produção, é a primeira entrada do
+    `X-Forwarded-For`, aceita só nas requisições que trazem o segredo do proxy da Vercel (seções
+    24 e 29). Os contadores em memória zeram também quando o serviço dorme.
 - **Rationale**: o bloqueio é uma regra da spec (FR-009) e precisa sobreviver a reinícios e ser
   testável; por isso fica no banco. O limite por frequência é só proteção contra abuso, e perder
   os contadores em um reinício é aceitável com a API em instância única.
@@ -124,8 +127,13 @@ no início da implementação.
 
 ## 7. E-mails
 
-- **Decision**: todo e-mail é enviado pelo worker, por um job `send_email`, usando `smtplib` e
-  `email.message` da biblioteca padrão dentro de `asyncio.to_thread`. O token do link é gerado
+- **Decision**: todo e-mail é enviado pelo worker, por um job `send_email`. Em desenvolvimento,
+  usa `smtplib` e `email.message` da biblioteca padrão dentro de `asyncio.to_thread`, com o
+  Mailpit. Em produção (revisão de 2026-11-02), o Render gratuito fecha as portas de SMTP, e o
+  envio vai pela API HTTPS do Brevo (`POST /v3/smtp/email`), com `urllib.request` da biblioteca
+  padrão, também em `asyncio.to_thread`; `EMAIL_BACKEND` escolhe entre `smtp` e `brevo`. As
+  respostas 429 e 5xx viram nova tentativa, e as outras 4xx, falha definitiva. Sem domínio
+  próprio, o Brevo troca o remetente por um endereço do domínio dele. O token do link é gerado
   dentro do job, que grava só o hash; o payload do job tem apenas ids e o tipo do e-mail. Os
   textos ficam em arquivos em `app/email/templates/`, preenchidos com `string.Template`.
 - **Rationale**: enviar pela fila dá novas tentativas automáticas e faz as respostas de cadastro
@@ -138,12 +146,18 @@ no início da implementação.
 
 - **Decision**:
   - Tabela `jobs`; o worker busca com `SELECT ... FOR UPDATE SKIP LOCKED`, em laço com espera
-    curta quando não há trabalho.
+    curta quando não há trabalho. Desde 2026-11-02, o laço roda como uma tarefa de fundo dentro
+    do processo da API (`WORKER_EMBEDDED`), em produção e no ambiente local; ele começa e
+    para com a API.
   - Falha transitória: nova tentativa com backoff exponencial e aleatoriedade, até
     `max_attempts`. Job travado (worker morreu) volta para a fila depois de um tempo limite.
   - Tarefas periódicas rodam no mesmo laço, por intervalo: exclusões de conta vencidas, pedidos
     de desativação de duas etapas vencidos e seus lembretes, limpeza de tokens e sessões
-    expirados, e limpeza de arquivos e importações abandonadas.
+    expirados, e limpeza de arquivos e importações abandonadas. Como o serviço de produção dorme
+    sem acessos, elas também têm um disparo externo: o workflow `scheduled-tasks.yml` chama, a
+    cada 3 horas, `POST /api/v1/internal/scheduled-tasks`, protegido por token
+    (`SCHEDULER_TOKEN`), que as roda e devolve o resultado de cada uma. Cada tarefa roda sob um
+    advisory lock do PostgreSQL próprio dela, para o laço e o disparo não a rodarem em dobro.
   - Saúde do worker: ele grava um batimento em `worker_heartbeats`; `GET /api/v1/health/worker`
     responde saudável se o último batimento tem menos de 60 segundos, e o `healthcheck` do
     contêiner usa a mesma checagem.
@@ -162,15 +176,19 @@ no início da implementação.
 
 ## 9. Uploads
 
-- **Decision**: limite de 10 MB aplicado no Caddy e de novo na API, lendo em blocos; tipo real
-  conferido com `filetype` pelos primeiros bytes (PDF, JPG, PNG, XLSX) e por inspeção de conteúdo
-  para OFX e CSV, que são texto; nome gerado pelo sistema (UUID); gravação em um volume privado
-  compartilhado só entre `api` e `worker`, fora de qualquer pasta servida; o volume não entra no
-  backup. PDF cifrado é detectado pelo marcador `/Encrypt` e recusado.
-- **Rationale**: atende o Princípio V. Guardar o arquivo no banco colocaria documentos bancários
-  dentro dos backups por 14 dias, contra a regra de descartar o original.
-- **Alternatives considered**: arquivo em coluna `bytea` (vai para o backup); armazenamento de
-  objetos externo (infraestrutura a mais para arquivos que vivem minutos).
+- **Decision** (revista em 2026-11-02, ADR 0011): limite de 10 MB aplicado na API, lendo em
+  blocos (o upload de 10 MB pela Vercel foi validado: seção 29); tipo real conferido com
+  `filetype` pelos primeiros bytes (PDF, JPG, PNG, XLSX) e por inspeção de conteúdo para OFX e
+  CSV, que são texto. O conteúdo vai para a tabela `import_files`, uma linha por importação,
+  apagada depois do processamento; o backup leva a estrutura dela, mas não os dados
+  (`pg_dump --exclude-table-data=import_files`). PDF cifrado é detectado pelo marcador
+  `/Encrypt` e recusado.
+- **Rationale**: atende o Princípio V e sobrevive à hibernação do Render, que não tem disco
+  permanente. Antes, os arquivos ficavam num volume privado entre `api` e `worker` (ADR 0006,
+  substituído).
+- **Alternatives considered**: disco do serviço (perde o arquivo quando o serviço reinicia ou
+  dorme); armazenamento de objetos externo (mais uma conta para arquivos que vivem minutos);
+  conteúdo no payload do job (a fila guarda só identificadores).
 
 ## 10. Fluxo e estados da importação
 
@@ -474,30 +492,43 @@ no início da implementação.
 
 ## 24. Infraestrutura, deploy, backup e CI
 
-- **Decision**:
-  - `docker-compose.yml` (dev): `caddy`, `frontend` (Vite), `api`, `worker`, `postgres`,
-    `mailpit`. `docker-compose.prod.yml`: `caddy` (HTTPS automático), `frontend` (build
-    estático), `api`, `worker`, `postgres` (sem porta publicada) e `backup`.
-  - O contêiner da API roda `alembic upgrade head` antes de iniciar; o worker só sobe com a API
-    saudável.
-  - Backup: contêiner que roda `pg_dump` uma vez por dia, compacta, cifra com `age` usando uma
-    chave pública (a chave privada fica fora do servidor) e envia com `rclone` para um
-    armazenamento de objetos compatível com S3. Retenção de 14 dias, aplicada pela regra de ciclo
-    de vida do bucket e conferida pelo script. `infra/backup/restore.sh` documenta e executa a
-    restauração; o procedimento é testado restaurando em um banco temporário.
+- **Decision** (revista em 2026-11-02, constituição 2.0.0 e ADR 0010; a versão anterior previa
+  uma VPS com `docker-compose.prod.yml` atrás do Caddy):
+  - `docker-compose.yml` (ambiente local): `caddy`, `frontend` (Vite), `api` (com o worker
+    embutido), `postgres` e `mailpit`.
+  - Produção em planos gratuitos, sem cartão, com Render e Neon na mesma região (Ohio):
+    - **Vercel**: serve o build estático e repassa `/api/*` à API (`frontend/vercel.json`, com
+      `routes`, porque o cabeçalho do segredo exige `transforms`). Aplica nas páginas a CSP da
+      seção 26, HSTS, `nosniff` e `Referrer-Policy`; `/assets/` com cache de um ano
+      (`immutable`), um arquivo de `/assets/` que não existe com 404 sem cache, e o resto com
+      `no-cache`; o repasse sem cache.
+    - **Render**: a API, da mesma imagem do `backend/Dockerfile` (estágio `prod`), na porta de
+      `PORT`, com health check em `/api/v1/health`. O `entrypoint.sh` roda `alembic upgrade
+      head` a cada partida.
+    - **Neon**: PostgreSQL pelo endpoint direto (sem o pooler, que quebra os prepared statements
+      do asyncpg), com `?ssl=require`.
+  - A API recusa com 403 o que chega sem o segredo do proxy (`PROXY_SHARED_SECRET`, igual ao
+    `ORIGIN_SECRET` da Vercel), menos o health check; responde tudo com `Cache-Control:
+    no-store`; e lê o IP do visitante da primeira entrada do `X-Forwarded-For` (seção 29).
+  - Tarefas agendadas: ver seção 8.
+  - Backup: workflow `backup.yml` no repositório privado `contai-backups`, uma vez por dia:
+    `pg_dump` com um usuário só de leitura e sem os dados de `import_files`, compactado, cifrado
+    com `age` por chave pública (a chave privada fica com o mantenedor) e guardado como artifact
+    com `retention-days: 14`. `infra/backup/restore.sh` documenta e executa a restauração; o
+    procedimento é testado restaurando em um banco temporário.
   - CI (`ci.yml`): Ruff, mypy, pytest com cobertura e `pip-audit` no backend; ESLint, Prettier,
     `tsc`, Vitest e `npm audit` no frontend.
-  - Deploy: job do GitHub Actions que depende dos jobs de CI e roda só na branch principal;
-    conecta na VPS por SSH e executa `infra/deploy.sh`, que atualiza o código, constrói as imagens
-    e sobe o `docker-compose.prod.yml`.
-  - Cabeçalhos de segurança (CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`) definidos no
-    Caddy para tudo e repetidos pela API nas respostas dela.
-- **Rationale**: Princípio XII. Depender dos jobs de CI garante por construção que só há deploy
-  com CI verde. A cifra com chave pública impede que uma invasão do servidor exponha os backups
-  antigos.
-- **Alternatives considered**: `Makefile` para rodar localmente (o ambiente de desenvolvimento é
-  Windows; `docker compose up` já é o comando único); construir imagens no CI e publicar em um
-  registro (mais peças; pode vir depois se a VPS não aguentar o build).
+  - Deploy: job do GitHub Actions que depende dos jobs de CI e roda só em push na `main`; chama
+    os deploy hooks do Render e da Vercel e confere `/api/v1/health` pela Vercel. Os deploys
+    automáticos e as prévias dos dois ficam desligados.
+  - Segredos só nos painéis dos serviços e nos segredos do GitHub Actions; nada no repositório.
+- **Rationale**: Princípio XII (constituição 2.0.0). Depender dos jobs de CI garante por
+  construção que só há deploy com CI verde. A cifra com chave pública impede que um vazamento de
+  quem guarda os backups exponha o conteúdo deles.
+- **Alternatives considered**: VPS própria (custa dinheiro); manter o serviço acordado com
+  acessos periódicos (estoura as 100 CU-horas do Neon); cron e worker do Render (não existem no
+  plano gratuito); artifacts no repositório principal (vai ser público); armazenamento de objetos
+  com `rclone` (pede cartão ou não garante que não pede).
 
 ## 25. Dependências além da lista da constituição
 
@@ -595,7 +626,8 @@ Ele traz decisões que afetam a implementação além do visual.
   navegadores: a prévia foi conferida só por capturas estáticas no Chrome.
 - Os arquivos de licença das duas fontes, ao copiá-las para o repositório.
 - O provedor de e-mail transacional e o de armazenamento de objetos para o backup, e as
-  credenciais de cada um.
+  credenciais de cada um. Resolvido em 2026-11-02: Brevo, pela API (seção 7), e artifacts num
+  repositório privado do GitHub (seção 24).
 
 ## 28. Desempenho do painel e da lista: medição com 5.000 lançamentos
 
@@ -645,3 +677,36 @@ de construir as telas do painel.
 - **A repetir**: a medição vale para um usuário com 5.000 lançamentos e pouca concorrência.
   Repetir no servidor de produção, e de novo se um usuário passar de algumas dezenas de
   milhares de lançamentos ou se a busca por texto ficar perceptível.
+
+## 29. Validação do deploy em planos gratuitos (2026-10-31 e 2026-11-02)
+
+Feita antes das adaptações grandes, com a Vercel e o Render no ar e o banco num ramo descartável
+do Neon (`validacao`), o provedor de IA simulado e um usuário de teste.
+
+- **Decision**: o desenho da seção 24 funciona. O que foi medido:
+  - **Segredo do proxy**: direto no Render, sem o segredo ou com um segredo falso, a API
+    responde 403; o health check direto responde 200. Pela Vercel, as requisições chegam.
+  - **Cookie de refresh**: chega ao navegador com `HttpOnly; Secure; SameSite=strict;
+    Path=/api/v1/auth/refresh`; o refresh com o `Origin` do app troca o cookie, e com o
+    `Origin` de outro site responde 403.
+  - **Upload**: 10,48 MB pela Vercel, aceito (202); 10,6 MB, recusado com o 413 da própria API,
+    não da Vercel. A query string também chega.
+  - **Partida a frio**: 62,6 s e 63,9 s depois de 20 minutos sem acesso, dentro dos 120 s da
+    Vercel; as requisições seguintes, cerca de 0,45 s.
+  - **Argon2id**: com o padrão da biblioteca (64 MiB, t=3, p=4), cerca de 1,4 s por senha no
+    Render (login de ~1,8 s). Com m=19 MiB, t=2, p=1 (OWASP), 0,1 a 0,2 s (login de 0,5 a
+    0,8 s). O primeiro login de cada usuário refaz o hash e leva cerca de 2,8 s, uma vez só.
+  - **Cache**: `/assets/` com `max-age=31536000, immutable`; páginas com `no-cache`; asset
+    inexistente com 404 e `no-store`; API com `no-store`.
+  - **IP do visitante**: o diagnóstico temporário dos cabeçalhos no Render, em GET e POST,
+    mostrou que a Vercel substitui o `X-Forwarded-For` pelo IP do visitante (descartando uma
+    lista falsa enviada pelo cliente) e que a Cloudflare e o proxy do Render só acrescentam
+    entradas no fim. Com a primeira entrada, as sessões gravaram o IP certo nos quatro logins,
+    inclusive nos dois com cabeçalhos falsos.
+- **Rationale**: as premissas que derrubariam o desenho (limite de corpo no repasse, cookie,
+  partida a frio acima de 120 s, custo da senha na CPU do plano gratuito) foram conferidas no
+  ambiente real antes de adaptar o código.
+- **Alternatives considered** para o IP: `X-Real-IP` (não chega à API; o valor lido antes era
+  um endereço interno do Render, 10.x); `X-Vercel-Forwarded-For` (a Vercel deixa passar o valor
+  do cliente em POST: o teste com `1.2.3.4` gravou `1.2.3.4`); `CF-Connecting-IP` e
+  `True-Client-IP` (trazem o IP da Vercel).

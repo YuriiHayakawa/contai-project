@@ -4,7 +4,8 @@
 
 **Created**: 2026-10-01
 
-**Status**: Approved (2026-10-01)
+**Status**: Approved (2026-10-01); revisão da hospedagem em planos gratuitos aprovada em
+2026-11-02
 
 **Input**: User description: "Construir o Contaí — aplicação web multiusuário de controle
 financeiro pessoal com assistente de IA que responde perguntas em linguagem natural sobre os
@@ -114,6 +115,23 @@ código, o termo é "transação" (`transaction`). Os dois nomes se referem à m
   limite: passa para o limite do cartão, e a dívida inicial fica em zero.
 - Q: O assistente responde sobre o limite? → A: Sim, com os mesmos limite, usado e disponível
   da tela do cartão.
+
+### Session 2026-10-29
+
+- Q: Onde o Contaí roda em produção? → A: Só em planos gratuitos e sem cartão: o site na
+  Vercel, a API no Render e o banco no Neon, nos Estados Unidos (Ohio). A Vercel repassa as
+  chamadas `/api` ao Render, e o navegador vê uma única origem.
+- Q: O que acontece no primeiro acesso depois de um tempo parado? → A: O servidor dorme depois
+  de 15 minutos sem acesso e leva cerca de 1 minuto para acordar. O app avisa que está
+  acordando; a espera é aceita, e o servidor não é mantido acordado.
+- Q: Com que folga os prazos automáticos são cumpridos? → A: As tarefas agendadas rodam pelo
+  menos a cada 3 horas. A exclusão definitiva da conta e a desativação das duas etapas
+  acontecem até 3 horas depois do fim do prazo, nunca antes.
+- Q: De que endereço saem os e-mails? → A: De um serviço de e-mail com API, sem domínio
+  próprio. O remetente fica no domínio do serviço, e o risco de as mensagens caírem no spam
+  foi aceito.
+- Q: Como o usuário acha um e-mail que caiu no spam? → A: Toda tela e mensagem que pede para
+  abrir um e-mail do Contaí lembra de olhar também a caixa de spam (FR-089).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -612,7 +630,7 @@ os 7 dias, não consegue mais entrar.
 - **FR-013**: Desativar a verificação em duas etapas DEVE exigir a senha e um código válido.
   Quem não tem mais nenhum código DEVE poder pedir a desativação, depois de informar e-mail e
   senha corretos, por um link de uso único enviado ao e-mail; a desativação só DEVE valer
-  72 horas após o pedido. Nesse período, o sistema DEVE avisar o usuário por e-mail no momento
+  72 horas após o pedido, e DEVE valer em até 3 horas depois desse prazo. Nesse período, o sistema DEVE avisar o usuário por e-mail no momento
   do pedido e antes de a desativação valer, e o pedido DEVE ser cancelado se o usuário o
   cancelar pelo aviso ou entrar com um código válido. Quando a desativação passa a valer, todas
   as sessões da conta DEVEM ser encerradas.
@@ -624,8 +642,8 @@ os 7 dias, não consegue mais entrar.
 - **FR-017**: O usuário DEVE poder excluir sua conta definitivamente, confirmando com a senha.
   No momento do pedido, a conta DEVE ser desativada, todas as sessões DEVEM ser encerradas e o
   usuário DEVE receber um e-mail com a data da exclusão definitiva. Durante 7 dias, ele DEVE
-  poder cancelar a exclusão entrando de novo; ao fim desse prazo, o sistema DEVE remover
-  definitivamente seus dados, arquivos e conversas, sem possibilidade de desfazer.
+  poder cancelar a exclusão entrando de novo; ao fim desse prazo, em até 3 horas, o sistema
+  DEVE remover definitivamente seus dados, arquivos e conversas, sem possibilidade de desfazer.
 - **FR-080**: O sistema DEVE fazer uma cópia de segurança dos dados todos os dias e guardar cada
   cópia por 14 dias; depois desse prazo, a cópia DEVE ser apagada, de modo que os dados de uma
   conta excluída deixem de existir também nas cópias em até 14 dias após a exclusão definitiva.
@@ -869,6 +887,9 @@ os 7 dias, não consegue mais entrar.
 - **FR-078**: A interface DEVE oferecer modo claro e modo escuro.
 - **FR-079**: A interface DEVE ser utilizável apenas com o teclado e com leitor de tela, com
   contraste adequado e foco visível.
+- **FR-089**: Toda tela e mensagem que pede ao usuário para abrir um e-mail do Contaí (cadastro,
+  reenvio da confirmação, conta ainda não confirmada, recuperação de senha e desativação das
+  duas etapas) DEVE lembrar de olhar também a caixa de spam.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -924,11 +945,14 @@ os 7 dias, não consegue mais entrar.
 - **SC-010**: As seis perguntas de exemplo do assistente são respondidas corretamente, e nenhuma
   resposta numérica diverge do painel.
 - **SC-011**: Uma conta com exclusão pedida fica inacessível imediatamente e, 7 dias depois do
-  pedido, nenhum dado do usuário permanece no sistema em uso; 14 dias depois disso, também não
-  permanece em nenhuma cópia de segurança.
+  pedido (mais as até 3 horas do agendamento), nenhum dado do usuário permanece no sistema em
+  uso; 14 dias depois disso, também não permanece em nenhuma cópia de segurança.
 - **SC-012**: Todas as telas funcionam a partir de 320px de largura, sem rolagem horizontal.
 - **SC-013**: O painel aparece em até 3 segundos para um usuário com 5.000 transações.
 - **SC-014**: 90% das perguntas ao assistente são respondidas em até 10 segundos.
+
+As metas de tempo (SC-005, SC-006, SC-013 e SC-014) valem com o servidor acordado. O primeiro
+acesso depois de 15 minutos sem uso leva cerca de 1 minuto a mais (ver Assumptions).
 
 ## Assumptions
 
@@ -970,7 +994,16 @@ os 7 dias, não consegue mais entrar.
 **Ambiente e dependências**
 
 - O envio de e-mails (confirmação, redefinição de senha e avisos) depende de um serviço de
-  envio de e-mail.
+  envio de e-mail com API. Sem domínio próprio, o remetente fica no domínio do serviço, e as
+  mensagens podem cair na caixa de spam (risco aceito; ver FR-089).
+- A produção usa só planos gratuitos, sem cartão: o site na Vercel, a API no Render e o banco
+  no Neon, nos Estados Unidos (Ohio). Por isso:
+  - o servidor dorme depois de 15 minutos sem acesso e leva cerca de 1 minuto para acordar
+    (62,6 s e 63,9 s nas medições); o app avisa que está acordando o servidor;
+  - as tarefas com prazo (exclusão definitiva de conta, desativação das duas etapas e seus
+    avisos, limpezas) rodam por um disparo externo, pelo menos a cada 3 horas, além de sempre
+    que o servidor está acordado;
+  - os dados ficam fora do Brasil, o que a política de privacidade informa.
 - A extração de PDFs e imagens, a sugestão de categorias, as respostas do assistente e o
   lançamento por texto dependem de um serviço de IA externo.
 - O texto da política de privacidade precisa ser redigido antes da abertura do cadastro.

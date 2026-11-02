@@ -38,4 +38,9 @@ A saúde do worker é um batimento em `worker_heartbeats`; `GET /api/v1/health/w
 - Uma peça a menos de infraestrutura: a fila sobe junto com o banco.
 - O worker é de instância única; a escala horizontal exigiria revisitar o `SKIP LOCKED` e os
   intervalos das tarefas periódicas.
+- Desde 2026-11-02, o worker roda embutido no processo da API, e as tarefas periódicas também
+  têm um disparo externo, pelo endpoint interno, porque o serviço dorme sem acessos (ver
+  [[0010-hospedagem-em-planos-gratuitos]]). Como o laço e o disparo podem rodar a mesma tarefa
+  periódica ao mesmo tempo, cada tarefa roda sob um advisory lock do PostgreSQL próprio dela, e
+  quem não pega a trava pula a vez.
 - Como o payload só tem ids, todo dado sensível é relido do banco pelo serviço, dentro do job.
