@@ -67,6 +67,9 @@ FROZEN_NOW = datetime(2026, 10, 1, 15, 0, tzinfo=UTC)  # meio-dia em Brasília
 def alembic_config() -> Config:
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     config.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+    # Mantém o log configurado pelo app: o do alembic.ini poria a raiz em WARNING, e os testes
+    # que leem o log passariam a depender da ordem em que rodam.
+    config.attributes["configure_logger"] = False
     return config
 
 
