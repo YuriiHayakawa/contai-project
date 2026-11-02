@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import clock
 from app.core.config import get_settings
 from app.core.security import hash_token, new_token
-from app.email.sender import send_email
+from app.email.sender import EmailRejected, send_email
 from app.email.templates import EmailType, get_email_type, render
 from app.modules.auth.repository import AuthRepository
 from app.modules.users.repository import UserRepository
@@ -82,6 +82,9 @@ async def handle_send_email(session: AsyncSession, job: Job) -> None:
 
     try:
         await send_email(to=user.email, subject=rendered.subject, body=rendered.body)
+    except EmailRejected as exc:
+        # O provedor recusou a mensagem: tentar de novo não adianta.
+        raise queue.PermanentJobError(exc.code) from exc
     except OSError as exc:
-        # Falha de rede ou do servidor SMTP: vale tentar de novo, com um link novo.
+        # Falha de rede ou do servidor de e-mail: vale tentar de novo, com um link novo.
         raise queue.RetryableJobError("smtp_failed") from exc

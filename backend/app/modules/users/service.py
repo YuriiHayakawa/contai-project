@@ -29,8 +29,6 @@ from app.modules.auth.errors import (
 from app.modules.auth.models import SessionRevokedReason
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.two_factor import verify_second_factor
-from app.modules.imports import storage
-from app.modules.imports.repository import ImportRepository
 from app.modules.users import emails
 from app.modules.users.export import build_account_export
 from app.modules.users.models import User, UserStatus
@@ -261,17 +259,10 @@ class UserService:
         await self._users.save(user)
 
     async def purge_due_account_deletions(self) -> int:
-        """Apaga de vez as contas cujo prazo venceu: o banco cascateia e os arquivos saem do disco.
-
-        Os nomes dos arquivos são colhidos antes de apagar o usuário, pois a cascata remove as
-        importações que os apontavam.
-        """
+        """Apaga de vez as contas cujo prazo venceu: o banco apaga em cascata dados, arquivos
+        enviados e conversas."""
         now = clock.utcnow()
         due = await self._users.list_deletions_due(now)
-        imports = ImportRepository(self._session)
         for user in due:
-            stored = await imports.stored_filenames_for_user(user.id)
             await self._users.delete(user.id)
-            for stored_filename in stored:
-                await storage.delete(stored_filename)
         return len(due)

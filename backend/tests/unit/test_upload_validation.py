@@ -1,10 +1,8 @@
-"""Validação do envio: tamanho, tipo real pelo conteúdo e nome gerado pelo sistema."""
+"""Validação do envio: tamanho e tipo real pelo conteúdo."""
 
 import hashlib
 import io
-import re
 import zipfile
-from pathlib import Path
 
 import pytest
 
@@ -12,7 +10,7 @@ from app.core.errors import PayloadTooLarge
 from app.modules.imports import storage
 from app.modules.imports.models import ImportFormat
 from app.modules.imports.storage import UnsupportedFile
-from tests.imports import fixture_bytes, stored_files
+from tests.imports import fixture_bytes
 
 PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 64
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 64
@@ -187,49 +185,3 @@ async def test_the_hash_is_the_sha256_of_the_content() -> None:
     received = await storage.receive(FakeUpload(content))
 
     assert received.file_hash == hashlib.sha256(content).hexdigest()
-
-
-# ---------- gravação no volume privado
-
-
-async def test_the_stored_name_is_generated_by_the_system(upload_dir: Path) -> None:
-    first = await storage.store(b"conteudo")
-    second = await storage.store(b"conteudo")
-
-    # Nada do nome dado pelo usuário chega ao disco, nem a extensão.
-    assert re.fullmatch(r"[0-9a-f]{32}", first)
-    assert first != second
-    assert [path.name for path in stored_files(upload_dir)] == sorted([first, second])
-    assert await storage.read(first) == b"conteudo"
-
-
-async def test_the_upload_folder_is_created_when_missing(
-    upload_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.core.config import get_settings
-
-    monkeypatch.setattr(get_settings(), "upload_dir", upload_dir / "nova" / "pasta")
-
-    stored = await storage.store(b"conteudo")
-
-    assert (upload_dir / "nova" / "pasta" / stored).read_bytes() == b"conteudo"
-
-
-async def test_deleting_removes_the_file_and_can_be_repeated(upload_dir: Path) -> None:
-    stored = await storage.store(b"conteudo")
-
-    await storage.delete(stored)
-    await storage.delete(stored)
-
-    assert stored_files(upload_dir) == []
-    with pytest.raises(FileNotFoundError):
-        await storage.read(stored)
-
-
-@pytest.mark.parametrize(
-    "name", ["../segredo", "..\\segredo", "/etc/passwd", "extrato.ofx", "", "A" * 32]
-)
-async def test_only_a_name_generated_here_becomes_a_path(name: str, upload_dir: Path) -> None:
-    for operation in (storage.read, storage.delete):
-        with pytest.raises(ValueError, match="inválido"):
-            await operation(name)

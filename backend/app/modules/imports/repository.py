@@ -1,4 +1,5 @@
-"""Acesso ao banco para importações, transações propostas e modelos de colunas.
+"""Acesso ao banco para importações, arquivos enviados, transações propostas e
+modelos de colunas.
 
 Todo método exige `user_id`, menos os de manutenção, no fim: a limpeza periódica do worker
 percorre as importações de todos os usuários.
@@ -18,6 +19,7 @@ from app.modules.imports.models import (
     CategorySource,
     DuplicateStatus,
     Import,
+    ImportFile,
     ImportFormat,
     ImportItem,
     ImportKind,
@@ -63,7 +65,6 @@ class ImportRepository:
         file_format: ImportFormat,
         original_filename: str,
         file_hash: str,
-        stored_filename: str,
         created_at: dt.datetime,
     ) -> Import:
         record = Import(
@@ -73,7 +74,6 @@ class ImportRepository:
             format=file_format,
             original_filename=original_filename,
             file_hash=file_hash,
-            stored_filename=stored_filename,
             status=ImportStatus.QUEUED,
             # O instante vem do relógio da aplicação: é ele que ordena o histórico.
             created_at=created_at,
@@ -153,9 +153,36 @@ class ImportRepository:
         return result.scalar_one()
 
     async def delete(self, user_id: uuid.UUID, import_id: uuid.UUID) -> None:
-        """Apaga a importação; as transações propostas dela vão junto."""
+        """Apaga a importação; o arquivo e as transações propostas dela vão junto."""
         await self._session.execute(
             delete(Import).where(Import.id == import_id, Import.user_id == user_id)
+        )
+
+    # ---------- arquivo enviado, guardado só até o processamento
+
+    async def save_file(
+        self, user_id: uuid.UUID, import_id: uuid.UUID, content: bytes, *, created_at: dt.datetime
+    ) -> None:
+        self._session.add(
+            ImportFile(import_id=import_id, user_id=user_id, content=content, created_at=created_at)
+        )
+        await self._session.flush()
+
+    async def read_file(self, user_id: uuid.UUID, import_id: uuid.UUID) -> bytes | None:
+        """O conteúdo do arquivo, ou `None` se ele já foi apagado."""
+        result = await self._session.execute(
+            select(ImportFile.content).where(
+                ImportFile.import_id == import_id, ImportFile.user_id == user_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def delete_file(self, user_id: uuid.UUID, import_id: uuid.UUID) -> None:
+        """Apaga o arquivo; um arquivo que já não existe não é erro."""
+        await self._session.execute(
+            delete(ImportFile).where(
+                ImportFile.import_id == import_id, ImportFile.user_id == user_id
+            )
         )
 
     # ---------- transações propostas
@@ -281,16 +308,11 @@ class ImportRepository:
     async def with_file_in(self, statuses: Sequence[ImportStatus]) -> list[Import]:
         """Importações nestes estados que ainda têm arquivo guardado."""
         result = await self._session.execute(
-            select(Import).where(Import.status.in_(statuses), Import.stored_filename.is_not(None))
+            select(Import)
+            .join(ImportFile, ImportFile.import_id == Import.id)
+            .where(Import.status.in_(statuses))
         )
         return list(result.scalars())
-
-    async def stored_filenames(self) -> set[str]:
-        """Os nomes de todos os arquivos que alguma importação ainda guarda."""
-        result = await self._session.execute(
-            select(Import.stored_filename).where(Import.stored_filename.is_not(None))
-        )
-        return {name for name in result.scalars() if name is not None}
 
     async def list_all_for_user(self, user_id: uuid.UUID) -> list[Import]:
         """Todas as importações do usuário, da mais antiga para a mais nova (exportação)."""
@@ -298,15 +320,3 @@ class ImportRepository:
             select(Import).where(Import.user_id == user_id).order_by(Import.created_at, Import.id)
         )
         return list((await self._session.execute(statement)).scalars())
-
-    async def stored_filenames_for_user(self, user_id: uuid.UUID) -> set[str]:
-        """Os nomes dos arquivos que as importações deste usuário ainda guardam.
-
-        Usado na exclusão definitiva para apagar do disco o que sobra depois da cascata.
-        """
-        result = await self._session.execute(
-            select(Import.stored_filename).where(
-                Import.user_id == user_id, Import.stored_filename.is_not(None)
-            )
-        )
-        return {name for name in result.scalars() if name is not None}

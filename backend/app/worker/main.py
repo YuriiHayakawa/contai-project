@@ -1,10 +1,13 @@
 """Processo worker: consome a fila de jobs e roda as tarefas periódicas.
 
 Os handlers e as tarefas periódicas chamam serviços dos módulos; nenhum deles consulta o banco
-diretamente.
+diretamente. Em produção, o laço roda dentro da API (`worker/embedded.py`), e as tarefas
+periódicas também têm um disparo externo (`worker/router.py`): cada uma roda sob uma trava
+própria, para o laço e o disparo não a rodarem em dobro.
 """
 
 import asyncio
+import hashlib
 import logging
 import os
 import signal
@@ -12,6 +15,7 @@ import socket
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,9 +39,12 @@ TWO_FACTOR_RESET_INTERVAL = timedelta(minutes=30)
 # A exclusão de conta tem prazo de 7 dias: conferir de hora em hora é mais que suficiente.
 ACCOUNT_DELETION_INTERVAL = timedelta(hours=1)
 UNEXPECTED_ERROR_CODE = "unexpected_error"
+HEARTBEAT = "heartbeat"
 
 JobHandler = Callable[[AsyncSession, Job], Awaitable[None]]
 PeriodicTask = Callable[[AsyncSession], Awaitable[None]]
+# `skipped`: a trava estava com outra execução da mesma tarefa.
+TaskStatus = Literal["ok", "skipped", "failed"]
 
 logger = logging.getLogger("contai.worker")
 
@@ -51,6 +58,18 @@ class _Periodic:
 
     def is_due(self, now: datetime) -> bool:
         return self.last_run_at is None or now - self.last_run_at >= self.interval
+
+
+@dataclass(frozen=True)
+class TaskResult:
+    name: str
+    status: TaskStatus
+
+
+def lock_key(task_name: str) -> int:
+    """A chave da trava de uma tarefa: estável entre processos e reinícios."""
+    digest = hashlib.sha256(f"contai.periodic.{task_name}".encode()).digest()
+    return int.from_bytes(digest[:8], "big", signed=True)
 
 
 @dataclass
@@ -117,11 +136,29 @@ class Worker:
             if not periodic.is_due(now):
                 continue
             periodic.last_run_at = now
-            try:
-                async with self.session_factory() as session:
-                    await periodic.run(session)
-            except Exception:
-                logger.exception("periodic task crashed", extra={"job_type": periodic.name})
+            await self._run_locked(periodic)
+
+    async def run_scheduled_tasks(self) -> list[TaskResult]:
+        """Roda uma vez cada tarefa periódica, menos o batimento, e diz como foi cada uma.
+
+        É o que o disparo externo pede, porque o serviço dorme sem acessos e o laço para junto.
+        """
+        return [
+            TaskResult(name=periodic.name, status=await self._run_locked(periodic))
+            for periodic in self._periodic
+            if periodic.name != HEARTBEAT
+        ]
+
+    async def _run_locked(self, periodic: _Periodic) -> TaskStatus:
+        try:
+            async with self.session_factory() as session:
+                if not await WorkerRepository(session).try_lock(lock_key(periodic.name)):
+                    return "skipped"
+                await periodic.run(session)
+        except Exception:
+            logger.exception("periodic task crashed", extra={"job_type": periodic.name})
+            return "failed"
+        return "ok"
 
     async def run(self, stop: asyncio.Event) -> None:
         logger.info("worker started", extra={"worker_id": self.worker_id})
@@ -164,7 +201,7 @@ def build_worker(session_factory: SessionFactory = session_scope) -> Worker:
     worker.register_handler(JobType.SEND_EMAIL, handle_send_email)
     worker.register_handler(JobType.PROCESS_IMPORT, handle_process_import)
     worker.register_give_up_handler(JobType.PROCESS_IMPORT, handle_import_given_up)
-    worker.register_periodic("heartbeat", HEARTBEAT_INTERVAL, _heartbeat_task(worker))
+    worker.register_periodic(HEARTBEAT, HEARTBEAT_INTERVAL, _heartbeat_task(worker))
     worker.register_periodic("recover_stuck_jobs", STUCK_CHECK_INTERVAL, _recover_stuck)
     worker.register_periodic(
         "purge_login_attempts", LOGIN_ATTEMPT_PURGE_INTERVAL, purge_login_attempts

@@ -21,8 +21,6 @@ from app.modules.imports.models import ImportFormat, ImportKind
 from app.modules.transactions.models import TransactionType
 from tests.imports import stored_file
 
-pytestmark = pytest.mark.usefixtures("upload_dir")
-
 TODAY = date(2026, 10, 1)
 CONTEXT = ImportContext(account_type=AccountType.CHECKING, today=TODAY)
 PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 64

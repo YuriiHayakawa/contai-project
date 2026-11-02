@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -131,3 +131,12 @@ class WorkerRepository:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def try_lock(self, key: int) -> bool:
+        """Pega a trava `key` até o fim da transação, sem esperar: `False` se já está com outro.
+
+        Usada nas tarefas periódicas, que o laço do worker e o disparo externo podem rodar ao
+        mesmo tempo.
+        """
+        result = await self._session.execute(select(func.pg_try_advisory_xact_lock(key)))
+        return bool(result.scalar_one())

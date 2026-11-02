@@ -4,12 +4,14 @@ from pathlib import Path
 from typing import Any
 
 from httpx import AsyncClient, Response
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.accounts.models import AccountType
 from app.modules.imports import storage
 from app.modules.imports.importers.base import ImportContext, Importer, ProposedTransaction
 from app.modules.imports.mapping import ColumnMapping
-from app.modules.imports.models import ImportFormat
+from app.modules.imports.models import ImportFile, ImportFormat
 
 IMPORTS = "/api/v1/imports"
 # Arquivos com dados fictícios, um por formato e por jeito de banco.
@@ -22,9 +24,10 @@ def fixture_bytes(name: str) -> bytes:
     return (FIXTURES / name).read_bytes()
 
 
-def stored_files(upload_dir: Path) -> list[Path]:
-    """O que está guardado no volume de uploads do teste."""
-    return sorted(upload_dir.iterdir())
+async def stored_files(session: AsyncSession) -> list[bytes]:
+    """O conteúdo dos arquivos enviados que o banco ainda guarda, de todos os usuários."""
+    result = await session.execute(select(ImportFile.content))
+    return sorted(result.scalars())
 
 
 async def send_file(
@@ -55,11 +58,11 @@ async def get_import(client: AsyncClient, record: Json) -> Json:
 
 
 async def stored_file(content: bytes, name: str = "extrato") -> storage.StoredFile:
-    """Guarda o conteúdo no volume de testes, como o envio faria."""
+    """O arquivo guardado, como o processamento o entrega ao importador."""
     file_format = storage.sniff_format(content)
     assert file_format is not None
     return storage.StoredFile(
-        stored_filename=await storage.store(content),
+        content=content,
         format=ImportFormat(file_format),
         original_filename=name,
     )

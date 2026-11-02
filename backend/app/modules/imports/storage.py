@@ -1,20 +1,15 @@
-"""Arquivos enviados: limite de tamanho, tipo real, gravação no volume privado e exclusão.
+"""Arquivos enviados: limite de tamanho e tipo real.
 
 O tipo vem do conteúdo, nunca da extensão nem do `Content-Type` informado: PDF, imagem e
 planilha são reconhecidos pelos primeiros bytes; OFX e CSV, que são texto, pela inspeção do
-conteúdo (research.md, seção 9). O arquivo fica em um volume privado, com nome gerado aqui, e é
-apagado depois do processamento (FR-053).
+conteúdo (research.md, seção 9). O conteúdo aceito é guardado pelo repositório de importações,
+no banco, e apagado depois do processamento (FR-053, ADR 0011).
 """
 
-import asyncio
-import datetime as dt
 import hashlib
 import io
-import re
-import uuid
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol
 
 import filetype
@@ -47,7 +42,6 @@ AI_MEDIA_TYPES = frozenset({PDF_MEDIA_TYPE, "image/jpeg", "image/png"})
 # Um PDF cifrado traz esta entrada no dicionário final; o modelo não conseguiria abri-lo.
 _PDF_ENCRYPTION_MARKER = b"/Encrypt"
 
-_STORED_NAME = re.compile(r"[0-9a-f]{32}")
 _ZIP_MAGIC = b"PK\x03\x04"
 # Formato dos arquivos antigos do Office, como o .xls.
 _OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
@@ -82,15 +76,15 @@ class ReceivedFile:
 
 @dataclass(frozen=True)
 class StoredFile:
-    """Um arquivo guardado no volume privado, como os importadores o recebem."""
+    """Um arquivo guardado, como os importadores o recebem."""
 
-    stored_filename: str
+    content: bytes
     format: ImportFormat
     # Nome dado pelo usuário: só ajuda a reconhecer o formato; nunca vira caminho.
     original_filename: str
 
     async def read(self) -> bytes:
-        return await read(self.stored_filename)
+        return self.content
 
 
 def decode_text(data: bytes) -> str | None:
@@ -188,47 +182,3 @@ async def receive(upload: Readable, *, max_bytes: int | None = None) -> Received
     return ReceivedFile(
         content=content, format=file_format, file_hash=hashlib.sha256(content).hexdigest()
     )
-
-
-def _path(stored_filename: str) -> Path:
-    # O nome vem do banco, mas só um nome gerado aqui vira caminho no disco.
-    if not _STORED_NAME.fullmatch(stored_filename):
-        raise ValueError("nome de arquivo inválido")
-    return get_settings().upload_dir / stored_filename
-
-
-def _write(path: Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(content)
-
-
-async def store(content: bytes) -> str:
-    """Grava o conteúdo no volume privado e devolve o nome gerado."""
-    stored_filename = uuid.uuid4().hex
-    await asyncio.to_thread(_write, _path(stored_filename), content)
-    return stored_filename
-
-
-def _older_than(cutoff: float) -> list[str]:
-    folder = get_settings().upload_dir
-    if not folder.is_dir():
-        return []
-    return [
-        path.name
-        for path in folder.iterdir()
-        if _STORED_NAME.fullmatch(path.name) and path.stat().st_mtime < cutoff
-    ]
-
-
-async def stored_before(moment: dt.datetime) -> list[str]:
-    """Os arquivos guardados aqui antes de `moment`, para a limpeza dos que ficaram sem dono."""
-    return await asyncio.to_thread(_older_than, moment.timestamp())
-
-
-async def read(stored_filename: str) -> bytes:
-    return await asyncio.to_thread(_path(stored_filename).read_bytes)
-
-
-async def delete(stored_filename: str) -> None:
-    """Apaga o arquivo; um arquivo que já não existe não é erro."""
-    await asyncio.to_thread(_path(stored_filename).unlink, missing_ok=True)

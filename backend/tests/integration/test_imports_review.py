@@ -3,10 +3,8 @@ guardadas, conferência de saldo, confirmação, histórico, desfazer, descarte 
 a FR-054, FR-081 a FR-083 e FR-085).
 """
 
-import os
 import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -23,7 +21,6 @@ from app.modules.categories.service import CategoryService
 from app.modules.categorization.models import RuleSource
 from app.modules.categorization.repository import CategorizationRepository
 from app.modules.categorization.service import category_paths
-from app.modules.imports import storage
 from app.modules.imports.repository import ImportRepository
 from app.modules.users.models import User
 from app.worker import queue
@@ -42,6 +39,7 @@ from tests.imports import (
     IMPORTS,
     confirm,
     decisions,
+    fixture_bytes,
     get_import,
     saved_decisions,
     send_confirmation,
@@ -53,7 +51,7 @@ from tests.imports import (
 
 Json = dict[str, Any]
 
-pytestmark = pytest.mark.usefixtures("frozen_time", "upload_dir")
+pytestmark = pytest.mark.usefixtures("frozen_time")
 
 SUMMARY = "/api/v1/dashboard/summary"
 CSV_MAPPING = {"date_column": 0, "description_column": 1, "amount_column": 3}
@@ -1243,15 +1241,15 @@ async def test_discarding_an_import_in_review_leaves_nothing_behind(
 
 
 async def test_discarding_an_import_that_waits_for_the_mapping_deletes_the_file(
-    client_a: AsyncClient, checking: Json, upload_dir: Path, run_jobs: JobRunner
+    client_a: AsyncClient, checking: Json, session: AsyncSession, run_jobs: JobRunner
 ) -> None:
     record = await _review(client_a, run_jobs, checking, "extrato_ponto_e_virgula.csv")
-    assert len(stored_files(upload_dir)) == 1
+    assert len(await stored_files(session)) == 1
 
     response = await client_a.delete(f"{IMPORTS}/{record['id']}")
 
     assert response.status_code == 204, response.text
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_a_confirmed_import_cannot_be_discarded(
@@ -1376,7 +1374,7 @@ async def test_a_file_waiting_for_the_mapping_for_more_than_a_day_is_deleted(
     client_for: ClientFactory,
     user_a: User,
     checking: Json,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     session_factory: SessionFactory,
     frozen_time: datetime,
@@ -1387,7 +1385,7 @@ async def test_a_file_waiting_for_the_mapping_for_more_than_a_day_is_deleted(
     async with session_factory() as worker_session:
         await cleanup_imports(worker_session)
     assert (await get_import(await client_for(user_a), record))["status"] == "awaiting_mapping"
-    assert len(stored_files(upload_dir)) == 1
+    assert len(await stored_files(session)) == 1
 
     clock.set_fixed_time(frozen_time + timedelta(hours=24, seconds=1))
     async with session_factory() as worker_session:
@@ -1401,7 +1399,7 @@ async def test_a_file_waiting_for_the_mapping_for_more_than_a_day_is_deleted(
         and "Envie o arquivo de novo" in expired["error_message"]
     )
     assert expired["mapping_preview"] is None
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
     # O mapeamento chegou tarde: o arquivo já não existe.
     late = await later.post(f"{IMPORTS}/{record['id']}/mapping", json=CSV_MAPPING)
     assert late.status_code == 409
@@ -1412,7 +1410,7 @@ async def test_an_import_whose_job_ran_out_of_attempts_goes_to_error(
     client_for: ClientFactory,
     user_a: User,
     checking: Json,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1434,7 +1432,7 @@ async def test_an_import_whose_job_ran_out_of_attempts_goes_to_error(
     # A importação não fica presa "na fila" nem "processando".
     assert (record["status"], record["error_code"]) == ("failed", "processing_error")
     assert "Envie o arquivo de novo" in record["error_message"]
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
 
 
 async def test_a_job_with_a_broken_payload_does_not_break_the_worker(
@@ -1447,53 +1445,41 @@ async def test_a_job_with_a_broken_payload_does_not_break_the_worker(
     assert await run_jobs() == 2
 
 
-async def test_files_without_an_import_are_removed_after_an_hour(
+async def test_the_cleanup_keeps_the_file_of_an_import_waiting_for_the_columns(
     client_a: AsyncClient,
     checking: Json,
-    upload_dir: Path,
+    session: AsyncSession,
     run_jobs: JobRunner,
     session_factory: SessionFactory,
-    frozen_time: datetime,
 ) -> None:
     waiting = await _review(client_a, run_jobs, checking, "extrato_ponto_e_virgula.csv")
-    [kept] = stored_files(upload_dir)
-    old_orphan = upload_dir / await storage.store(b"de um envio que nao terminou")
-    new_orphan = upload_dir / await storage.store(b"de um envio em andamento")
-    stranger = upload_dir / "anotacoes.txt"
-    stranger.write_bytes(b"nao e um arquivo de importacao")
-    two_hours_ago = (frozen_time - timedelta(hours=2)).timestamp()
-    just_now = (frozen_time - timedelta(minutes=5)).timestamp()
-    os.utime(old_orphan, (two_hours_ago, two_hours_ago))
-    os.utime(kept, (two_hours_ago, two_hours_ago))
-    os.utime(new_orphan, (just_now, just_now))
 
     async with session_factory() as worker_session:
         await cleanup_imports(worker_session)
 
-    # Sai só o arquivo antigo que nenhuma importação guarda.
-    assert stored_files(upload_dir) == sorted([kept, new_orphan, stranger])
+    assert await stored_files(session) == [fixture_bytes("extrato_ponto_e_virgula.csv")]
     assert (await get_import(client_a, waiting))["status"] == "awaiting_mapping"
 
 
 async def test_the_file_of_a_finished_import_that_was_left_behind_is_removed(
     client_a: AsyncClient,
     checking: Json,
-    upload_dir: Path,
+    session: AsyncSession,
+    user_a: User,
     run_jobs: JobRunner,
     session_factory: SessionFactory,
-    monkeypatch: pytest.MonkeyPatch,
+    frozen_time: datetime,
 ) -> None:
-    async def disk_error(stored_filename: str) -> None:
-        raise PermissionError("disco só para leitura")
-
-    with monkeypatch.context() as patched:
-        patched.setattr(storage, "delete", disk_error)
-        sent = await upload(client_a, checking, "vazio.ofx", b"<OFX><STMTRS></STMTRS></OFX>")
-        await run_jobs()
-    assert len(stored_files(upload_dir)) == 1
+    sent = await upload(client_a, checking, "vazio.ofx", b"<OFX><STMTRS></STMTRS></OFX>")
+    await run_jobs()
+    # Um arquivo que ficou para trás numa importação já terminada.
+    await ImportRepository(session).save_file(
+        user_a.id, uuid.UUID(sent["id"]), b"sobrou", created_at=frozen_time
+    )
+    await session.commit()
 
     async with session_factory() as worker_session:
         await cleanup_imports(worker_session)
 
-    assert stored_files(upload_dir) == []
+    assert await stored_files(session) == []
     assert (await get_import(client_a, sent))["status"] == "failed"
