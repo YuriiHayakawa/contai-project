@@ -1,0 +1,101 @@
+# Backup diário cifrado do Contaí (ADR 0007, revisto com a ADR 0010).
+#
+# Cópia de referência: este workflow roda no repositório PRIVADO contai-backups, em
+# .github/workflows/backup.yml. Os artifacts de um repositório público podem ser baixados por
+# qualquer pessoa com conta no GitHub, por isso o backup não roda no repositório principal.
+#
+# Precisa, no contai-backups (Settings → Secrets and variables → Actions):
+#   - segredo BACKUP_DATABASE_URL: postgresql://contai_backup:<senha>@<host>/<banco>?sslmode=require,
+#     com o usuário só de leitura de create-backup-role.sql;
+#   - variável BACKUP_AGE_PUBLIC_KEY: a chave pública do age (age1…). A chave privada fica só com
+#     o mantenedor; sem ela, ninguém lê as cópias.
+#
+# Restauração: infra/backup/README.md e infra/backup/restore.sh, no repositório principal.
+name: Backup diário
+
+on:
+  schedule:
+    # Uma vez por dia, às 06:17 UTC (03:17 em Brasília). O GitHub pode atrasar alguns minutos.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Copiar, cifrar e guardar por 14 dias
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Instalar o age
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q age
+
+      - name: Gerar a cópia cifrada
+        id: dump
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          AGE_PUBLIC_KEY: ${{ vars.BACKUP_AGE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::Configure o segredo BACKUP_DATABASE_URL do repositório."
+            exit 1
+          fi
+          case "$AGE_PUBLIC_KEY" in
+            age1*) ;;
+            *)
+              echo "::error::Configure a variável BACKUP_AGE_PUBLIC_KEY com a chave pública do age (age1…)."
+              exit 1
+              ;;
+          esac
+
+          # O pg_dump precisa ser da mesma versão do servidor ou mais novo: a imagem oficial do
+          # PostgreSQL acompanha a versão que o Neon estiver usando. A primeira conexão acorda o
+          # banco, se ele estiver dormindo.
+          server_version=$(docker run --rm -e DATABASE_URL postgres:17-alpine \
+            sh -c 'psql "$DATABASE_URL" -XtAc "SHOW server_version_num"')
+          major=$((server_version / 10000))
+          image="postgres:${major}-alpine"
+          name="contai-$(date -u +%Y-%m-%dT%H%MZ)-pg${major}"
+          plain="$RUNNER_TEMP/$name.dump"
+          mkdir -p "$RUNNER_TEMP/out"
+          encrypted="$RUNNER_TEMP/out/$name.dump.age"
+          echo "Servidor PostgreSQL $major; cópia $name"
+
+          # Formato custom (já compactado), sem dono nem privilégios, para restaurar em qualquer
+          # banco vazio. Os arquivos enviados ficam fora: só existem até serem lidos (ADR 0011).
+          # O pg_dump grava num arquivo, e não na saída padrão, para a cópia levar o índice dos
+          # dados.
+          docker run --rm --user "$(id -u):$(id -g)" -v "$RUNNER_TEMP:/out" \
+            -e DATABASE_URL -e FILE="/out/$name.dump" "$image" \
+            sh -c 'pg_dump --dbname="$DATABASE_URL" --file="$FILE" --format=custom --compress=9 --no-owner --no-privileges --exclude-table-data=import_files'
+
+          # Uma cópia que o pg_restore não lê não serve: confere antes de cifrar.
+          tables=$(docker run --rm -i "$image" pg_restore --list < "$plain" | grep -c " TABLE DATA " || true)
+          if [ "$tables" -lt 1 ]; then
+            echo "::error::A cópia não tem dados de nenhuma tabela."
+            exit 1
+          fi
+          echo "Dados de $tables tabelas; $(du -h "$plain" | cut -f1) antes da cifra"
+
+          age --recipient "$AGE_PUBLIC_KEY" --output "$encrypted" "$plain"
+          shred -u "$plain"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "path=$encrypted" >> "$GITHUB_OUTPUT"
+
+      - name: Guardar como artifact por 14 dias
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.dump.outputs.name }}
+          path: ${{ steps.dump.outputs.path }}
+          retention-days: 14
+          # Cifrado não comprime: guardar como está.
+          compression-level: 0
+          if-no-files-found: error
