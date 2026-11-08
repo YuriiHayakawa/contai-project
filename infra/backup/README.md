@@ -1,5 +1,9 @@
 # Backup diário cifrado
 
+> **Adiado desde 2026-11-08.** Este backup ainda não roda: a conta do GitHub não tem cartão, e o
+> orçamento de US$ 0 bloqueia os Actions do repositório privado `contai-backups`. Os arquivos
+> daqui estão prontos e testados localmente. Ver o ADR 0007, seção "Desvio temporário".
+
 Uma vez por dia, um workflow do GitHub Actions copia o banco do Neon com um usuário só de
 leitura, cifra a cópia com a chave pública do `age` e a guarda como artifact por 14 dias
 ([ADR 0007](../../docs/adr/0007-backup-cifrado.md)). O workflow roda num repositório

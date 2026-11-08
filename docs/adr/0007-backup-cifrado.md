@@ -1,7 +1,8 @@
 # ADR 0007: backup diário cifrado com chave pública
 
 - **Situação**: aceito; revisto em 2026-11-02 com a hospedagem em planos gratuitos
-  ([[0010-hospedagem-em-planos-gratuitos]])
+  ([[0010-hospedagem-em-planos-gratuitos]]); **implantação adiada em 2026-11-08** (ver "Desvio
+  temporário", no fim)
 - **Data**: 2026-10-14
 - **Referência**: `specs/001-contai-mvp/research.md`, seção 24; constituição, Princípio XII;
   política de privacidade (retenção de 14 dias)
@@ -51,3 +52,24 @@ onde rodar um contêiner de backup. O repositório principal vai ser público (p
 - O repositório privado tem 500 MB para artifacts no plano gratuito; dumps compactados de
   dezenas de usuários ocupam poucos megabytes por dia.
 - O usuário só de leitura do Neon limita o estrago de um vazamento da credencial do backup.
+
+## Desvio temporário (2026-11-08)
+
+O backup diário não está rodando. A conta do GitHub do mantenedor não tem cartão, e o orçamento
+de US$ 0 bloqueia os GitHub Actions do repositório privado `contai-backups`; o workflow foi
+desligado lá. Os arquivos de `infra/backup/` continuam no repositório, prontos e testados
+localmente (T216), e o ensaio de restauração com uma cópia real (T217) fica para quando o backup
+rodar.
+
+- **Enquanto durar**: a única cópia dos dados é o histórico de restauração do próprio Neon, de
+  poucas horas no plano gratuito, dentro do provedor do banco. Um erro percebido depois desse
+  prazo, ou uma perda da conta do Neon, não tem volta. A política de privacidade diz isso ao
+  usuário.
+- **Por que aceito**: o mantenedor priorizou colocar o Contaí em uso, com poucos usuários e
+  dados que cada um pode baixar a qualquer hora (exportação da conta).
+- **Alternativas rejeitadas**: rodar o `backup.yml` no repositório principal, que passa a ser
+  público (os artifacts poderiam ser baixados por qualquer pessoa com conta no GitHub, mesmo
+  cifrados); cadastrar um cartão no GitHub ou usar armazenamento de objetos que pede cartão
+  (contra a regra de só usar planos gratuitos sem cartão).
+- **Fim do desvio**: o `backup.yml` rodando todos os dias num lugar privado e sem custo, e o
+  ensaio de restauração da T217 registrado em `infra/backup/README.md`.

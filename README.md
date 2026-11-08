@@ -321,7 +321,9 @@ O MVP (histórias 1–10) está completo e a hospedagem em planos gratuitos já 
 embutido na API, os arquivos enviados no banco, os e-mails pelo Brevo e o disparo das tarefas
 agendadas. Falta fechar a produção:
 
-- [ ] Backup diário cifrado com `age`, guardado por 14 dias num repositório privado.
+- [ ] Backup diário cifrado com `age`, guardado por 14 dias num repositório privado (pronto em
+  `infra/backup/`, adiado: sem cartão na conta do GitHub, o orçamento de US$ 0 bloqueia os
+  Actions do repositório privado).
 - [ ] Ensaio de restauração do backup.
 - [ ] Deploy por GitHub Actions, só com o CI verde.
 - [ ] Validação de ponta a ponta em produção, com o provedor de IA real.
