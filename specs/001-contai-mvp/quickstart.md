@@ -219,7 +219,7 @@ dos serviços; nada vai para o repositório.
 |------|-----------|
 | Render (API) | `ENVIRONMENT=production`, `DATABASE_URL` (endpoint direto do Neon, `postgresql+asyncpg://…?ssl=require`), `APP_ORIGIN` (endereço da Vercel), `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `PROXY_SHARED_SECRET`, `SCHEDULER_TOKEN`, `WORKER_EMBEDDED=true`, `EMAIL_BACKEND=brevo`, `BREVO_API_KEY`, `EMAIL_FROM`, `AI_PROVIDER=gemini`, `AI_API_KEY`, `AI_MODEL_*` e os limites |
 | Vercel (site) | `ORIGIN_SECRET`, com o mesmo valor de `PROXY_SHARED_SECRET` |
-| cron-job.org | nenhum segredo: só o endereço do health check do Render e o horário |
+| cron-job.org | nenhum segredo: um job em `GET /api/v1/health/worker` do Render, `0,3 */3 * * *` no horário de Brasília |
 | GitHub Actions (bloqueados desde 2026-11-06; ADR 0010) | no repositório principal, `SCHEDULER_TOKEN`, `RENDER_DEPLOY_HOOK_URL`, `VERCEL_DEPLOY_HOOK_URL` e a variável `APP_URL`; no `contai-backups` (privado), `BACKUP_DATABASE_URL` e a variável `BACKUP_AGE_PUBLIC_KEY` |
 | Fora de tudo | a chave privada do `age`, com o mantenedor |
 
@@ -240,8 +240,8 @@ Depois do deploy, confira pela Vercel (as mesmas verificações da validação, 
 4. Entre com uma conta: nas ferramentas do navegador (Application → Cookies), o cookie de
    refresh aparece com `HttpOnly`, `Secure` e `SameSite=Strict`.
 5. Importe um arquivo de até 10 MB e confira que ele é lido e que a revisão aparece.
-6. No cron-job.org, as execuções do job que confere `/api/v1/health/worker` aparecem com `200`
-   ("Successful").
+6. No histórico do job do cron-job.org, a execução do minuto 3 de cada horário aparece com
+   `200`. A do minuto 0 pode aparecer como falha por tempo: é a chamada que acorda a API.
 7. Backup (adiado, ADR 0007): quando ele voltar, rode à mão o `backup.yml` do repositório
    `contai-backups` e restaure o artifact num banco temporário com `infra/backup/restore.sh`, como
    descreve `infra/backup/README.md`.

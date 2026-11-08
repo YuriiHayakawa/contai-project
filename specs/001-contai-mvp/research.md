@@ -159,7 +159,8 @@ no início da implementação.
     (`SCHEDULER_TOKEN`), que as roda e devolve o resultado de cada uma. Cada tarefa roda sob um
     advisory lock do PostgreSQL próprio dela, para o laço e o disparo não a rodarem em dobro.
     Desde 2026-11-08, com os GitHub Actions da conta bloqueados (ADR 0010), o disparo é o
-    cron-job.org chamando o health check a cada 3 horas: a API acorda, e o laço roda todas as
+    cron-job.org chamando `GET /api/v1/health/worker` a cada 3 horas, nos minutos 0 e 3 (a
+    primeira chamada acorda; a segunda confere): a API acorda, e o laço roda todas as
     tarefas periódicas logo no começo, porque não guarda a última execução entre partidas.
   - Saúde do worker: ele grava um batimento em `worker_heartbeats`; `GET /api/v1/health/worker`
     responde saudável se o último batimento tem menos de 60 segundos, e o `healthcheck` do
