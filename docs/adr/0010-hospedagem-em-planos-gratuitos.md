@@ -100,11 +100,14 @@ cartão. Enquanto isso:
   Auto-Deploy do Render (On Commit, na `main`) e a produção da Vercel na `main`. As prévias da
   Vercel ficam desligadas (`git.deploymentEnabled` só na `main`, em `frontend/vercel.json`). O
   job de deploy por deploy hooks fica para quando os Actions voltarem.
-- **Tarefas agendadas**: um agendador gratuito e sem cartão, o cron-job.org, chama o health check
-  do Render a cada 3 horas. A chamada acorda o serviço, e o worker embutido roda todas as tarefas
-  periódicas ao começar (elas não têm registro da última execução depois de uma partida). Não há
-  segredo envolvido: o health check é público e não devolve dados. Um segundo chamado, minutos
-  depois, confere `/api/v1/health/worker` e avisa por e-mail se falhar.
+- **Tarefas agendadas**: um agendador gratuito e sem cartão, o cron-job.org, chama
+  `GET /api/v1/health/worker` do Render a cada 3 horas, duas vezes: no minuto 0 e no minuto 3
+  (`0,3 */3 * * *`, horário de Brasília). A primeira chamada acorda o serviço e costuma passar
+  dos 30 segundos que o cron-job.org espera; a segunda já o encontra acordado e confere que o
+  worker está vivo. Assim as falhas nunca ficam seguidas, e o cron-job.org não desliga o job (ele
+  desliga depois de mais de 25 falhas seguidas e avisa por e-mail). O worker embutido roda todas
+  as tarefas periódicas ao começar (elas não têm registro da última execução depois de uma
+  partida). Não há segredo envolvido: o health check é público e não devolve dados.
 - `ci.yml` e `scheduled-tasks.yml` continuam no repositório, desligados no GitHub, para quando a
   conta voltar a ter Actions.
 
