@@ -681,7 +681,9 @@ de construir as telas do painel.
 ## 29. Validação do deploy em planos gratuitos (2026-10-31 e 2026-11-02)
 
 Feita antes das adaptações grandes, com a Vercel e o Render no ar e o banco num ramo descartável
-do Neon (`validacao`), o provedor de IA simulado e um usuário de teste.
+do Neon (`validacao`), o provedor de IA simulado e um usuário de teste. O ramo `validacao` expirou
+e foi apagado em 2026-11-07; desde então, a API do Render usa o ramo principal do Neon,
+`production`, pelo endpoint direto, e o backup lê desse mesmo ramo.
 
 - **Decision**: o desenho da seção 24 funciona. O que foi medido:
   - **Segredo do proxy**: direto no Render, sem o segredo ou com um segredo falso, a API

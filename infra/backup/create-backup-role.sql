@@ -1,8 +1,8 @@
 -- Usuário só de leitura do backup diário (ADR 0007). Ver infra/backup/README.md.
 --
--- Rodar no SQL Editor do Neon, no ramo e no banco do app, como o mesmo papel do DATABASE_URL do
--- Render (o dono das tabelas, normalmente neondb_owner): os privilégios padrão do fim valem para
--- as tabelas que esse papel criar nas próximas migrações.
+-- Rodar no SQL Editor do Neon, no ramo production (o mesmo do Render) e no banco do app, como o
+-- mesmo papel do DATABASE_URL do Render (o dono das tabelas, normalmente neondb_owner): os
+-- privilégios padrão do fim valem para as tabelas que esse papel criar nas próximas migrações.
 --
 -- O papel é criado por SQL de propósito: um papel criado pelo painel do Neon entra no
 -- neon_superuser e deixa de ser só de leitura.

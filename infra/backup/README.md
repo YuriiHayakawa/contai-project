@@ -58,8 +58,8 @@ No Linux ou no macOS, instale o pacote `age` e rode o mesmo `age-keygen -o`.
 
 1. Gere uma senha longa, por exemplo:
    `docker compose run --rm --no-deps -e RUN_MIGRATIONS=0 api python -c "import secrets; print(secrets.token_urlsafe(32))"`.
-2. No SQL Editor do Neon, no ramo e no banco do app, rode
-   [`create-backup-role.sql`](create-backup-role.sql) com a senha no lugar de
+2. No SQL Editor do Neon, no ramo `production` (o principal, o mesmo do Render) e no banco do
+   app, rode [`create-backup-role.sql`](create-backup-role.sql) com a senha no lugar de
    `COLE_A_SENHA_AQUI`. Rode como o mesmo papel do `DATABASE_URL` do Render, o dono das tabelas.
    Assim, as tabelas das próximas migrações também entram na cópia.
 3. A consulta do fim do arquivo confere o papel: `rolsuper`, `rolcreaterole` e `neon_superuser`
@@ -67,8 +67,9 @@ No Linux ou no macOS, instale o pacote `age` e rode o mesmo `age-keygen -o`.
 4. Apague a consulta do histórico do SQL Editor, porque ela tem a senha.
 
 O papel é criado por SQL de propósito: um papel criado pelo painel do Neon entra no
-`neon_superuser` e deixa de ser só de leitura. Os papéis do Neon são de cada ramo. Ao trocar de
-ramo (T218), crie o papel de novo no ramo novo e atualize o segredo.
+`neon_superuser` e deixa de ser só de leitura. Os papéis do Neon são de cada ramo: o
+`contai_backup` existe só no `production`. Se o banco do app passar para outro ramo, crie o papel
+de novo nele e atualize o segredo.
 
 ### 4. Segredo e variável no `contai-backups`
 
@@ -79,7 +80,8 @@ Em Settings → Secrets and variables → Actions:
 | Segredo | `BACKUP_DATABASE_URL` | `postgresql://contai_backup:<senha>@<host>/<banco>?sslmode=require` |
 | Variável | `BACKUP_AGE_PUBLIC_KEY` | a chave pública `age1…` |
 
-O host e o banco são os do `DATABASE_URL` do Render: o endpoint direto, sem `-pooler`. O formato
+O host e o banco são os do `DATABASE_URL` do Render, no ramo `production`: o endpoint direto,
+sem `-pooler`. O formato
 muda em dois pontos: começa com `postgresql://`, sem o `+asyncpg`, e termina em `sslmode=require`
 em vez de `ssl=require`.
 
