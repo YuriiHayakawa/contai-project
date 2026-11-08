@@ -41,6 +41,20 @@ Follow-up TODOs:
   - Continuam valendo as pendências externas da versão 1.0.0 que ainda estão abertas (valores
     numéricos deixados para specs e ADRs).
 
+Desvio temporário em vigor (2026-11-08, sem mudança de texto nem de versão; Governance,
+Conformidade):
+  - XII. Deploy e Infraestrutura, "backup diário automático do PostgreSQL, guardado fora do
+    provedor do banco": NÃO atendido por enquanto. A conta do GitHub não tem cartão, e o
+    orçamento de US$ 0 bloqueia os Actions do repositório privado contai-backups. Enquanto isso,
+    a única cópia é o histórico de restauração do Neon, de poucas horas, dentro do provedor.
+  - Justificativa: o mantenedor priorizou colocar o Contaí em uso. Alternativas rejeitadas:
+    rodar o backup no repositório principal, que fica público (artifacts baixáveis por qualquer
+    conta do GitHub); cadastrar cartão ou usar armazenamento que o exige (contra a regra de só
+    usar planos gratuitos sem cartão).
+  - Plano de adequação: T216 (backup rodando todos os dias) e T217 (ensaio de restauração),
+    adiadas em specs/001-contai-mvp/tasks.md; detalhes no ADR 0007, seção "Desvio temporário".
+    A política de privacidade informa o usuário de que as cópias diárias ainda não existem.
+
 HISTÓRICO
 ---------
 1.0.1 (2026-10-01)
