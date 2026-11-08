@@ -532,7 +532,7 @@ do prazo, pedir de novo e, passados os 7 dias, não conseguir mais entrar
 - [X] T223 Passar a lista da seção 11 do `design-system.md` em todas as telas de `frontend/src/features/`, em 320px e em desktop, nos dois temas, com teclado, com leitor de tela e com movimento reduzido, corrigindo o que falhar
 - [X] T224 Conferir a cobertura de 80% em `backend/app/modules` e que `backend/tests/isolation/test_all_routes_covered.py` passa com todas as rotas registradas, completando os testes que faltarem
 - [X] T225 [P] Escrever `README.md` na raiz: visão do projeto, capturas de tela, arquitetura, decisões técnicas com links para os ADRs e instruções para rodar localmente com `docker compose up`
-- [ ] T226 Executar o roteiro de `specs/001-contai-mvp/validation/T226-roteiro.md` (conta de teste, OFX e PDF fictícios, compra parcelada, lançamento por texto, painel e as seis perguntas, com os números esperados calculados antes) e o roteiro completo de `specs/001-contai-mvp/quickstart.md`, inclusive a seção Produção, e a validação com o provedor de IA real (SC-005, SC-010 e SC-014) em produção, com o servidor acordado, e corrigir o que falhar
+- [X] T226 **Executada em 2026-11-08 em produção, com o Gemini real: SC-005, SC-010 e SC-014 atendidos; resultado e duas observações na seção 9 do roteiro.** Executar o roteiro de `specs/001-contai-mvp/validation/T226-roteiro.md` (conta de teste, OFX e PDF fictícios, compra parcelada, lançamento por texto, painel e as seis perguntas, com os números esperados calculados antes) e o roteiro completo de `specs/001-contai-mvp/quickstart.md`, inclusive a seção Produção, e a validação com o provedor de IA real (SC-005, SC-010 e SC-014) em produção, com o servidor acordado, e corrigir o que falhar
 
 ---
 
