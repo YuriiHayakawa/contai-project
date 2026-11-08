@@ -782,7 +782,7 @@ describe("desativar as duas etapas por e-mail", () => {
 });
 
 describe("política de privacidade", () => {
-  it("é pública e explica dados, IA, uso pelo provedor, cópias de 14 dias e onde os dados ficam", async () => {
+  it("é pública e explica dados, IA, uso pelo provedor, cópias de segurança e onde os dados ficam", async () => {
     server = "no-session";
     renderApp(paths.privacy);
 
@@ -800,12 +800,17 @@ describe("política de privacidade", () => {
       expect(screen.getByRole("heading", { name: title, level: 2 })).toBeInTheDocument();
     }
     expect(screen.getByText(/melhorar os próprios modelos/)).toBeInTheDocument();
-    expect(screen.getByText(/guardada por 14 dias/)).toBeInTheDocument();
-    for (const provider of ["Vercel", "Render", "Neon", "Brevo", "GitHub"]) {
+    // As cópias diárias estão adiadas: a política não pode dizer que elas existem.
+    expect(screen.getByText(/única cópia de segurança é um histórico/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Cópias diárias, cifradas e guardadas por 14 dias, estão em implantação/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Todos os dias o Contaí faz uma cópia/)).not.toBeInTheDocument();
+    for (const provider of ["Vercel", "Render", "Neon", "Brevo"]) {
       expect(screen.getByText(new RegExp(`^${provider}:`))).toBeInTheDocument();
     }
     expect(screen.getByText(/transferência internacional de dados/)).toBeInTheDocument();
-    expect(screen.getByText(/Versão 2, de 2 de novembro de 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Versão 3, de 8 de novembro de 2026/)).toBeInTheDocument();
   });
 });
 
