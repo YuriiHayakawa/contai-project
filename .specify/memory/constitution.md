@@ -54,6 +54,16 @@ Conformidade):
   - Plano de adequação: T216 (backup rodando todos os dias) e T217 (ensaio de restauração),
     adiadas em specs/001-contai-mvp/tasks.md; detalhes no ADR 0007, seção "Desvio temporário".
     A política de privacidade informa o usuário de que as cópias diárias ainda não existem.
+  - XII, "O CI no GitHub Actions DEVE executar [...] a cada push. O deploy só PODE acontecer com o
+    CI verde": NÃO atendido por enquanto. Desde 2026-11-06 os Actions da conta não rodam
+    ("account is locked due to a billing issue"), e o mantenedor não vai cadastrar cartão. O CI
+    roda por infra/ci-local.sh antes de cada push, com os mesmos passos do ci.yml; o deploy é
+    feito pela integração com o Git do Render e da Vercel a cada merge na main, que só é feito
+    com o CI local verde. As tarefas agendadas são disparadas pelo cron-job.org, que acorda a API
+    a cada 3 horas pelo health check, sem segredo.
+  - Justificativa e alternativas rejeitadas: ADR 0010, seção "Desvio temporário: GitHub Actions
+    bloqueados". O desvio acaba quando os Actions da conta voltarem a rodar (T218 volta ao job de
+    deploy por deploy hooks).
 
 HISTÓRICO
 ---------

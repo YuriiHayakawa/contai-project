@@ -4,7 +4,8 @@ O serviço da API dorme sem acessos, e o laço do worker dorme junto; as tarefas
 (exclusão de conta, desativação das duas etapas e seus avisos, limpezas) não podem depender de
 alguém usar o app. O workflow `scheduled-tasks.yml` chama esta rota a cada 3 horas, com o token
 de `SCHEDULER_TOKEN`. Ela não usa o login de usuário nem lida com os dados de um usuário
-específico.
+específico. Enquanto os Actions da conta estiverem bloqueados (ADR 0010), quem acorda a API é o
+cron-job.org, pelo health check, e o laço do worker roda as tarefas ao começar.
 """
 
 import hmac

@@ -212,20 +212,20 @@ conversa do usuário A. Todas respondem `404`.
 ## Produção
 
 A produção usa só planos gratuitos, sem cartão (ADR 0010): o site na Vercel, a API no Render e o
-banco no Neon, com o Render e o Neon em Ohio. Os segredos ficam só nos painéis dos serviços e nos
-segredos do GitHub Actions; nada vai para o repositório.
+banco no Neon (ramo `production`), com o Render e o Neon em Ohio. Os segredos ficam só nos painéis
+dos serviços; nada vai para o repositório.
 
 | Onde | Variáveis |
 |------|-----------|
 | Render (API) | `ENVIRONMENT=production`, `DATABASE_URL` (endpoint direto do Neon, `postgresql+asyncpg://…?ssl=require`), `APP_ORIGIN` (endereço da Vercel), `JWT_SECRET`, `TOTP_ENCRYPTION_KEY`, `PROXY_SHARED_SECRET`, `SCHEDULER_TOKEN`, `WORKER_EMBEDDED=true`, `EMAIL_BACKEND=brevo`, `BREVO_API_KEY`, `EMAIL_FROM`, `AI_PROVIDER=gemini`, `AI_API_KEY`, `AI_MODEL_*` e os limites |
 | Vercel (site) | `ORIGIN_SECRET`, com o mesmo valor de `PROXY_SHARED_SECRET` |
-| GitHub Actions do repositório principal | `SCHEDULER_TOKEN`, `RENDER_DEPLOY_HOOK_URL`, `VERCEL_DEPLOY_HOOK_URL` e a variável `APP_URL` |
-| GitHub Actions do repositório `contai-backups` (privado) | `BACKUP_DATABASE_URL` (usuário só de leitura) e a variável `BACKUP_AGE_PUBLIC_KEY` |
+| cron-job.org | nenhum segredo: só o endereço do health check do Render e o horário |
+| GitHub Actions (bloqueados desde 2026-11-06; ADR 0010) | no repositório principal, `SCHEDULER_TOKEN`, `RENDER_DEPLOY_HOOK_URL`, `VERCEL_DEPLOY_HOOK_URL` e a variável `APP_URL`; no `contai-backups` (privado), `BACKUP_DATABASE_URL` e a variável `BACKUP_AGE_PUBLIC_KEY` |
 | Fora de tudo | a chave privada do `age`, com o mantenedor |
 
-O deploy é feito pelo job de deploy do CI, só em push na `main` e só com o CI verde: ele chama os
-deploy hooks do Render e da Vercel e confere o health check pela Vercel. As migrações rodam
-quando a API sobe.
+Enquanto os GitHub Actions da conta estiverem bloqueados (desvio temporário, ADR 0010), o CI é
+`infra/ci-local.sh`, rodado antes de cada push, e o deploy é feito pelo Render e pela Vercel a
+cada merge na `main`, que só é feito com o CI local verde. As migrações rodam quando a API sobe.
 
 Depois do deploy, confira pela Vercel (as mesmas verificações da validação, seção 29 de
 [research.md](./research.md)):
@@ -240,8 +240,8 @@ Depois do deploy, confira pela Vercel (as mesmas verificações da validação, 
 4. Entre com uma conta: nas ferramentas do navegador (Application → Cookies), o cookie de
    refresh aparece com `HttpOnly`, `Secure` e `SameSite=Strict`.
 5. Importe um arquivo de até 10 MB e confira que ele é lido e que a revisão aparece.
-6. Rode à mão o workflow `scheduled-tasks.yml` (Actions → Run workflow): ele termina verde, com
-   todas as tarefas em `ok` ou `skipped`.
-7. Rode à mão o `backup.yml` do repositório `contai-backups` e restaure o artifact num banco
-   temporário com `infra/backup/restore.sh`, como descreve `infra/backup/README.md`. Faça isso
-   antes de o sistema receber usuários reais.
+6. No cron-job.org, as execuções do job que confere `/api/v1/health/worker` aparecem com `200`
+   ("Successful").
+7. Backup (adiado, ADR 0007): quando ele voltar, rode à mão o `backup.yml` do repositório
+   `contai-backups` e restaure o artifact num banco temporário com `infra/backup/restore.sh`, como
+   descreve `infra/backup/README.md`.

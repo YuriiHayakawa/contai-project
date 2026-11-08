@@ -117,13 +117,15 @@ As imagens ficam em [`docs/screenshots/`](docs/screenshots/) — veja ali como g
 ### Infraestrutura
 - **Produção**, só em planos gratuitos: **Vercel** (frontend e repasse de `/api`), **Render** (API
   em contêiner Docker) e **Neon** (PostgreSQL gerenciado), com e-mails pela API do **Brevo** e
-  tarefas agendadas disparadas pelo **GitHub Actions**.
+  as tarefas agendadas acordadas pelo **cron-job.org**.
 - **Desenvolvimento**: **Docker Compose**, com **Caddy** como proxy na mesma origem e **Mailpit**
   para os e-mails.
 
 ### Qualidade
 - Backend: **Ruff** (lint + format), **mypy**, **pytest** (+cobertura), **pip-audit**.
 - Frontend: **ESLint**, **Prettier**, **tsc**, **Vitest**, **npm audit**.
+- Os mesmos passos rodam no GitHub Actions (`ci.yml`) e, sem ele, em contêineres, por
+  `infra/ci-local.sh`.
 
 ---
 
@@ -138,8 +140,8 @@ nunca é chamada direto.
                        └────────────┬─────────────┘
                      /api/* + segredo do repasse
                        ┌────────────▼─────────────┐        ┌─────────────────┐
-  GitHub Actions ────► │       API no Render      │ ─────► │  Brevo (e-mail) │
-  (tarefas a cada 3 h) │  FastAPI + worker junto  │        └─────────────────┘
+    cron-job.org ────► │       API no Render      │ ─────► │  Brevo (e-mail) │
+  (acorda a cada 3 h)  │  FastAPI + worker junto  │        └─────────────────┘
                        └────────────┬─────────────┘
                        ┌────────────▼─────────────┐
                        │   PostgreSQL no Neon     │  dados, fila de jobs e
@@ -150,8 +152,10 @@ nunca é chamada direto.
 - **Uma origem só**: a Vercel repassa `/api` ao Render com um cabeçalho secreto, e a API recusa
   quem chega sem ele. O cookie de refresh fica `httpOnly`, `Secure` e `SameSite=Strict`, sem CORS.
 - **Servidor que dorme**: o Render gratuito dorme depois de 15 minutos sem acesso e leva cerca de
-  um minuto para acordar; o app avisa enquanto espera. As tarefas com prazo rodam por um disparo
-  do GitHub Actions a cada 3 horas, e não dependem de alguém usar o app.
+  um minuto para acordar; o app avisa enquanto espera. O cron-job.org acorda a API a cada 3 horas,
+  e o worker roda as tarefas com prazo ao acordar, sem depender de alguém usar o app.
+- **Deploy**: o Render e a Vercel publicam a cada merge na `main`, que só recebe código com o CI
+  verde.
 - **No ambiente local**, o Docker Compose sobe o PostgreSQL, a API (com o worker embutido), o
   servidor do Vite, o Caddy, que faz o papel da Vercel, e o Mailpit.
 
@@ -325,7 +329,8 @@ agendadas. Falta fechar a produção:
   `infra/backup/`, adiado: sem cartão na conta do GitHub, o orçamento de US$ 0 bloqueia os
   Actions do repositório privado).
 - [ ] Ensaio de restauração do backup.
-- [ ] Deploy por GitHub Actions, só com o CI verde.
+- [ ] Deploy e tarefas agendadas pelo GitHub Actions (`ci.yml` e `scheduled-tasks.yml` prontos;
+  hoje os Actions da conta estão bloqueados, e o CI roda por `infra/ci-local.sh`).
 - [ ] Validação de ponta a ponta em produção, com o provedor de IA real.
 
 ---

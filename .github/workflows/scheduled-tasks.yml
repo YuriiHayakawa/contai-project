@@ -1,4 +1,8 @@
 # Disparo externo das tarefas agendadas (ADR 0010, research.md seção 8).
+#
+# DESLIGADO desde 2026-11-08: os GitHub Actions da conta estão bloqueados (ADR 0010, "Desvio
+# temporário"). Enquanto isso, o cron-job.org acorda a API pelo health check a cada 3 horas.
+#
 # O serviço da API dorme sem acessos, e o laço do worker dorme junto: as tarefas com prazo
 # (exclusão de conta, desativação das duas etapas e seus avisos, limpezas) rodam por este
 # disparo, a cada 3 horas, além de sempre que o serviço está acordado.

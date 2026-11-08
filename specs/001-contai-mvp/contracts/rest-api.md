@@ -245,7 +245,8 @@ proposta: o assistente pergunta o valor (`clarification`).
 ## Interna (disparo das tarefas agendadas)
 
 Chamada pelo workflow `scheduled-tasks.yml` a cada 3 horas (seção 8 de
-[research.md](../research.md)). Não usa o access token de usuário e não lida com os dados de um
+[research.md](../research.md)); enquanto os Actions da conta estiverem bloqueados, o disparo é o
+cron-job.org acordando a API pelo health check, e esta rota fica sem uso. Não usa o access token de usuário e não lida com os dados de um
 usuário específico; por isso fica fora do teste de acesso cruzado entre usuários.
 
 | Método e rota | Resposta |

@@ -158,6 +158,9 @@ no início da implementação.
     cada 3 horas, `POST /api/v1/internal/scheduled-tasks`, protegido por token
     (`SCHEDULER_TOKEN`), que as roda e devolve o resultado de cada uma. Cada tarefa roda sob um
     advisory lock do PostgreSQL próprio dela, para o laço e o disparo não a rodarem em dobro.
+    Desde 2026-11-08, com os GitHub Actions da conta bloqueados (ADR 0010), o disparo é o
+    cron-job.org chamando o health check a cada 3 horas: a API acorda, e o laço roda todas as
+    tarefas periódicas logo no começo, porque não guarda a última execução entre partidas.
   - Saúde do worker: ele grava um batimento em `worker_heartbeats`; `GET /api/v1/health/worker`
     responde saudável se o último batimento tem menos de 60 segundos, e o `healthcheck` do
     contêiner usa a mesma checagem.
@@ -522,6 +525,9 @@ no início da implementação.
     os deploy hooks do Render e da Vercel e confere `/api/v1/health` pela Vercel. Os deploys
     automáticos e as prévias dos dois ficam desligados.
   - Segredos só nos painéis dos serviços e nos segredos do GitHub Actions; nada no repositório.
+  - Desde 2026-11-08, com os Actions da conta bloqueados (desvio temporário, ADR 0010): CI por
+    `infra/ci-local.sh` antes de cada push e deploy pela integração com o Git do Render e da
+    Vercel a cada merge na `main`, com as prévias da Vercel desligadas.
 - **Rationale**: Princípio XII (constituição 2.0.0). Depender dos jobs de CI garante por
   construção que só há deploy com CI verde. A cifra com chave pública impede que um vazamento de
   quem guarda os backups exponha o conteúdo deles.
