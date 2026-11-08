@@ -1,3 +1,5 @@
+# DESLIGADO desde 2026-11-08: os GitHub Actions da conta estão bloqueados (ADR 0010, "Desvio
+# temporário"). Os mesmos passos rodam por infra/ci-local.sh, antes de cada push.
 name: CI
 
 on:

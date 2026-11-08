@@ -1,6 +1,7 @@
 # ADR 0010: hospedagem em planos gratuitos (Vercel, Render e Neon)
 
-- **Situação**: aceito
+- **Situação**: aceito; CI, deploy e disparo das tarefas em desvio temporário desde 2026-11-08
+  (ver "Desvio temporário", no fim)
 - **Data**: 2026-11-02
 - **Emenda relacionada**: constituição 1.0.1 → 2.0.0 (Princípios III e XII, Stack e Dependências)
 - **Referência**: `specs/001-contai-mvp/research.md`, seções 1, 24 e 29
@@ -78,8 +79,44 @@ gratuitos mudam o desenho:
   O bloqueio de login por tentativas erradas fica no banco e não é afetado.
 - As requisições que não passam pela Vercel não chegam à API, exceto o health check.
 - Os dados ficam nos EUA; a política de privacidade informa a transferência internacional.
-- O histórico de restauração do Neon guarda dados apagados por até 6 horas, dentro do prazo de
-  14 dias que a política promete para as cópias.
+- O histórico de restauração do Neon guarda dados apagados por até 6 horas. Enquanto o backup
+  diário estiver adiado ([[0007-backup-cifrado]]), é a única cópia, e a política de privacidade
+  diz isso.
 - O plano Hobby da Vercel não admite uso comercial; o Contaí se enquadra enquanto for pessoal e
   de portfólio.
 - O ambiente local deixa de ter o contêiner `worker`; a API roda o worker também ali.
+
+## Desvio temporário: GitHub Actions bloqueados (2026-11-08)
+
+Desde 2026-11-06, todo job do GitHub Actions da conta do mantenedor falha antes de começar
+("account is locked due to a billing issue"), inclusive no repositório principal, que é público.
+A conta não tem cartão, e os orçamentos de US$ 0 bloqueiam o uso; o mantenedor não vai cadastrar
+cartão. Enquanto isso:
+
+- **CI**: `infra/ci-local.sh` roda os mesmos passos do `ci.yml` (Ruff, mypy, pytest com
+  cobertura e `pip-audit`; ESLint, Prettier, `tsc`, Vitest e `npm audit`) em contêineres Linux,
+  antes de cada push. O merge na `main` só é feito com ele verde.
+- **Deploy**: pela integração com o Git dos dois serviços, a cada merge na `main` — o
+  Auto-Deploy do Render (On Commit, na `main`) e a produção da Vercel na `main`. As prévias da
+  Vercel ficam desligadas (`git.deploymentEnabled` só na `main`, em `frontend/vercel.json`). O
+  job de deploy por deploy hooks fica para quando os Actions voltarem.
+- **Tarefas agendadas**: um agendador gratuito e sem cartão, o cron-job.org, chama o health check
+  do Render a cada 3 horas. A chamada acorda o serviço, e o worker embutido roda todas as tarefas
+  periódicas ao começar (elas não têm registro da última execução depois de uma partida). Não há
+  segredo envolvido: o health check é público e não devolve dados. Um segundo chamado, minutos
+  depois, confere `/api/v1/health/worker` e avisa por e-mail se falhar.
+- `ci.yml` e `scheduled-tasks.yml` continuam no repositório, desligados no GitHub, para quando a
+  conta voltar a ter Actions.
+
+**O que se perde**: a garantia automática de que nada chega à `main` sem CI verde passa a
+depender da disciplina de rodar o script; e o resultado de cada tarefa agendada deixa de aparecer
+num lugar só (fica nos registros do Render).
+
+**Alternativas rejeitadas**: cadastrar cartão no GitHub (o mantenedor não quer correr o risco de
+cobrança); outro serviço de CI hospedado (mais uma conta, e os planos gratuitos costumam pedir
+cartão ou limitar repositórios); deixar as tarefas só para quando alguém usa o app (os prazos de
+exclusão de conta e de desativação das duas etapas poderiam atrasar dias).
+
+**Fim do desvio**: os Actions da conta voltando a rodar; então o deploy volta para o job da T218
+e o disparo, para o `scheduled-tasks.yml`.
+
