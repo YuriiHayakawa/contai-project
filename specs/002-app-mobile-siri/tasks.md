@@ -449,9 +449,10 @@ passos 1 a 5, 7 e 8.
   - **Cota de perguntas esgotada**: 429 `limit`, nada gravado.
   - **Limite de frases**: a 21ª frase na hora recebe 429.
   - **Prazo** (`X-Contai-Deadline`):
-    - já vencido: 503 `deadline`, sem chamar a IA e sem registrar uso;
+    - já vencido: 503 `deadline`, sem chamar a IA, mas registrando uso `VOICE_ENTRY` com
+      `model="none"` e zero tokens, porque cada chamada conta (Princípio XV);
     - vencendo entre a IA e o commit: 503, com rollback;
-    - sem o cabeçalho, o prazo é a chegada mais 6,5 s.
+    - sem o cabeçalho, o prazo é a chegada mais 5,5 s.
   - **Autenticação**: token ausente, malformado, inexistente ou revogado, ou de conta excluída,
     recebe 401 com corpo idêntico em todos os casos.
   - **Uso registrado**: cada frase registra uso `VOICE_ENTRY` no balde de perguntas.
@@ -467,7 +468,7 @@ passos 1 a 5, 7 e 8.
   - Mais de 8 s responde 200 `waking` com a mensagem de "acordando".
   - Erro de rede responde `waking`.
   - Sem `phrase`, ou com corpo maior que 2 KB, responde `repeat`.
-  - O cabeçalho `X-Contai-Deadline` é a chegada mais 6,5 s, e `x-contai-proxy-secret` é
+  - O cabeçalho `X-Contai-Deadline` é a chegada mais 5,5 s, e `x-contai-proxy-secret` é
     enviado.
 - [ ] T054 [P] [US3] Registrar as rotas novas em `backend/tests/isolation/registry.py`:
   - `/personal-tokens` (GET, POST, PATCH e DELETE), com os casos de outro usuário: o `PATCH` e o
@@ -522,7 +523,9 @@ passos 1 a 5, 7 e 8.
   5. Aplicar as regras da voz (research, seção 7).
   6. Conferir o prazo de novo antes de gravar.
   7. Gravar pelo `TransactionRepository`, com `source=voice` e `voice_phrase`.
-  8. Chamar `record_usage(VOICE_ENTRY)` se a IA foi chamada.
+  8. Chamar `record_usage(VOICE_ENTRY, counts_toward_limit=True)` em toda chamada que passou da
+     cota e do limite por hora, inclusive quando o prazo descarta a frase (`model="none"`,
+     zero tokens).
   9. Montar a `speech` com o valor por extenso.
 - [ ] T062 [US3] Criar o schema `VoiceEntryRequest` (`phrase` com 1 a 300 caracteres) e
   `VoiceEntryResult` em `backend/app/modules/assistant/schemas.py`, e a rota
@@ -538,7 +541,7 @@ passos 1 a 5, 7 e 8.
 - [ ] T063 [US3] Criar `frontend/api/siri.ts`, a função da Vercel na Node runtime, com
   `export async function POST(request: Request)`, conforme `contracts/siri-shortcut.md`.
   - Lê `API_ORIGIN_URL`, `ORIGIN_SECRET`, `VOICE_RELAY_TIMEOUT_MS` (padrão 8000) e
-    `VOICE_API_BUDGET_MS` (padrão 6500).
+    `VOICE_API_BUDGET_MS` (padrão 5500, sempre pelo menos 2,5 s abaixo do tempo de espera).
   - Usa um `AbortController`.
   - Sempre responde 200 com `outcome` e `speech`.
   - Não registra a frase nem o token.

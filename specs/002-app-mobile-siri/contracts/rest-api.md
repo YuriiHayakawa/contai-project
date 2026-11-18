@@ -90,7 +90,7 @@ Exigem a sessão normal (`CurrentUserDep`). Um token pessoal recebe 401 aqui (FR
 - **Autenticação**: `Authorization: Bearer ctp_<id>.<segredo>`, por `PersonalTokenDep`. É a
   única rota que aceita token pessoal.
 - **Cabeçalho opcional**: `X-Contai-Deadline`, um número inteiro em milissegundos desde a época
-  Unix. Sem ele, o prazo é o momento da chegada mais 6,5 s.
+  Unix. Sem ele, o prazo é o momento da chegada mais 5,5 s.
 - **Corpo**: `{ "phrase": str (1–300) }`
 - **Resposta**: sempre `VoiceEntryResult`:
 
@@ -112,7 +112,7 @@ Exigem a sessão normal (`CurrentUserDep`). Um token pessoal recebe 401 aqui (FR
 | 422 | `unsupported` | Mais de um lançamento, transferência, compra parcelada ou pergunta |
 | 429 | `limit` | Cota diária de IA acabou ou o token passou de 20 frases por hora |
 | 503 | `unavailable` | O serviço de IA está indisponível |
-| 503 | `deadline` | O prazo já tinha passado. Nada foi gravado, e a cota não é consumida se a IA não foi chamada. |
+| 503 | `deadline` | O prazo já tinha passado. Nada foi gravado. A chamada conta na cota de perguntas, mesmo sem chamar a IA (Princípio XV, FR-026). |
 | 401 | `unauthorized` | Token ausente, malformado, inexistente, revogado ou de conta excluída. Todos esses casos têm a mesma resposta. |
 
 **Garantias**

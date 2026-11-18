@@ -17,7 +17,7 @@
             │
             ▼
   Função da Vercel  frontend/api/siri.ts  (POST /api/siri)
-       ├─ deadline = chegada + 6,5 s
+       ├─ deadline = chegada + 5,5 s
        ├─ fetch  https://contai-api.onrender.com/api/v1/voice/entries
        │     cabeçalhos x-contai-proxy-secret, Authorization (repassado),
        │     X-Contai-Deadline, Content-Type
@@ -39,7 +39,8 @@
   - `ORIGIN_SECRET`, que já existe e é a mesma do proxy;
   - `API_ORIGIN_URL`, nova, com o valor `https://contai-api.onrender.com`;
   - `VOICE_RELAY_TIMEOUT_MS`, opcional, com padrão 8000;
-  - `VOICE_API_BUDGET_MS`, opcional, com padrão 6500.
+  - `VOICE_API_BUDGET_MS`, opcional, com padrão 5500. Precisa ficar pelo menos 2,5 s abaixo de
+    `VOICE_RELAY_TIMEOUT_MS` (research, seção 1).
 - **Roteamento** (`frontend/vercel.json`): a primeira rota passa de `/api/(.*)` para
   `/api/((?!siri$).*)`, e o resto continua igual. A função é servida no passo
   `handle: filesystem`.

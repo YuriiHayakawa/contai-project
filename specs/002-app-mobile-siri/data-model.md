@@ -80,8 +80,14 @@ qualquer ──(exclusão da conta)──────▶ apagado (cascade)
 - `AiTask` ganha `VOICE_ENTRY`, contado no balde `LimitKind.QUESTION`, junto com `CHAT` e
   `TEXT_ENTRY`. A tela de uso do site e do app mostra as perguntas como antes, agora com a voz
   incluída.
-- O uso só é registrado quando a IA é chamada de fato. Uma frase descartada pelo prazo antes da
-  chamada não consome cota.
+- Toda chamada autenticada ao endpoint de voz registra uso `VOICE_ENTRY` com
+  `counts_toward_limit=True`, porque a constituição diz que cada chamada conta (Princípio XV,
+  FR-026).
+  - Isso vale para as chamadas que passaram da conferência da cota e do limite por hora.
+  - Vale também para a frase descartada pelo prazo antes de chamar a IA. Nesse caso o registro
+    leva `model="none"` e uso zero de tokens.
+  - Não registram uso as chamadas recusadas antes disso: token inválido, cota esgotada e limite
+    por hora.
 
 ## Token de restauração (não é guardado)
 

@@ -765,6 +765,11 @@ quem está no celular.
 
   O link entra no app depois, por configuração. As tarefas da feature DEVEM incluir esse passo
   e a conferência de que o atalho funciona instalado a partir do link.
+- **Limite do FR-025**: a frase sem resposta a tempo não é lançada porque a API confere um prazo
+  2,5 s menor que a espera da Siri, antes de gravar. Resta um caso de fronteira: a gravação acontece
+  no fim do prazo, e a resposta leva mais de 2,5 s para voltar. Nesse caso a Siri diria
+  "acordando" com o lançamento salvo. Esse risco foi aceito, porque o lançamento aparece em
+  destaque, com a frase, e pode ser desfeito com um toque (research, seção 1).
 - O atalho espera a resposta da API só por um tempo limitado. O plano define esse tempo e como o
   aviso de "acordando" é entregue dentro dele.
 

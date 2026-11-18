@@ -29,18 +29,19 @@ do site, `POST /api/siri`, que funciona como um intermediário curto.
 
 - **Repasse**: a função envia a frase à API no Render, com o segredo do proxy e o cabeçalho
   `X-Contai-Deadline`. Esse cabeçalho é um prazo absoluto: o momento em que a requisição chegou
-  à função mais 6,5 segundos.
+  à função mais 5,5 segundos.
 - **Espera da função**: no máximo 8 segundos. Se a API não responder nesse tempo, a função
   responde ao atalho, com status 200: "O Contaí está acordando. Nada foi lançado. Tente de novo
   em um minuto." A própria chamada já acordou o Render.
 - **Sem lançamento em dobro**: a API confere o prazo duas vezes, antes de chamar a IA e
   imediatamente antes do commit. Uma requisição que chega depois do prazo, como acontece quando
-  o Render acorda depois de 1 minuto, é descartada sem gravar nada e sem gastar a cota de IA.
+  o Render acorda depois de 1 minuto, é descartada sem gravar nada e sem chamar a IA. A chamada
+  conta uma pergunta na cota, porque o Princípio XV manda contar cada chamada.
   Quando o usuário repete a frase, só um lançamento existe (FR-025, SC-011).
-- **Folga do prazo**: o prazo da API (6,5 s) é 1,5 s menor que a espera da função (8 s). Essa
+- **Folga do prazo**: o prazo da API (5,5 s) é 2,5 s menor que a espera da função (8 s). Essa
   folga cobre a volta da resposta. Se o commit acontece dentro do prazo, a resposta chega à
   função antes dela desistir.
-- **Risco residual aceito**: um commit nos últimos milissegundos com uma volta acima de 1,5 s
+- **Risco residual aceito**: um commit nos últimos milissegundos com uma volta acima de 2,5 s
   geraria "acordando" com o lançamento salvo. Mesmo nesse caso, o lançamento aparece em
   destaque e pode ser desfeito.
 - **Mensagem honesta**: o tempo também pode estourar com o servidor acordado, se a IA demorar.
