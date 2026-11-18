@@ -1,6 +1,66 @@
 <!--
 SYNC IMPACT REPORT
 ==================
+Version change: 2.0.0 → 2.1.0
+Bump rationale: MINOR. Entram dois princípios novos (XIV. App Mobile e XV. Lançamento por Voz) e
+uma linha nova na Stack. Outros seis princípios ganham regras ou remissões. Nenhuma regra é
+removida, e nada do que estava conforme deixa de estar. As duas exceções abertas (salvar sem
+confirmação no Princípio VI e desfazer sem confirmação no Princípio IX) valem só para o
+lançamento por voz, que ainda não existe, então nenhum código atual passa a violá-las. Por isso a
+mudança é MINOR, e não MAJOR.
+
+Justificativa: o mantenedor vai construir um app mobile do Contaí em React Native para uma
+disciplina da faculdade (trabalho individual, entrega em 2026-11-25), na pasta mobile/ deste
+repositório e consumindo a mesma API. Vai também construir o lançamento por voz pela Siri: um
+atalho do app Atalhos do iPhone envia a frase falada para a API. O desenvolvimento é feito no
+Windows, sem Mac e sem conta paga da Apple, então o app precisa rodar no Expo Go.
+
+Modified principles:
+  - Preâmbulo: o Contaí passa a ter também um app mobile e o lançamento por voz.
+  - II. Qualidade de Código — Frontend: as regras passam a valer também para o app mobile.
+  - V. Segurança: remissões aos Princípios XIV (sessão no app) e XV (tokens pessoais). O token
+    pessoal é incluído nos testes de isolamento e no CORS (clientes nativos).
+  - VI. Inteligência Artificial: exceção à confirmação para o lançamento por voz (Princípio XV).
+  - VII. Privacidade e LGPD: a política de privacidade passa a informar que a frase falada passa
+    pela Apple. A exportação e a exclusão da conta passam a cobrir os tokens pessoais.
+  - IX. Design e UX: regras de acessibilidade do app (leitor de tela, fonte do sistema, área de
+    toque). Desfazer um lançamento por voz deixa de exigir confirmação.
+  - X. Testes: testes obrigatórios do app (jest-expo e React Native Testing Library) e do token
+    pessoal.
+  - XII. Deploy e Infraestrutura: o app e o atalho usam a mesma origem pública. O CI cobre o app.
+    O app não é publicado nas lojas.
+
+Added sections:
+  - XIV. App Mobile
+  - XV. Lançamento por Voz (tokens pessoais)
+  - Stack e Dependências: linha "Mobile".
+
+Removed sections: nenhuma.
+
+Templates: não modificados. Os templates e comandos dependentes leem esta constituição em tempo
+de execução.
+
+ADR: docs/adr/0012-sessao-no-app-e-tokens-pessoais.md acompanha esta emenda, como a seção de
+governança pede para emendas que tocam segurança. A emenda cria um modo de login para clientes
+nativos e uma credencial nova, o token pessoal.
+
+Plano de adequação (Governance): nenhum. Nenhum código existente passa a violar a constituição.
+
+Follow-up TODOs:
+  - Fonte única do código compartilhado (Princípio XIV): o mantenedor aprovou (2026-11-18) que o
+    plano escolha o mecanismo mais simples. Se compartilhar custar mais de meio dia, por causa
+    do prazo de 2026-11-25, o plano registra um desvio temporário em vez de travar a entrega.
+  - Valores numéricos deixados para a spec: número máximo de tokens pessoais ativos por usuário,
+    limite de uso por token e tempo de destaque dos lançamentos por voz.
+  - Continuam valendo as pendências externas da versão 1.0.0 que ainda estão abertas.
+
+Desvios temporários: os dois registrados em 2026-11-08 (versão 2.0.0, abaixo) continuam em vigor.
+Enquanto o desvio do CI durar, as verificações do app entram em infra/ci-local.sh, como as
+demais.
+
+HISTÓRICO
+---------
+2.0.0 (2026-11-02)
 Version change: 1.0.1 → 2.0.0
 Bump rationale: MAJOR. O Princípio XII é redefinido de forma incompatível: a produção deixa de
 ser uma VPS com Docker Compose atrás do Caddy e passa a usar serviços gerenciados. A seção Stack
@@ -65,8 +125,6 @@ Conformidade):
     bloqueados". O desvio acaba quando os Actions da conta voltarem a rodar (T218 volta ao job de
     deploy por deploy hooks).
 
-HISTÓRICO
----------
 1.0.1 (2026-10-01)
 Version change: 1.0.0 → 1.0.1
 Bump rationale: PATCH. A lista de domínios do Princípio III ganha o módulo `categorization`. É um
@@ -141,9 +199,10 @@ Follow-up TODOs (nenhum placeholder ficou no documento; itens abaixo são pendê
 
 # Contaí Constitution
 
-Contaí é uma aplicação web multiusuário de controle financeiro pessoal com assistente de IA. Cada
-usuário registra suas finanças manualmente ou importando documentos de qualquer banco e faz
-perguntas em linguagem natural sobre os próprios gastos. O sistema é usado de verdade por várias
+Contaí é uma aplicação web multiusuário de controle financeiro pessoal com assistente de IA, com
+um app mobile e lançamento por voz que usam a mesma API. Cada usuário registra suas finanças
+manualmente, importando documentos de qualquer banco ou falando com a Siri, e faz perguntas em
+linguagem natural sobre os próprios gastos. O sistema é usado de verdade por várias
 pessoas, inclusive sem conhecimento técnico, e é peça de portfólio: o padrão exigido é qualidade
 de produção.
 
@@ -178,6 +237,7 @@ da execução, o que importa em um sistema que lida com dinheiro de pessoas reai
   ficar em uma camada de serviços e ser consumidas via hooks do TanStack Query.
 - Formulários DEVEM ser validados com schemas Zod.
 - ESLint e Prettier DEVEM passar sem erros.
+- As regras deste princípio valem também para o app mobile em `mobile/` (ver Princípio XIV).
 
 **Rationale**: o mesmo rigor de tipos do backend, com a UI separada do acesso a dados para que
 componentes sejam previsíveis e testáveis.
@@ -221,7 +281,9 @@ variações que escondem bugs e falhas de acesso.
   contra senhas comuns.
 - **Tokens**: o access token JWT DEVE ter curta duração e ser mantido apenas em memória no
   frontend. O refresh token DEVE ficar em cookie `httpOnly`, `Secure`, `SameSite=Strict`, com
-  rotação a cada uso, detecção de reutilização e revogação no logout e na troca de senha.
+  rotação a cada uso, detecção de reutilização e revogação no logout e na troca de senha. A
+  sessão do app mobile segue o Princípio XIV. Os tokens pessoais do lançamento por voz seguem o
+  Princípio XV.
 - **CSRF**: o endpoint que usa o cookie de refresh DEVE ter proteção contra CSRF.
 - **Cadastro e recuperação**: a verificação de e-mail DEVE ser obrigatória no cadastro. A
   recuperação de senha DEVE usar token de uso único com expiração curta. As respostas NÃO DEVEM
@@ -232,7 +294,7 @@ variações que escondem bugs e falhas de acesso.
   de IA, com bloqueio temporário após tentativas falhas.
 - **Isolamento entre usuários**: toda consulta, arquivo, job e conversa DEVE ser filtrado pelo
   usuário autenticado. DEVEM existir testes automatizados que tentam acessar dados de outro
-  usuário em todos os endpoints.
+  usuário em todos os endpoints, inclusive com o token pessoal de outro usuário.
 - **Uploads**: DEVEM ser tratados como não confiáveis, com limite de tamanho, validação do tipo
   real pelo conteúdo, nomes de arquivo gerados pelo sistema, armazenamento fora de qualquer pasta
   pública e exclusão do arquivo original após o processamento.
@@ -241,7 +303,9 @@ variações que escondem bugs e falhas de acesso.
 - **Logs**: NÃO DEVEM conter senhas, tokens, conteúdo de documentos, descrições ou valores de
   transações.
 - **Transporte**: HTTPS DEVE ser obrigatório em produção, com headers de segurança (CSP, HSTS,
-  `X-Content-Type-Options`, `Referrer-Policy`) e CORS restrito ao domínio do frontend.
+  `X-Content-Type-Options`, `Referrer-Policy`) e CORS restrito ao domínio do frontend. O app
+  mobile e o atalho da Siri não são navegadores e não dependem de CORS. O CORS NÃO DEVE ser
+  afrouxado por causa deles.
 - **Dependências**: DEVEM ser verificadas por ferramenta de auditoria de vulnerabilidades no CI.
 
 **Rationale**: a aplicação guarda dados financeiros de terceiros. Um vazamento entre usuários ou
@@ -257,7 +321,8 @@ uma conta comprometida é o pior defeito possível do produto.
   NÃO DEVE vir da IA.
 - Ferramentas do chat DEVEM ser somente leitura. Qualquer alteração de dados sugerida pela IA
   (lançamento por texto, extração de documento) DEVE ser uma proposta que o usuário revisa e
-  confirma antes de salvar.
+  confirma antes de salvar. A única exceção é o lançamento por voz feito com token pessoal, que
+  é salvo sem confirmação, nas condições do Princípio XV.
 - Extrações de PDF e imagem DEVEM passar por verificações automáticas de consistência (por
   exemplo, soma extraída comparada ao total do documento), e as divergências DEVEM ser exibidas
   ao usuário.
@@ -286,8 +351,10 @@ qual usuário são os dados.
 - Como o plano gratuito do provedor pode usar os dados para melhoria dos modelos, a política de
   privacidade DEVE informar isso claramente, e o usuário DEVE ser avisado antes do primeiro envio
   de PDF ou imagem.
+- A política de privacidade DEVE informar que, no lançamento por voz, a frase é reconhecida pela
+  Siri (Apple) antes de chegar ao Contaí e depois é enviada à IA, como no lançamento por texto.
 - O usuário DEVE poder exportar todos os seus dados e excluir a conta definitivamente, com
-  remoção de dados, arquivos e conversas.
+  remoção de dados, arquivos, conversas e tokens pessoais.
 
 **Rationale**: dados financeiros são dados pessoais sob a LGPD, e os usuários confiam ao sistema
 informações que não entregariam a um terceiro sem saber.
@@ -320,8 +387,19 @@ Inteiros, idempotência e atomicidade eliminam classes inteiras desses erros.
   pensada para pessoas sem familiaridade com tecnologia.
 - Toda ação assíncrona DEVE ter estado de carregamento, de erro e vazio. Mensagens de erro DEVEM
   dizer o que fazer, e não apenas o que falhou.
-- Ações destrutivas DEVEM sempre pedir confirmação.
+- Ações destrutivas DEVEM sempre pedir confirmação. A única exceção é desfazer um lançamento
+  feito por voz (Princípio XV), que é feito com um toque.
 - A interface DEVE oferecer modo claro e modo escuro.
+- No app mobile, o `design-system.md` DEVE ser seguido com as adaptações do celular: tokens de
+  cor, tipografia e espaçamento iguais aos do site e componentes nativos equivalentes. O app
+  DEVE seguir o tema claro ou escuro do sistema.
+- O app mobile DEVE atender ao mesmo nível de acessibilidade do site:
+  - todo elemento interativo DEVE ter `accessibilityLabel` e `accessibilityRole` e ser lido
+    corretamente pelo VoiceOver;
+  - o texto DEVE acompanhar o tamanho de fonte do sistema (Dynamic Type), sem bloquear a escala
+    e sem quebrar o layout nos tamanhos maiores;
+  - as áreas de toque DEVEM ter no mínimo 44×44 pt;
+  - todas as telas DEVEM funcionar na menor tela de iPhone que o Expo Go suporta.
 
 **Rationale**: parte dos usuários não tem familiaridade com tecnologia e usa o celular. Se a
 interface não for clara e acessível para eles, o produto não cumpre seu propósito.
@@ -336,6 +414,17 @@ interface não for clara e acessível para eles, o produto não cumpre seu prop�
 - Testes de integração DEVEM rodar contra PostgreSQL real em container.
 - O frontend DEVE ser testado com Vitest e Testing Library nos hooks e nos componentes com
   lógica.
+- O app mobile DEVE ser testado com Jest (preset `jest-expo`) e React Native Testing Library
+  nos hooks e nos componentes com lógica. São obrigatórios os testes de: guarda e remoção da
+  sessão no armazenamento seguro, renovação do access token, guard de rotas autenticadas,
+  formulários e desfazer de lançamento por voz.
+- O token pessoal DEVE ter testes obrigatórios no backend:
+  - todo endpoint fora do lançamento por voz recusa o token;
+  - o banco guarda só o hash;
+  - a revogação vale na hora;
+  - o limite de uso é aplicado;
+  - uma frase ambígua não salva nada;
+  - a resposta não contém dados além do lançamento feito.
 - A cobertura mínima DEVE ser de 80% nos módulos de domínio do backend.
 - Nenhuma feature é considerada pronta sem testes passando.
 
@@ -371,7 +460,11 @@ pode se tornar ele mesmo um vazamento de dados.
 - DEVE existir backup diário automático do PostgreSQL, guardado fora do provedor do banco, com
   retenção definida e procedimento de restauração documentado e testado.
 - O CI no GitHub Actions DEVE executar lint, type check, testes e auditoria de dependências a
-  cada push. O deploy só PODE acontecer com o CI verde.
+  cada push, no backend, no frontend e no app mobile. O deploy só PODE acontecer com o CI verde.
+- O app mobile e o atalho da Siri DEVEM chamar a API pela mesma origem pública e pelo mesmo
+  proxy do site, sempre com HTTPS. NÃO DEVE existir caminho que chegue à API sem passar pelo
+  proxy.
+- O app mobile não é publicado nas lojas nesta fase. Ele roda pelo Expo Go (Princípio XIV).
 
 **Rationale**: a mesma imagem e o mesmo desenho de rotas (uma única origem, `/api` repassado)
 em todos os ambientes eliminam o "funciona na minha máquina" sem obrigar a um servidor próprio; e
@@ -387,6 +480,87 @@ um backup que nunca foi restaurado não é um backup.
 **Rationale**: o projeto é peça de portfólio. Quem avalia precisa entender o que foi construído e
 por quê sem ler o código inteiro.
 
+### XIV. App Mobile
+
+- O app DEVE ficar em `mobile/`, no mesmo repositório, e consumir a mesma API. Ele NÃO DEVE ter
+  backend próprio nem regra de negócio que a API não tenha: números, saldos e validações finais
+  vêm da API.
+- **Expo Go**: o app DEVE rodar no Expo Go num iPhone, sem build nativa própria (sem `prebuild`,
+  development build, EAS Build nem conta paga da Apple). Só PODEM ser usadas bibliotecas incluídas
+  no Expo Go ou escritas só em JavaScript/TypeScript. Uma biblioteca que exige código nativo fora
+  do Expo Go é proibida, mesmo que seja melhor.
+- **SDK**: o app DEVE usar a versão do Expo SDK que o Expo Go da App Store abre. Se o Expo Go
+  passar a exigir um SDK mais novo, atualizar o SDK é prioridade.
+- **Arquitetura**: as rotas DEVEM usar o Expo Router em `mobile/app/` e conter só composição de
+  tela. O código DEVE ser organizado por feature em `mobile/src/features/<feature>/`, com o
+  mesmo fluxo do site: services (HTTP) → hooks (TanStack Query) → components. As rotas
+  autenticadas DEVEM ser protegidas por um guard único, no layout do grupo autenticado.
+- **Reaproveitamento**: o código reaproveitado do frontend web DEVE ter uma fonte única, e não
+  cópias que podem divergir. Isso vale para tipos da API, formatação de dinheiro e datas e
+  schemas Zod. O código compartilhado DEVE ser TypeScript puro, sem dependência de DOM, React DOM
+  ou Vite. O plano da feature DEVE escolher o mecanismo mais simples de compartilhar esse
+  código entre o site e o app. Se compartilhar custar mais de meio dia de trabalho, o app PODE
+  usar cópias, mas só com um desvio temporário registrado (Governance, Conformidade). Esse
+  registro DEVE listar os arquivos copiados e trazer o plano de adequação.
+- **Sessão**: o access token DEVE ficar só em memória. O refresh token DEVE ficar só no
+  armazenamento seguro do sistema (`expo-secure-store`, Keychain no iOS). Ele NÃO DEVE ir para
+  AsyncStorage, arquivo, log, cache persistido do TanStack Query nem estado de navegação. Ele
+  DEVE ser apagado no logout e quando a API o recusar.
+- **Login do app**: clientes nativos DEVEM ter um fluxo próprio, em que o refresh token vai no
+  corpo da resposta e não em cookie. Esse fluxo DEVE manter todas as regras do Princípio V:
+  - verificação de e-mail, TOTP com códigos de recuperação, rate limiting e bloqueio temporário;
+  - rotação do refresh token a cada uso, detecção de reutilização e revogação no logout e na
+    troca de senha.
+- **Separação dos logins**: o login do site NÃO DEVE mudar nem ficar mais fraco. O endpoint de
+  refresh por cookie NÃO DEVE aceitar token no corpo, e o endpoint do app NÃO DEVE ler nem gravar
+  o cookie. Um refresh token emitido para um tipo de cliente NÃO DEVE ser aceito pelo outro.
+
+**Rationale**: o Expo Go é o único caminho para rodar o app num iPhone a partir do Windows sem
+conta paga da Apple. Por isso a restrição de bibliotecas não é negociável: uma única dependência
+nativa fora dele impede o app de abrir. No celular não existe cookie `httpOnly` de navegador. O
+equivalente seguro é o Keychain, e um fluxo separado impede que a conveniência do app abra uma
+porta no login do site. O fluxo do app não precisa de proteção contra CSRF porque não usa nenhuma
+credencial que o navegador envie sozinho.
+
+### XV. Lançamento por Voz (tokens pessoais)
+
+- **Token pessoal**:
+  - o usuário autenticado gera o token no app ou no site, e ele é exibido uma única vez;
+  - o token DEVE ter alta entropia e ser guardado no banco só como hash;
+  - cada token tem um nome dado pelo usuário, e a data de criação e a de último uso ficam
+    visíveis;
+  - o usuário DEVE poder revogar o token a qualquer momento, com efeito imediato;
+  - o token DEVE ser revogado também na troca de senha e na exclusão da conta.
+- **Escopo único**: o token pessoal DEVE autenticar só o endpoint de lançamento por voz. Todos os
+  outros endpoints DEVEM recusá-lo, inclusive os de leitura e os de gerenciar tokens. Ele NÃO
+  DEVE dar acesso a saldos, lançamentos, conversas ou qualquer outro dado.
+- **Transporte**: o token DEVE ir no cabeçalho `Authorization`, nunca na URL nem no corpo, para
+  não aparecer em logs de proxy nem no histórico.
+- **Limite de uso**: DEVE haver limite de requisições por token e por usuário. Cada chamada conta
+  no limite de uso de IA do usuário (Princípio VI).
+- **Entrada**: a frase é dado não confiável e passa pelas mesmas proteções contra prompt
+  injection e pelo mesmo caminho do lançamento por texto. Cada frase gera no máximo um
+  lançamento. O lançamento por voz NÃO DEVE criar contas, cartões nem categorias. O valor DEVE
+  ser validado por schema como inteiro positivo em centavos.
+- **Exceção à confirmação**: o usuário ativou o lançamento por voz de forma explícita ao criar o
+  token. Por isso o lançamento feito com ele é salvo sem tela de confirmação, e essa é a única
+  exceção ao Princípio VI. O lançamento DEVE:
+  - ser marcado no banco com a origem "voz";
+  - aparecer em destaque no app e no site;
+  - poder ser desfeito com um toque, sem confirmação (exceção do Princípio IX).
+- **Ambiguidade**: se faltar um dado obrigatório ou ele for ambíguo, nada é salvo, e a resposta
+  pede para o usuário repetir a frase. Isso vale, por exemplo, para frase sem valor, valor que
+  não dá para interpretar e conta inexistente ou que não dá para identificar.
+- **Resposta**: a resposta à Siri DEVE ser uma frase curta em português, que confirma só o
+  lançamento feito (valor, descrição ou categoria e conta) ou pede para repetir. Ela NÃO DEVE
+  conter saldo, outros lançamentos, dados pessoais nem dados de outras contas. Falhas de
+  autenticação DEVEM ter uma resposta genérica, que não diz se o token existiu ou foi revogado.
+
+**Rationale**: um atalho da Siri guarda a credencial fora do Contaí, num app de terceiros. Por
+isso essa credencial vale o mínimo possível: um token vazado só permite criar lançamentos
+visíveis e fáceis de desfazer. Salvar sem confirmação é o que torna a voz útil, e a marcação, o
+destaque e o desfazer com um toque devolvem ao usuário o controle que a confirmação daria.
+
 ## Stack e Dependências
 
 A stack abaixo é obrigatória. Substituir qualquer item exige emenda desta constituição.
@@ -396,6 +570,9 @@ A stack abaixo é obrigatória. Substituir qualquer item exige emenda desta cons
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS 4, React Router, TanStack Query para
   estado de servidor, React Hook Form + Zod para formulários, Recharts para gráficos e
   lucide-react para ícones.
+- **Mobile**: React Native com Expo (SDK que o Expo Go da App Store abre) e TypeScript estrito,
+  Expo Router, TanStack Query, React Hook Form + Zod e `expo-secure-store` para a sessão. Toda
+  biblioteca DEVE ser compatível com o Expo Go (ver Princípio XIV).
 - **Banco de dados**: PostgreSQL.
 - **Ambientes**: local via Docker Compose; produção em serviços gerenciados, com a mesma imagem
   da API (ver Princípio XII).
@@ -437,4 +614,4 @@ constituição antes da implementação, e toda revisão de código DEVE verific
 princípios. Um desvio só é aceito quando documentado com justificativa e com a alternativa mais
 simples que foi rejeitada; desvios que enfraquecem a segurança seguem o Princípio V.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-11-02
+**Version**: 2.1.0 | **Ratified**: 2026-10-01 | **Last Amended**: 2026-11-18
