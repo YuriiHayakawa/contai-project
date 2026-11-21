@@ -1,6 +1,12 @@
 // Ambiente dos testes do app: o Keychain (expo-secure-store) é um mapa em memória, e o `fetch`
 // é um mock que cada teste programa. Nenhum teste fala com a rede.
 
+import { notifyManager } from "@tanstack/react-query";
+
+// O TanStack Query avisa as telas num `setTimeout`, fora do `act` do teste. Nos testes, o aviso
+// sai na hora, dentro do `act` que causou a mudança.
+notifyManager.setScheduler((callback) => callback());
+
 // O prefixo `mock` é o que o Jest exige para a fábrica do `jest.mock` poder usar a variável.
 const mockSecureStore = new Map<string, string>();
 

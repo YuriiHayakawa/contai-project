@@ -1,5 +1,5 @@
-// Abas do app. Lançamentos entra com a US2, e Assistente com a US6, que sai no corte 2: a barra
-// nunca mostra uma aba sem tela.
+// Abas do app. Assistente entra com a US6, que sai no corte 2: a barra nunca mostra uma aba sem
+// tela.
 import { Tabs } from "expo-router/js-tabs";
 import { SymbolView } from "expo-symbols";
 import type { ComponentProps } from "react";
@@ -29,6 +29,10 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Painel", tabBarIcon: tabIcon("chart.bar") }} />
+      <Tabs.Screen
+        name="lancamentos"
+        options={{ title: "Lançamentos", tabBarIcon: tabIcon("list.bullet") }}
+      />
       <Tabs.Screen
         name="mais"
         options={{ title: "Mais", tabBarIcon: tabIcon("ellipsis.circle") }}
