@@ -58,7 +58,9 @@ As decisões e as fontes estão em [research.md](research.md).
     (`>=9.0.0 <14.0.2`) e do `minimatch` (`>=7.0.0 <11.0.1`), vindas da cadeia do Jest e do
     `@expo/fingerprint`. A auditoria fica em zero, e o `minimatch` 3 do ESLint não muda;
   - `expo-asset`, na versão do SDK, porque o `expo-font` o exige para carregar as fontes
-    (registrado na T017).
+    (registrado na T017);
+  - `expo-symbols`, na versão do SDK, para os ícones das abas com os SF Symbols do iOS. Vem no
+    Expo Go e evita uma biblioteca de ícones (registrado na T038).
 - **Backend**: nenhuma dependência nova. Usa FastAPI, SQLAlchemy, Alembic, PyJWT e slowapi, que
   já estão no projeto.
 

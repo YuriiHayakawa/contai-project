@@ -287,13 +287,14 @@ encerrar a sessão pelo site, sair), também no [quickstart.md](quickstart.md), 
   `test_no_isolation_entry_points_to_a_route_that_no_longer_exists`. Em vez disso,
   `test_mobile_routes_stay_public`, em `test_auth_mobile.py`, garante que as três seguem
   públicas.
-- [ ] T028 [P] [US1] **Movida para o começo do D2**, antes da T036: escrita no D1, ela deixaria
-  a suíte vermelha até o D2. Criar `mobile/src/features/auth/hooks/useLogin.test.tsx`:
+- [X] T028 [P] [US1] **Movida para o começo do D2**, antes da T036: escrita no D1, ela deixaria
+  a suíte vermelha até o D2. Feita em 2026-11-21, falhando antes da implementação. Criar `mobile/src/features/auth/hooks/useLogin.test.tsx`:
   - login sem duas etapas grava a sessão;
   - com duas etapas, leva à tela do código e aceita código ou código de recuperação;
   - credenciais erradas mostram a mensagem genérica;
   - e-mail não confirmado e bloqueio temporário mostram as mensagens do site.
-- [ ] T029 [P] [US1] **Movida para o começo do D2**, antes da T038, pelo mesmo motivo da T028.
+- [X] T029 [P] [US1] **Movida para o começo do D2**, antes da T038, pelo mesmo motivo da T028.
+  Feita em 2026-11-21, falhando antes da implementação.
   Criar `mobile/src/features/auth/guard.test.tsx` com `renderRouter` do
   `expo-router/testing-library`. O teste fica fora de `mobile/app/`, porque ali todo arquivo
   vira rota.
@@ -330,26 +331,38 @@ encerrar a sessão pelo site, sair), também no [quickstart.md](quickstart.md), 
 
 ### App (D2)
 
-- [ ] T035 [P] [US1] Criar `mobile/src/features/auth/types.ts`, que reaproveita
+- [X] T035 [P] [US1] Criar `mobile/src/features/auth/types.ts`, que reaproveita
   `@web/features/auth/types` quando servir, e `mobile/src/features/auth/services/auth.ts`, com
   `login`, `loginTwoFactor`, `logout` e `refresh`, conforme `contracts/rest-api.md`.
-- [ ] T036 [US1] Criar `mobile/src/features/auth/hooks/useLogin.ts`,
+- [X] T036 [US1] Criar `mobile/src/features/auth/hooks/useLogin.ts`,
   `useTwoFactorLogin.ts` e `useLogout.ts`. O logout chama a API, apaga a sessão e o cache
   de consultas.
-- [ ] T037 [US1] Criar `mobile/src/features/auth/components/LoginForm.tsx` e
+- [X] T037 [US1] Criar `mobile/src/features/auth/components/LoginForm.tsx` e
   `TwoFactorForm.tsx`.
   - Usam React Hook Form e o schema de login de `@web/features/auth/schemas`.
   - O formulário de duas etapas alterna entre código do app e código de recuperação.
   - Criar as rotas `mobile/app/(auth)/entrar.tsx` e `mobile/app/(auth)/duas-etapas.tsx`.
-- [ ] T038 [US1] Criar o guard único em `mobile/app/(app)/_layout.tsx`, que redireciona para
+- [X] T038 [US1] Criar o guard único em `mobile/app/(app)/_layout.tsx`, que redireciona para
   `/entrar` sem sessão e mostra o motivo, e as abas em `mobile/app/(app)/(abas)/_layout.tsx`:
   Painel, Lançamentos, Assistente e Mais.
-- [ ] T039 [US1] Criar `mobile/app/(app)/(abas)/mais.tsx`.
+  - O guard fica em `mobile/src/features/auth/components/RequireSession.tsx`, e o layout de
+    `(app)` só o usa. `(auth)/_layout.tsx` leva ao painel quem já tem sessão.
+  - **As abas entram com as telas**: por enquanto, Painel (provisório até a T093) e Mais.
+    Lançamentos entra na T048 e Assistente na T097, para a barra nunca mostrar aba sem tela.
+  - O desafio da segunda etapa fica só em memória (`features/auth/challenge.ts`), e não no
+    endereço da rota.
+
+- [X] T039 [US1] Criar `mobile/app/(app)/(abas)/mais.tsx`.
   - "Sair" com confirmação.
   - Links que abrem o site por `expo-linking`, usando `@web/lib/paths`: criar conta, esqueci a
     senha, duas etapas (configurações), sessões, exportar dados e excluir conta (FR-006).
   - Atalho para "Conectar à Siri".
   - Na tela de entrada, os links "Criar conta" e "Esqueci a senha".
+  - As configurações do site são uma página só, com as seções em abas: os atalhos de duas
+    etapas, sessões, exportar e excluir abrem `/configuracoes`.
+  - O atalho "Conectar à Siri" entra na T071, junto com a tela da Siri.
+  - A tela está em `mobile/src/features/more/components/MoreScreen.tsx`, com teste.
+
 - [ ] T040 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com `infra/ci-local.sh` verde,
   para publicar o login do app no Render. A migração 0010 roda na subida da API. Depois,
   conferir no iPhone a história 1 contra a produção.

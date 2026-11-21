@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react-native";
 import { useEffect } from "react";
 import { Text } from "react-native";
 
+import { createTestQueryClient } from "@/test-utils";
 import { api, resetApiClient } from "@/lib/api-client";
 import { getAccessToken, readRefreshToken, saveRefreshToken, setAccessToken } from "@/lib/session";
 
@@ -36,7 +37,7 @@ function Probe({ onSession }: { onSession: (value: ReturnType<typeof useSession>
 }
 
 async function renderProvider() {
-  const queryClient = new QueryClient();
+  const queryClient = createTestQueryClient();
   await render(
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
