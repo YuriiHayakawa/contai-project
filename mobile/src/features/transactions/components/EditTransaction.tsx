@@ -7,22 +7,26 @@ import { StyleSheet, View } from "react-native";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Notice } from "@/components/ui/Notice";
+import { Text } from "@/components/ui/Text";
 import { errorMessage } from "@/lib/api-client";
 import { space } from "@/theme/tokens";
 
 import { categoriesById } from "../../categories/hooks/useCategories";
 import { useDeleteTransaction } from "../hooks/useDeleteTransaction";
+import { useUndoVoice } from "../hooks/useUndoVoice";
 import { useSaveTransaction } from "../hooks/useSaveTransaction";
 import { ReadOnlyTransaction, isEditableInApp } from "./ReadOnlyTransaction";
 import { TransactionForm } from "./TransactionForm";
+import { VoiceBadge, voicePhraseLabel } from "./VoiceBadge";
+import { undoLabel } from "./VoiceHighlights";
 
 export interface EditTransactionProps {
   transaction: Transaction;
   accounts: Account[];
   categories: CategoryTree;
   recent: Transaction[];
-  /** O lançamento foi salvo ou excluído: a tela volta para a lista. */
-  onDone: (result: "saved" | "deleted") => void;
+  /** O lançamento foi salvo, excluído ou desfeito: a tela volta para a lista. */
+  onDone: (result: "saved" | "deleted" | "undone") => void;
 }
 
 /** Editar uma despesa ou receita, ou excluí-la com confirmação (FR-010). */
@@ -35,6 +39,7 @@ export function EditTransaction({
 }: EditTransactionProps) {
   const save = useSaveTransaction();
   const remove = useDeleteTransaction();
+  const undo = useUndoVoice();
   const [confirming, setConfirming] = useState(false);
 
   if (!isEditableInApp(transaction)) {
@@ -46,8 +51,28 @@ export function EditTransaction({
     );
   }
 
+  const byVoice = transaction.source === "voice";
+
   return (
     <View style={styles.wrapper}>
+      {byVoice && (
+        <View style={styles.voice}>
+          <VoiceBadge />
+          {transaction.voice_phrase && (
+            <Text variant="body" color="inkMuted">
+              {voicePhraseLabel(transaction.voice_phrase)}
+            </Text>
+          )}
+          <Button
+            variant="secondary"
+            label="Desfazer"
+            accessibilityLabel={undoLabel(transaction)}
+            accessibilityHint="Apaga o lançamento na hora. Por 10 segundos, dá para refazer."
+            loading={undo.isPending}
+            onPress={() => undo.mutate(transaction, { onSuccess: () => onDone("undone") })}
+          />
+        </View>
+      )}
       <TransactionForm
         accounts={accounts}
         categories={categories}
@@ -85,4 +110,5 @@ export function EditTransaction({
 
 const styles = StyleSheet.create({
   wrapper: { gap: space[4] },
+  voice: { gap: space[2] },
 });

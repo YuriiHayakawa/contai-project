@@ -51,6 +51,7 @@ const base: Transaction = {
   installment_number: null,
   installment_count: null,
   source: "manual",
+  voice_phrase: null,
   created_at: "2026-10-01T12:00:00Z",
 };
 

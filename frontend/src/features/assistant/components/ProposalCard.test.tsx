@@ -104,6 +104,7 @@ function saved(changes: Partial<Transaction>): Transaction {
     installment_number: null,
     installment_count: null,
     source: "assistant",
+    voice_phrase: null,
     created_at: "2026-10-04T15:00:05Z",
     ...changes,
   };

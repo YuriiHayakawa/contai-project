@@ -5,6 +5,7 @@ usuário, e nada de outro usuário.
 """
 
 import io
+import uuid
 import zipfile
 from datetime import datetime
 
@@ -32,6 +33,7 @@ EXPECTED_FILES = {
     "importacoes.csv",
     "regras-de-categoria.csv",
     "conversas.json",
+    "tokens-da-siri.csv",
 }
 
 
@@ -130,3 +132,61 @@ async def test_export_only_includes_the_requesting_user(
     assert "MINE" in everything
     assert "ALHEIO" not in everything
     assert user_b.email not in everything
+
+
+async def test_export_has_the_voice_phrase_and_the_siri_tokens_without_secrets(
+    client_a: AsyncClient, session: AsyncSession, user_a: User, frozen_time: datetime
+) -> None:
+    from app.modules.auth.models import PersonalToken
+    from app.modules.transactions.models import TransactionSource
+
+    accounts = AccountRepository(session)
+    account = await accounts.create(
+        user_a.id,
+        name="Nubank",
+        account_type=AccountType.CHECKING,
+        institution=None,
+        initial_balance_cents=0,
+        initial_balance_date=frozen_time.date(),
+        closing_day=None,
+        due_day=None,
+    )
+    category = await CategoryRepository(session).create(
+        user_a.id,
+        name="Comida",
+        kind=CategoryKind.EXPENSE,
+        parent_id=None,
+        icon="cart",
+        color=CategoryColor.PISCINA,
+    )
+    await TransactionRepository(session).create(
+        user_a.id,
+        account_id=account.id,
+        transaction_type=TransactionType.EXPENSE,
+        amount_cents=4590,
+        date=frozen_time.date(),
+        description="iFood",
+        description_normalized="ifood",
+        fingerprint="voz",
+        created_at=frozen_time,
+        category_id=category.id,
+        source=TransactionSource.VOICE,
+        voice_phrase="gastei 45 e 90 no ifood",
+    )
+    created = await client_a.post(
+        "/api/v1/personal-tokens",
+        json={"name": "iPhone da Ana", "default_account_id": str(account.id)},
+    )
+    secret = created.json()["token"].partition(".")[2]
+    row = await session.get(PersonalToken, uuid.UUID(created.json()["id"]))
+    assert row is not None
+
+    files = _open_zip((await client_a.get(EXPORT)).content)
+
+    assert "gastei 45 e 90 no ifood" in files["lancamentos.csv"]
+    assert "voice" in files["lancamentos.csv"]
+    assert "iPhone da Ana" in files["tokens-da-siri.csv"]
+    assert "Nubank" in files["tokens-da-siri.csv"]
+    everything = "\n".join(files.values())
+    assert secret not in everything
+    assert row.secret_hash not in everything

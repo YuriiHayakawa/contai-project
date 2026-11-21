@@ -187,6 +187,7 @@ const market: Transaction = {
   installment_number: null,
   installment_count: null,
   source: "manual",
+  voice_phrase: null,
   created_at: "2026-09-26T12:00:00Z",
 };
 

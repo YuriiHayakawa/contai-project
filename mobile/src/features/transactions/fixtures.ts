@@ -71,6 +71,7 @@ export function transaction(id: string, extra: Partial<Transaction> = {}): Trans
     installment_number: null,
     installment_count: null,
     source: "manual",
+    voice_phrase: null,
     created_at: "2026-11-10T12:00:00Z",
     ...extra,
   };

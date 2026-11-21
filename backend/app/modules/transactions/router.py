@@ -4,21 +4,23 @@ import datetime as dt
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.modules.auth.dependencies import CurrentUserDep
-from app.modules.transactions.models import TransactionType
+from app.modules.transactions.models import TransactionSource, TransactionType
 from app.modules.transactions.schemas import (
     EditScope,
     InstallmentPurchaseCreate,
+    RestoreRequest,
     TransactionCreate,
     TransactionList,
     TransactionPage,
     TransactionRead,
     TransactionUpdate,
     TransferCreate,
+    UndoVoiceResponse,
 )
 from app.modules.transactions.service import TransactionService
 
@@ -79,6 +81,9 @@ async def list_transactions(
         uuid.UUID | None, Query(description="Os dois lados de uma transferência")
     ] = None,
     ids: Annotated[list[uuid.UUID] | None, Query(max_length=MAX_PAGE_SIZE)] = None,
+    source: Annotated[
+        TransactionSource | None, Query(description="De onde veio: `voice` para os da Siri")
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     cursor: Annotated[str | None, Query(max_length=200)] = None,
 ) -> TransactionPage:
@@ -94,6 +99,7 @@ async def list_transactions(
         installment_group_id=installment_group_id,
         transfer_group_id=transfer_group_id,
         ids=ids,
+        source=source,
         limit=limit,
         cursor=cursor,
     )
@@ -130,6 +136,41 @@ async def create_transfer(
     body: TransferCreate, current: CurrentUserDep, service: TransactionServiceDep
 ) -> TransactionList:
     return TransactionList(items=await service.create_transfer(current.id, body))
+
+
+@router.post(
+    "/restore",
+    status_code=status.HTTP_201_CREATED,
+    summary="Refazer um lançamento por voz desfeito",
+    description=(
+        "Reinsere a linha com o mesmo id. 201 quando voltou agora; 200 quando já tinha voltado. "
+        "Depois de 15 s, 410."
+    ),
+)
+async def restore_transaction(
+    body: RestoreRequest,
+    response: Response,
+    current: CurrentUserDep,
+    service: TransactionServiceDep,
+) -> TransactionRead:
+    restored, created = await service.restore(current.id, body.restore_token)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return restored
+
+
+@router.post(
+    "/{transaction_id}/undo-voice",
+    summary="Desfazer um lançamento por voz",
+    description=(
+        "Apaga, sem pedir confirmação, um lançamento feito pela Siri, e devolve o token do "
+        "Refazer, que vale 10 s na tela."
+    ),
+)
+async def undo_voice_entry(
+    transaction_id: uuid.UUID, current: CurrentUserDep, service: TransactionServiceDep
+) -> UndoVoiceResponse:
+    return await service.undo_voice(current.id, transaction_id)
 
 
 @router.get("/{transaction_id}", summary="Ver uma transação")

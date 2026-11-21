@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.accounts.models import Account
 from app.modules.accounts.repository import AccountRepository
 from app.modules.assistant.repository import AssistantRepository
+from app.modules.auth.models import PersonalToken
+from app.modules.auth.personal_tokens import PersonalTokenRepository
 from app.modules.categories.models import Category
 from app.modules.categories.repository import CategoryRepository
 from app.modules.categorization.models import CategorizationRule
@@ -42,6 +44,7 @@ Este arquivo reúne tudo o que o Contaí guarda da sua conta.
 - importacoes.csv .......... o histórico de arquivos importados
 - regras-de-categoria.csv .. as regras que categorizam lançamentos automaticamente
 - conversas.json ........... suas conversas com o assistente
+- tokens-da-siri.csv ....... os atalhos da Siri que você conectou (sem o token)
 
 Os arquivos .csv abrem em qualquer planilha (Excel, Google Planilhas, LibreOffice).
 Os valores estão em reais, com o ponto separando os centavos.
@@ -80,6 +83,7 @@ class AccountExporter:
         self._imports = ImportRepository(session)
         self._rules = CategorizationRepository(session)
         self._assistant = AssistantRepository(session)
+        self._personal_tokens = PersonalTokenRepository(session)
 
     async def build(self, user_id: uuid.UUID) -> bytes:
         user = await self._users.get_by_id(user_id)
@@ -106,6 +110,9 @@ class AccountExporter:
                 await self._rules.list_all(user_id), category_name
             ),
             "conversas.json": await self._conversations_json(user_id),
+            "tokens-da-siri.csv": self._personal_tokens_csv(
+                await self._personal_tokens.list_all(user_id), account_name
+            ),
         }
 
         out = io.BytesIO()
@@ -190,6 +197,7 @@ class AccountExporter:
             "origem",
             "parcela",
             "importacao_id",
+            "frase_por_voz",
         ]
         rows = []
         for t in transactions:
@@ -211,8 +219,28 @@ class AccountExporter:
                     str(t.source),
                     parcela,
                     t.import_id,
+                    t.voice_phrase,
                 ]
             )
+        return _csv(header, rows)
+
+    @staticmethod
+    def _personal_tokens_csv(
+        tokens: Iterable[PersonalToken], account_name: dict[uuid.UUID, str]
+    ) -> str:
+        """Os tokens da Siri: nome, conta padrão e datas. O token e o hash nunca saem daqui."""
+        header = ["nome", "conta_padrao", "criado_em", "ultimo_uso", "revogado_em", "motivo"]
+        rows = [
+            [
+                token.name,
+                account_name.get(token.default_account_id, "") if token.default_account_id else "",
+                _when(token.created_at),
+                _when(token.last_used_at),
+                _when(token.revoked_at),
+                str(token.revoked_reason) if token.revoked_reason else "",
+            ]
+            for token in tokens
+        ]
         return _csv(header, rows)
 
     @staticmethod

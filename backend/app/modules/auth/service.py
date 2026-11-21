@@ -54,7 +54,7 @@ from app.worker.jobs.send_email import enqueue_email
 
 # Versão da política aceita no cadastro. Muda junto com o texto da política, que fica em
 # frontend/src/features/auth/privacy-policy.ts.
-PRIVACY_POLICY_VERSION = "3"
+PRIVACY_POLICY_VERSION = "4"
 
 MAX_FAILED_LOGINS = 5
 LOCK_DURATION = timedelta(minutes=15)

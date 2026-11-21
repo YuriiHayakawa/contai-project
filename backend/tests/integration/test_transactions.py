@@ -89,6 +89,7 @@ async def test_create_expense(
         "installment_number": None,
         "installment_count": None,
         "source": "manual",
+        "voice_phrase": None,
         "created_at": body["created_at"],
     }
 
@@ -550,3 +551,87 @@ async def test_deleting_the_user_removes_accounts_categories_and_transactions(
     for model in (Transaction, Account, Category):
         remaining = await session.execute(select(func.count()).select_from(model))
         assert remaining.scalar_one() == 0
+
+
+# ---------- lançamentos por voz (feature 002, US4)
+
+
+async def _voice_entry(session: AsyncSession, user: User, account: Json, category: Json) -> str:
+    from app.modules.transactions.models import TransactionSource, TransactionType
+    from app.modules.transactions.repository import TransactionRepository
+
+    created = await TransactionRepository(session).create(
+        user.id,
+        account_id=uuid.UUID(account["id"]),
+        transaction_type=TransactionType.EXPENSE,
+        amount_cents=4590,
+        date=clock.today(),
+        description="iFood",
+        description_normalized="ifood",
+        fingerprint="voz",
+        created_at=clock.utcnow(),
+        category_id=uuid.UUID(category["id"]),
+        source=TransactionSource.VOICE,
+        voice_phrase="gastei 45 e 90 no ifood",
+    )
+    await session.flush()
+    return str(created.id)
+
+
+async def test_source_filter_and_voice_fields(
+    client_a: AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    account: Json,
+    food: Json,
+) -> None:
+    manual = await create_transaction(client_a, account, food, description="Padaria")
+    voice_id = await _voice_entry(session, user_a, account, food)
+
+    page = await list_transactions(client_a, source="voice")
+
+    assert [item["id"] for item in page["items"]] == [voice_id]
+    assert page["items"][0]["source"] == "voice"
+    assert page["items"][0]["voice_phrase"] == "gastei 45 e 90 no ifood"
+    detail = (await client_a.get(f"{TRANSACTIONS}/{manual['id']}")).json()
+    assert detail["source"] == "manual"
+    assert detail["voice_phrase"] is None
+
+
+async def test_editing_a_voice_entry_keeps_its_source_and_phrase(
+    client_a: AsyncClient,
+    session: AsyncSession,
+    user_a: User,
+    account: Json,
+    food: Json,
+) -> None:
+    voice_id = await _voice_entry(session, user_a, account, food)
+
+    edited = await client_a.patch(
+        f"{TRANSACTIONS}/{voice_id}",
+        json={"amount_cents": 5000, "voice_phrase": "outra frase", "source": "manual"},
+    )
+
+    assert edited.status_code == 200
+    assert edited.json()["amount_cents"] == 5000
+    assert edited.json()["source"] == "voice"
+    assert edited.json()["voice_phrase"] == "gastei 45 e 90 no ifood"
+
+
+async def test_a_voice_entry_cannot_be_created_through_the_regular_route(
+    client_a: AsyncClient, account: Json, food: Json
+) -> None:
+    response = await client_a.post(
+        TRANSACTIONS,
+        json={
+            "type": "expense",
+            "amount_cents": 100,
+            "date": "2026-10-01",
+            "description": "Pão",
+            "account_id": account["id"],
+            "category_id": food["id"],
+            "source": "voice",
+        },
+    )
+
+    assert response.status_code == 422

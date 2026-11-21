@@ -4,17 +4,25 @@ import base64
 import binascii
 import datetime as dt
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
-from app.core.errors import NotFound, ValidationFailed
+from app.core.errors import Forbidden, NotFound, ValidationFailed
 from app.core.money import split_installments
+from app.core.security import create_restore_token, decode_restore_token
 from app.modules.accounts.models import Account, AccountType
 from app.modules.accounts.repository import AccountRepository
 from app.modules.categories.models import Category, CategoryKind
 from app.modules.categories.repository import CategoryRepository
 from app.modules.categorization.service import CategorizationService
+from app.modules.transactions.errors import (
+    NotVoiceEntry,
+    RestoreConflict,
+    RestoreExpired,
+    VoiceEntryNotFound,
+)
 from app.modules.transactions.models import (
     Transaction,
     TransactionSource,
@@ -35,7 +43,40 @@ from app.modules.transactions.schemas import (
     TransactionRead,
     TransactionUpdate,
     TransferCreate,
+    UndoVoiceResponse,
 )
+
+# O botão "Refazer" fica 10 s na tela; o token vale 15 s, com folga para a rede.
+RESTORE_WINDOW_SECONDS = 10
+RESTORE_FORBIDDEN = "Este lançamento não é seu. Abra o app com a sua conta e tente de novo."
+# As colunas de uma linha desfeita que voltam iguais no "Refazer". Lançamentos por voz nunca são
+# transferência, parcela nem importação, então essas colunas ficam vazias.
+_RESTORED_COLUMNS = (
+    "account_id",
+    "category_id",
+    "type",
+    "amount_cents",
+    "date",
+    "description",
+    "description_normalized",
+    "fingerprint",
+    "notes",
+    "source",
+    "voice_phrase",
+    "created_at",
+    "updated_at",
+)
+
+
+@dataclass(frozen=True)
+class _RestoredRow:
+    """A linha lida do token de restauração, com os ids já conferidos."""
+
+    transaction_id: uuid.UUID
+    account_id: uuid.UUID
+    category_id: uuid.UUID | None
+    columns: dict[str, object]
+
 
 ACCOUNT_NOT_FOUND = "Escolha uma das suas contas."
 ACCOUNT_ARCHIVED = "Esta conta está arquivada. Escolha outra conta ou desarquive esta."
@@ -127,6 +168,7 @@ class TransactionService:
         installment_group_id: uuid.UUID | None = None,
         transfer_group_id: uuid.UUID | None = None,
         ids: list[uuid.UUID] | None = None,
+        source: TransactionSource | None = None,
         limit: int = 50,
         cursor: str | None = None,
     ) -> TransactionPage:
@@ -146,6 +188,7 @@ class TransactionService:
             installment_group_id=installment_group_id,
             transfer_group_id=transfer_group_id,
             ids=ids,
+            source=source,
         )
         after = decode_cursor(cursor) if cursor else None
         # Uma linha a mais só para saber se existe próxima página.
@@ -488,3 +531,86 @@ class TransactionService:
             await self._transactions.delete_many(user_id, [parcel.id for parcel in parcels])
             return
         await self._transactions.delete(user_id, transaction.id)
+
+    # ---------- desfazer e refazer da voz (FR-029, FR-030)
+
+    @staticmethod
+    def _snapshot(transaction: Transaction) -> dict[str, object]:
+        """A linha em texto, para caber no token de restauração."""
+        row: dict[str, object] = {"id": str(transaction.id)}
+        for column in _RESTORED_COLUMNS:
+            value = getattr(transaction, column)
+            if isinstance(value, dt.date | dt.datetime):
+                value = value.isoformat()
+            elif isinstance(value, uuid.UUID):
+                value = str(value)
+            row[column] = value
+        return row
+
+    @staticmethod
+    def _from_snapshot(row: dict[str, object]) -> _RestoredRow:
+        def text(name: str) -> str:
+            return str(row[name])
+
+        def optional_text(name: str) -> str | None:
+            value = row.get(name)
+            return None if value is None else str(value)
+
+        try:
+            category = optional_text("category_id")
+            transaction_id = uuid.UUID(text("id"))
+            account_id = uuid.UUID(text("account_id"))
+            category_id = uuid.UUID(category) if category else None
+            columns: dict[str, object] = {
+                "id": transaction_id,
+                "account_id": account_id,
+                "category_id": category_id,
+                "type": TransactionType(text("type")),
+                "amount_cents": int(text("amount_cents")),
+                "date": dt.date.fromisoformat(text("date")),
+                "description": text("description"),
+                "description_normalized": text("description_normalized"),
+                "fingerprint": text("fingerprint"),
+                "notes": optional_text("notes"),
+                "source": TransactionSource(text("source")),
+                "voice_phrase": optional_text("voice_phrase"),
+                "created_at": dt.datetime.fromisoformat(text("created_at")),
+                "updated_at": dt.datetime.fromisoformat(text("updated_at")),
+            }
+        except (KeyError, ValueError) as error:
+            # Assinado por nós, mas sem o formato esperado: não dá para refazer.
+            raise RestoreConflict() from error
+        return _RestoredRow(transaction_id, account_id, category_id, columns)
+
+    async def undo_voice(self, user_id: uuid.UUID, transaction_id: uuid.UUID) -> UndoVoiceResponse:
+        """Apaga um lançamento por voz, sem pedir confirmação, e devolve o token do "Refazer"."""
+        transaction = await self._transactions.get(user_id, transaction_id)
+        if transaction is None:
+            raise VoiceEntryNotFound()
+        if transaction.source != TransactionSource.VOICE:
+            raise NotVoiceEntry()
+        token = create_restore_token(user_id, self._snapshot(transaction))
+        await self._transactions.delete(user_id, transaction.id)
+        return UndoVoiceResponse(restore_token=token, expires_in=RESTORE_WINDOW_SECONDS)
+
+    async def restore(self, user_id: uuid.UUID, restore_token: str) -> tuple[TransactionRead, bool]:
+        """Reinsere a linha desfeita, com o mesmo id. Devolve o lançamento e se ele voltou agora;
+        um segundo pedido, de um toque duplo, encontra a linha e não duplica."""
+        claims = decode_restore_token(restore_token)
+        if claims.user_id != user_id:
+            raise Forbidden(RESTORE_FORBIDDEN)
+        if claims.expires_at <= clock.utcnow():
+            raise RestoreExpired()
+        row = self._from_snapshot(claims.row)
+
+        existing = await self._transactions.get(user_id, row.transaction_id)
+        if existing is not None:
+            return TransactionRead.from_transaction(existing), False
+        if await self._accounts.get(user_id, row.account_id) is None:
+            raise RestoreConflict()
+        if row.category_id is not None and (
+            await self._categories.get(user_id, row.category_id) is None
+        ):
+            raise RestoreConflict()
+        restored = await self._transactions.insert_exact(user_id, row.columns)
+        return TransactionRead.from_transaction(restored), True

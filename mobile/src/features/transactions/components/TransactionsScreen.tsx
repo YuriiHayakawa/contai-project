@@ -17,6 +17,7 @@ import { useTheme } from "@/theme/useTheme";
 import { useAccounts } from "../../accounts/hooks/useAccounts";
 import { categoriesById, useCategories } from "../../categories/hooks/useCategories";
 import { useTransactions } from "../hooks/useTransactions";
+import { useUndoVoice } from "../hooks/useUndoVoice";
 import { MonthSwitcher } from "./MonthSwitcher";
 import { TransactionList } from "./TransactionList";
 
@@ -37,11 +38,18 @@ export function TransactionsScreen() {
   const [month, setMonth] = useState<YearMonth>(
     params.mes && MONTH_PATTERN.test(params.mes) ? params.mes : yearMonthOf(),
   );
+  // A aba pode já estar aberta quando o painel manda outro mês: o mês acompanha o parâmetro.
+  const [monthParam, setMonthParam] = useState(params.mes);
+  if (params.mes !== monthParam) {
+    setMonthParam(params.mes);
+    if (params.mes && MONTH_PATTERN.test(params.mes)) setMonth(params.mes);
+  }
   const categoryId = params.categoria ?? null;
 
   const transactions = useTransactions(month, categoryId);
   const accounts = useAccounts();
   const categories = useCategories();
+  const undo = useUndoVoice();
   useRefetchOnFocus(transactions.refetch);
 
   const categoryName =
@@ -114,6 +122,8 @@ export function TransactionsScreen() {
         accounts={accounts.data ?? []}
         categories={categories.data ?? { expense: [], income: [] }}
         onOpen={(item) => router.push(`/lancamento/${item.id}`)}
+        onUndo={(item) => undo.mutate(item)}
+        undoingId={undo.isPending ? (undo.variables?.id ?? null) : null}
         header={header}
         empty={empty}
         refreshing={transactions.isRefetching && !transactions.isFetchingNextPage}

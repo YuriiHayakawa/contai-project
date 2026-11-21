@@ -15,6 +15,9 @@ export interface TransactionListProps {
   accounts: Account[];
   categories: CategoryTree;
   onOpen: (transaction: Transaction) => void;
+  /** Desfaz um lançamento por voz; `undoingId` é o que está sendo desfeito. */
+  onUndo?: (transaction: Transaction) => void;
+  undoingId?: string | null;
   header: ReactElement;
   empty: ReactElement | null;
   refreshing: boolean;
@@ -29,6 +32,8 @@ export function TransactionList({
   accounts,
   categories,
   onOpen,
+  onUndo,
+  undoingId = null,
   header,
   empty,
   refreshing,
@@ -61,6 +66,8 @@ export function TransactionList({
           }
           accountName={accountNames.get(item.account_id) ?? null}
           onPress={() => onOpen(item)}
+          onUndo={onUndo ? () => onUndo(item) : undefined}
+          undoing={undoingId === item.id}
         />
       )}
     />

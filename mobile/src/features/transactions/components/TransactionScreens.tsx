@@ -135,10 +135,13 @@ export function EditTransactionScreen({ id }: { id: string }) {
         categories={data.categories}
         recent={data.recent}
         onDone={(result) => {
-          toast.show({
-            message: result === "saved" ? "Lançamento atualizado." : "Lançamento excluído.",
-            kind: "success",
-          });
+          // O desfazer já mostra o aviso com o "Refazer".
+          if (result !== "undone") {
+            toast.show({
+              message: result === "saved" ? "Lançamento atualizado." : "Lançamento excluído.",
+              kind: "success",
+            });
+          }
           router.back();
         }}
       />

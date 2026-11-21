@@ -1,4 +1,6 @@
 import { ArrowLeftRight } from "lucide-react";
+
+import { VoiceBadge, voicePhraseLabel } from "./VoiceBadge";
 import { useEffect, useEffectEvent, useRef, type ReactNode } from "react";
 
 import { Button } from "../../../components/ui/Button";
@@ -225,7 +227,13 @@ function TransactionRow({ transaction, account, category, onSelect }: Transactio
           <span className="line-clamp-2 wrap-break-word text-body font-bold text-ink">
             {transaction.description}
           </span>
+          {transaction.source === "voice" && <VoiceBadge className="mt-0.5" />}
           <span className="block truncate text-small text-ink-muted">{details.join(" · ")}</span>
+          {transaction.voice_phrase && (
+            <span className="block truncate text-small text-ink-muted italic">
+              {voicePhraseLabel(transaction.voice_phrase)}
+            </span>
+          )}
         </span>
         <span
           className={cn(

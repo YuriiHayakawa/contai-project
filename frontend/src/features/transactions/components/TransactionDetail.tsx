@@ -1,4 +1,12 @@
-import { ArrowDown, ArrowLeftRight, ArrowUp, Pencil, Trash2, type LucideIcon } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowLeftRight,
+  ArrowUp,
+  Pencil,
+  Trash2,
+  Undo2,
+  type LucideIcon,
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { Button } from "../../../components/ui/Button";
@@ -13,9 +21,11 @@ import type { Account } from "../../accounts/types";
 import type { CategoryOption } from "../../categories/hooks/useCategories";
 import { useDeleteTransaction } from "../hooks/useDeleteTransaction";
 import { useRelatedTransactions } from "../hooks/useTransactions";
+import { useUndoVoice } from "../hooks/useUndoVoice";
 import type { EditScope, Transaction, TransactionType } from "../types";
 import { ScopeDialog } from "./ScopeDialog";
 import { signedAmount } from "./TransactionList";
+import { VoiceBadge, voicePhraseLabel } from "./VoiceBadge";
 
 export interface TransactionDetailProps {
   open: boolean;
@@ -70,6 +80,7 @@ export function TransactionDetail({
 }: TransactionDetailProps) {
   const toast = useToast();
   const remove = useDeleteTransaction();
+  const undo = useUndoVoice();
   const related = useRelatedTransactions(transaction);
   const [confirming, setConfirming] = useState(false);
   const [pendingScope, setPendingScope] = useState<EditScope | null>(null);
@@ -133,6 +144,16 @@ export function TransactionDetail({
             <Button icon={<Pencil />} onClick={() => onEdit(transaction)}>
               {isTransfer ? "Editar transferência" : "Editar lançamento"}
             </Button>
+            {transaction.source === "voice" && (
+              <Button
+                variant="secondary"
+                icon={<Undo2 />}
+                loading={undo.isPending}
+                onClick={() => undo.mutate(transaction, { onSuccess: close })}
+              >
+                Desfazer
+              </Button>
+            )}
             <Button variant="secondary" icon={<Trash2 />} onClick={() => setConfirming(true)}>
               {isTransfer ? "Excluir transferência" : "Excluir lançamento"}
             </Button>
@@ -154,6 +175,12 @@ export function TransactionDetail({
         <p className="mt-1 wrap-break-word text-body font-bold text-ink">
           {transaction.description}
         </p>
+        {transaction.source === "voice" && <VoiceBadge className="mt-1" />}
+        {transaction.voice_phrase && (
+          <p className="mt-1 wrap-break-word text-small text-ink-muted italic">
+            {voicePhraseLabel(transaction.voice_phrase)}
+          </p>
+        )}
         {isTransfer && (
           <p className="mt-1 text-small text-ink-muted">
             Não conta como gasto nem como receita: só move dinheiro entre as suas contas.
