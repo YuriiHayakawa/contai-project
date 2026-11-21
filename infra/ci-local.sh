@@ -6,7 +6,7 @@
 # este script é o CI: rode-o antes de cada push e só faça o merge na main com tudo verde, porque
 # o merge publica o app.
 #
-# Uso: infra/ci-local.sh [backend|frontend]    (sem argumento, roda os dois)
+# Uso: infra/ci-local.sh [backend|frontend|mobile]    (sem argumento, roda os três)
 #
 # Precisa só do Docker. Funciona no Git Bash do Windows, no Linux e no macOS. Não usa o banco nem
 # os node_modules do ambiente local: o backend testa num PostgreSQL descartável, e o frontend
@@ -78,15 +78,33 @@ frontend() {
     '
 }
 
+mobile() {
+  step "Mobile: npm ci, lint, formatação, tipos, testes e auditoria"
+  # O app importa código puro de frontend/src pelo apelido @web (research 002, seção 4), por isso
+  # o repositório inteiro é montado. O node_modules do app fica num volume anônimo.
+  docker run --rm -v "$host_root:/repo" -v /repo/mobile/node_modules \
+    -v contai-ci-npm-cache:/root/.npm -w /repo/mobile node:24-alpine sh -c '
+      set -e
+      echo "-- npm ci";            npm ci --no-audit --no-fund --loglevel=error
+      echo "-- lint";              npm run --silent lint
+      echo "-- formatação";        npm run --silent format:check
+      echo "-- tipos";             npm run --silent typecheck
+      echo "-- testes";            npm test --silent
+      echo "-- auditoria";         npm audit
+    '
+}
+
 case "${1:-all}" in
   backend) backend ;;
   frontend) frontend ;;
+  mobile) mobile ;;
   all)
     backend
     frontend
+    mobile
     ;;
   *)
-    echo "Uso: infra/ci-local.sh [backend|frontend]" >&2
+    echo "Uso: infra/ci-local.sh [backend|frontend|mobile]" >&2
     exit 2
     ;;
 esac

@@ -132,23 +132,49 @@ Se sobrar cota, faça também:
 - Uma pergunta fora do tema, por exemplo "qual a capital da França?". O esperado é uma recusa
   educada.
 
-## 9. Resultado
+## 9. Resultado (executado em 2026-11-08)
 
-Preencha com o que viu. Onde não bater, anote o valor que apareceu.
+Executado em produção (`contai-project.vercel.app`, Gemini real), pelo Claude Code, num navegador
+Chromium sem tela e pela API, com a conta do mantenedor. Os dados de teste antigos dessa conta
+(2 contas e 4 lançamentos) foram apagados antes, com a autorização dele.
+
+- **Pela API**: contas, envio e confirmação das importações e parcelado.
+- **Pela tela**: a revisão das importações, o lançamento por texto, o painel e as perguntas.
+- **O aviso de IA antes do primeiro PDF** foi aceito pela API: a tela do aviso não foi exercitada
+  nesta execução.
 
 | Passo | Esperado | Obtido | Tempo | OK? |
 |-------|----------|--------|-------|-----|
-| 3. OFX | 20 linhas, saldo R$ 11.447,00 sem aviso | | | |
-| 3. Categorias sugeridas | 20 certas | quantas foram corrigidas: | | |
-| 4. PDF | 4 linhas, soma R$ 323,30 confere | | | |
-| 5. Parcelado | 6 × R$ 300,00 | | | |
-| 6. Por texto | R$ 45,00, 07/11, Cartão Teste, Delivery | | < 10 s | |
-| 7. Painel | tabela da seção 7 | | | |
-| 8.1 Comida | R$ 618,30 | | | |
-| 8.2 Recebi | R$ 18.000,00 | | | |
-| 8.3 Gastei mais | Alimentação, Educação, Saúde | | | |
-| 8.4 Maiores de agosto | 5 itens da tabela | | | |
-| 8.5 Poupança | R$ 5.000,00 | | | |
-| 8.6 Parcelas | R$ 1.500,00 | | | |
+| 3. OFX | 20 linhas, saldo R$ 11.447,00 sem aviso | 20 linhas; `balance_check.matches = true` | 10,2 s até a revisão | ✅ |
+| 3. Categorias sugeridas | 20 certas | 20 certas, nenhuma corrigida | | ✅ |
+| 4. PDF | 4 linhas, soma R$ 323,30 confere | 4 linhas; `total_check.matches = true` (R$ 323,30); 4 categorias certas | 9,5 s até a revisão | ✅ |
+| 5. Parcelado | 6 × R$ 300,00 | 6 × R$ 300,00, de 02/11/2026 a 02/04/2027 | | ✅ |
+| 6. Por texto | R$ 45,00, 07/11, Cartão Teste, Delivery | R$ 45,00, "Ontem", Cartão Teste, Alimentação › Delivery; salvo | 2,9 s até o cartão; 4,1 s com o "Salvar" | ✅ |
+| 7. Painel | tabela da seção 7 | todos os valores iguais, com o aviso "Fatura vencida: Cartão Teste, R$ 323,30" | | ✅ |
+| 8.1 Comida | R$ 618,30 | R$ 618,30, com os 3 lançamentos | 4,9 s | ✅ |
+| 8.1b "e no mês anterior?" | R$ 544,00 | 1ª vez: "Não consegui calcular isso com segurança agora"; 2ª vez: R$ 544,00, com os 3 lançamentos | 5,5 s | ⚠️ |
+| 8.2 Recebi | R$ 18.000,00 | R$ 18.000,00, com os 4 salários | ~2,5 s | ✅ |
+| 8.3 Gastei mais | Alimentação, Educação, Saúde | Educação, Alimentação (+R$ 74,30, 13,7%) e Saúde | ~2,5 s | ✅ |
+| 8.4 Maiores de agosto | 5 itens da tabela | os 5, na ordem | ~2,5 s | ✅ |
+| 8.5 Poupança | R$ 5.000,00 | R$ 5.000,00 | ~2,5 s | ✅ |
+| 8.6 Parcelas | R$ 1.500,00 | R$ 1.500,00 | ~2,5 s | ✅ |
+| Fora do tema | recusa | recusa educada, com sugestões | ~2,4 s | ✅ |
 
-Depois, se quiser, exclua a conta de teste em **Configurações**. Ela é apagada de vez em 7 dias.
+Os tempos com "~" vêm do intervalo entre as perguntas gravadas, porque cada uma só saía depois
+da resposta anterior. Os outros foram medidos do envio até a resposta aparecer na tela. Todas as
+respostas ficaram abaixo de 10 s.
+
+**Critérios**: SC-005 ✅ (2,9 s); SC-010 ✅ (as seis perguntas certas, cada uma com a lista "De
+onde veio esse número"); SC-014 ✅ (todas abaixo de 10 s).
+
+**Observações**:
+
+1. **Continuação "e no mês anterior?"**: na primeira tentativa, o modelo respondeu sem consultar
+   os lançamentos de outubro. A conferência numérica (FR-062) recusou o valor, e o app mostrou
+   "Não consegui calcular isso com segurança agora" em vez de um número errado. Na segunda
+   tentativa, acertou. É uma falha do modelo, que a trava conteve. Fica como melhoria possível:
+   reforçar no prompt que uma continuação também consulta as ferramentas.
+2. **Lista de origem das parcelas**: a resposta de R$ 1.500,00 lista 7 lançamentos. A ferramenta
+   `get_card_invoices` junta as compras da fatura atual (R$ 345,00) e as 5 parcelas futuras,
+   porque responde as duas coisas de uma vez. O valor está certo; a lista é mais larga que a
+   pergunta. Fica como melhoria possível: separar a origem por métrica.

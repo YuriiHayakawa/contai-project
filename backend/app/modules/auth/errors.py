@@ -47,6 +47,14 @@ class RefreshNotFromApp(Forbidden):
     message = "Este pedido não veio do Contaí. Abra o app e tente de novo."
 
 
+class MobileClientRequired(DomainError):
+    """As rotas do app exigem `X-Contai-Client: mobile` (ADR 0012)."""
+
+    status_code = 400
+    code = "mobile_client_required"
+    message = "Este pedido não veio do app do Contaí. Atualize o app e tente de novo."
+
+
 class IncorrectPassword(ValidationFailed):
     """Senha atual errada, ao confirmar uma ação sensível (trocar senha, desativar 2FA)."""
 

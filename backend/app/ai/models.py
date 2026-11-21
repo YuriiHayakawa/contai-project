@@ -16,6 +16,7 @@ class AiTask(StrEnum):
     CATEGORIZATION = "categorization"
     STATEMENT_EXTRACTION = "statement_extraction"
     RECEIPT_EXTRACTION = "receipt_extraction"
+    VOICE_ENTRY = "voice_entry"
 
 
 class AiUsage(UUIDPrimaryKey, CreatedAt, Base):
@@ -25,7 +26,7 @@ class AiUsage(UUIDPrimaryKey, CreatedAt, Base):
     __table_args__ = (
         CheckConstraint(
             "task IN ('chat', 'text_entry', 'categorization', 'statement_extraction', "
-            "'receipt_extraction')",
+            "'receipt_extraction', 'voice_entry')",
             name="task_valid",
         ),
         Index("ix_ai_usage_user_id_usage_date", "user_id", "usage_date"),

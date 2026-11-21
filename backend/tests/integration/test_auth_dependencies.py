@@ -94,7 +94,9 @@ async def test_missing_or_invalid_token_is_unauthenticated(
 async def test_challenge_token_is_not_an_access_token(
     api: AsyncClient, user_a: User, frozen_time: datetime
 ) -> None:
-    response = await api.get("/api/v1/accounts", headers=_bearer(create_challenge_token(user_a.id)))
+    response = await api.get(
+        "/api/v1/accounts", headers=_bearer(create_challenge_token(user_a.id, "web"))
+    )
 
     assert response.status_code == 401
 

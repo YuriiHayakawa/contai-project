@@ -24,11 +24,15 @@ interface SessionRowProps {
 }
 
 function SessionRow({ session, onEnd, ending }: SessionRowProps) {
+  const isApp = session.client === "mobile";
   return (
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0">
-        <p className="truncate text-body font-bold text-ink">{session.device}</p>
+        <p className="truncate text-body font-bold text-ink">
+          {isApp ? "App do Contaí" : session.device}
+        </p>
         <p className="text-label text-ink-muted">
+          {isApp && `${session.device} · `}
           Última atividade: {lastUsedLabel(session.last_used_at)}
         </p>
       </div>

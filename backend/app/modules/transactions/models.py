@@ -35,6 +35,7 @@ class TransactionSource(StrEnum):
     MANUAL = "manual"
     IMPORT = "import"
     ASSISTANT = "assistant"
+    VOICE = "voice"
 
 
 def _in_list(column: str, values: type[StrEnum]) -> str:
@@ -47,6 +48,16 @@ class Transaction(UUIDPrimaryKey, Timestamps, Base):
         CheckConstraint(_in_list("type", TransactionType), name="type_valid"),
         CheckConstraint(_in_list("source", TransactionSource), name="source_valid"),
         CheckConstraint("amount_cents > 0", name="amount_positive"),
+        # A frase entendida pela Siri existe só, e sempre, nos lançamentos por voz.
+        CheckConstraint(
+            "voice_phrase IS NULL OR source = 'voice'", name="voice_phrase_only_for_voice"
+        ),
+        CheckConstraint(
+            "source <> 'voice' OR voice_phrase IS NOT NULL", name="voice_entry_has_phrase"
+        ),
+        CheckConstraint(
+            "voice_phrase IS NULL OR char_length(voice_phrase) <= 300", name="voice_phrase_length"
+        ),
         CheckConstraint("char_length(description) BETWEEN 1 AND 200", name="description_length"),
         # Transferência: tem direção e grupo, e não tem categoria. Despesa e receita: o inverso.
         CheckConstraint(
@@ -109,3 +120,5 @@ class Transaction(UUIDPrimaryKey, Timestamps, Base):
     source: Mapped[TransactionSource] = mapped_column(
         String(10), server_default=TransactionSource.MANUAL.value
     )
+    # O que a Siri entendeu. Nunca vai para log (Princípio V).
+    voice_phrase: Mapped[str | None] = mapped_column(Text)
