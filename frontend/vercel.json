@@ -8,7 +8,7 @@
   },
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/api/((?!siri$).*)",
       "dest": "https://contai-api.onrender.com/api/$1",
       "headers": {
         "x-vercel-enable-rewrite-caching": "0"

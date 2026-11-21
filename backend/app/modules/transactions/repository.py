@@ -138,6 +138,7 @@ class TransactionRepository:
         source: TransactionSource = TransactionSource.MANUAL,
         import_id: uuid.UUID | None = None,
         external_id: str | None = None,
+        voice_phrase: str | None = None,
     ) -> Transaction:
         transaction = Transaction(
             user_id=user_id,
@@ -158,6 +159,7 @@ class TransactionRepository:
             source=source,
             import_id=import_id,
             external_id=external_id,
+            voice_phrase=voice_phrase,
             # O instante vem do relógio da aplicação: é ele que ordena os lançamentos do dia.
             created_at=created_at,
             updated_at=created_at,

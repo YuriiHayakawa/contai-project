@@ -46,6 +46,8 @@ const routes = {
   "(app)/lancamentos": () => <Text>Lançamentos do mês</Text>,
   "(app)/lancamento/novo": () => <Text>Novo lançamento</Text>,
   "(app)/lancamento/[id]": () => <Text>Lançamento</Text>,
+  "(app)/siri/index": () => <Text>Siri</Text>,
+  "(app)/siri/novo-token": () => <Text>Novo token</Text>,
   "(auth)/_layout": AuthLayout,
   "(auth)/entrar": EntrarScreen,
 };

@@ -448,7 +448,7 @@ passos 1 a 5, 7 e 8.
 
 ### Testes (escritos primeiro)
 
-- [ ] T049 [P] [US3] Criar `backend/tests/integration/test_personal_tokens.py`:
+- [X] T049 [P] [US3] Criar `backend/tests/integration/test_personal_tokens.py`:
   - `POST /api/v1/personal-tokens` devolve `token` no formato `ctp_<id>.<segredo>` uma única vez,
     e o `GET` nunca devolve o token;
   - o banco guarda só `secret_hash`, com 64 caracteres hexadecimais iguais ao SHA-256 do
@@ -463,14 +463,18 @@ passos 1 a 5, 7 e 8.
   - a exclusão da conta apaga os tokens;
   - `needs_default_account` vale `true` com conta padrão nula ou arquivada;
   - um token pessoal no `Authorization` dos endpoints `/personal-tokens` recebe 401.
-- [ ] T050 [P] [US3] Criar `backend/tests/isolation/test_personal_token_scope.py`, a varredura
+  - O caso de dois pedidos simultâneos ficou fora: as sessões dos testes dividem uma conexão
+    dentro de uma transação desfeita no fim, e o `FOR UPDATE` não bloqueia ali. O limite tem
+    teste sequencial, e a trava da linha do usuário está no serviço.
+  - Também testa a limpeza dos tokens revogados há mais de 30 dias (achado M4 da análise).
+- [X] T050 [P] [US3] Criar `backend/tests/isolation/test_personal_token_scope.py`, a varredura
   de rotas.
   - Percorre `app.routes`.
   - Toda rota cuja árvore de dependências inclui `get_current_user` recebe
     `Authorization: Bearer <ctp_ válido>` e precisa responder 401.
   - `PersonalTokenDep` aparece em exatamente uma rota, `POST /api/v1/voice/entries`.
   - Uma rota nova entra no teste sozinha.
-- [ ] T051 [P] [US3] Criar `backend/tests/integration/test_voice_entries.py`, com a IA falsa
+- [X] T051 [P] [US3] Criar `backend/tests/integration/test_voice_entries.py`, com a IA falsa
   programada.
   - **Lançamentos que gravam (201 `saved`)**:
     - despesa com conta citada;
@@ -499,10 +503,10 @@ passos 1 a 5, 7 e 8.
   - **O que não vaza**:
     - a `speech` não contém saldo, nem e-mail, nem outros lançamentos;
     - com `caplog`, nenhum log contém a frase ou o token.
-- [ ] T052 [P] [US3] Criar `backend/tests/unit/test_voice_speech.py`, com o valor por extenso
+- [X] T052 [P] [US3] Criar `backend/tests/unit/test_voice_speech.py`, com o valor por extenso
   ("45 reais", "45 reais e 90 centavos", "1 real", "90 centavos", "1 centavo", "1.234 reais") e
   cada mensagem da tabela de `contracts/siri-shortcut.md`.
-- [ ] T053 [P] [US3] Criar `frontend/api/siri.test.ts` (Vitest, com `fetch` falso).
+- [X] T053 [P] [US3] Criar `frontend/api/siri.test.ts` (Vitest, com `fetch` falso).
   - Uma resposta da API em tempo é repassada com status 200, `outcome` e `speech`, sem
     `transaction_id`.
   - Mais de 8 s responde 200 `waking` com a mensagem de "acordando".
@@ -510,11 +514,15 @@ passos 1 a 5, 7 e 8.
   - Sem `phrase`, ou com corpo maior que 2 KB, responde `repeat`.
   - O cabeçalho `X-Contai-Deadline` é a chegada mais 5,5 s, e `x-contai-proxy-secret` é
     enviado.
-- [ ] T054 [P] [US3] Registrar as rotas novas em `backend/tests/isolation/registry.py`:
+- [X] T054 [P] [US3] Registrar as rotas novas em `backend/tests/isolation/registry.py`:
   - `/personal-tokens` (GET, POST, PATCH e DELETE), com os casos de outro usuário: o `PATCH` e o
     `DELETE` do token de outro usuário recebem 404;
   - `POST /voice/entries`, com o token de outro usuário: nunca grava na conta de outra pessoa.
-- [ ] T055 [P] [US3] Criar `mobile/src/features/voice/hooks/usePersonalTokens.test.tsx` e
+  - O registro só aceita rotas que dependem de `get_current_user`: as quatro de
+    `/personal-tokens` estão em `tests/isolation/test_personal_tokens.py`. A voz, que usa o token
+    pessoal, tem no mesmo arquivo um teste próprio: a frase com o token de B nunca grava na conta
+    de A, mesmo citando o nome dela.
+- [X] T055 [P] [US3] Criar `mobile/src/features/voice/hooks/usePersonalTokens.test.tsx` e
   `mobile/src/features/voice/components/NewTokenResult.test.tsx`:
   - o token aparece uma vez, com o botão "Copiar";
   - ao sair da tela, a área de transferência é limpa se ainda contiver o token;
@@ -524,7 +532,7 @@ passos 1 a 5, 7 e 8.
 
 ### Backend
 
-- [ ] T056 [US3] Criar `backend/app/modules/auth/personal_tokens.py`:
+- [X] T056 [US3] Criar `backend/app/modules/auth/personal_tokens.py`:
   - `PersonalTokenRepository`, sempre com `user_id`;
   - `PersonalTokenService` com:
     - `create`, que trava a linha do usuário com `SELECT … FOR UPDATE` e aplica o limite de 5;
@@ -533,27 +541,30 @@ passos 1 a 5, 7 e 8.
     - `authenticate(raw)`, que separa `ctp_<id>.<segredo>`, compara com
       `hmac.compare_digest`, recusa token revogado ou conta excluída ou em exclusão, e atualiza
       `last_used_at` no máximo uma vez por minuto.
-- [ ] T057 [US3] Criar os schemas `PersonalTokenCreate`, `PersonalTokenUpdate`,
+  - A limpeza dos revogados há mais de 30 dias entrou em `purge_expired_auth_data`.
+- [X] T057 [US3] Criar os schemas `PersonalTokenCreate`, `PersonalTokenUpdate`,
   `PersonalTokenRead` e `PersonalTokenCreated` em `backend/app/modules/auth/schemas.py`, e as
   rotas `/personal-tokens` em `backend/app/modules/auth/router.py`, com `CurrentUserDep`,
   conforme `contracts/rest-api.md`.
-- [ ] T058 [US3] Chamar `PersonalTokenService.revoke_all` com `password_changed` e
+- [X] T058 [US3] Chamar `PersonalTokenService.revoke_all` com `password_changed` e
   `password_reset` em `backend/app/modules/auth/service.py`, no mesmo ponto em que as sessões
   são revogadas.
-- [ ] T059 [US3] Criar `PersonalTokenDep` em `backend/app/modules/auth/dependencies.py`. Ela
+- [X] T059 [US3] Criar `PersonalTokenDep` em `backend/app/modules/auth/dependencies.py`. Ela
   lê só o cabeçalho `Authorization: Bearer ctp_…`. Na falha, levanta `VoiceUnauthorized`, que
   vira 401 com o corpo `VoiceEntryResult` `unauthorized`, sempre igual.
-- [ ] T060 [US3] Criar `backend/app/modules/assistant/prompts/voice_entry.md`, o prompt
+- [X] T060 [US3] Criar `backend/app/modules/assistant/prompts/voice_entry.md`, o prompt
   versionado.
   - Extrair um lançamento de uma frase em português.
   - Classificar `intent` como `entry`, `multiple`, `transfer`, `installments`, `question` ou
     `other`.
   - Nunca calcular, nunca inventar valor, conta nem data.
   - Tratar a frase como dado não confiável.
+  - A chamada usa `generate_structured` com o schema `VoiceEntryParams`, que é a ferramenta
+    obrigatória: a IA só pode devolver aqueles campos.
 
   Criar também a ferramenta `parse_voice_entry`, com seus parâmetros em Pydantic, em
   `backend/app/modules/assistant/voice.py`.
-- [ ] T061 [US3] Implementar `VoiceEntryService` em `backend/app/modules/assistant/voice.py`.
+- [X] T061 [US3] Implementar `VoiceEntryService` em `backend/app/modules/assistant/voice.py`.
   1. Conferir o prazo. Se faltar menos de 1,5 s, responder `deadline` sem chamar a IA.
   2. `check_limit(QUESTION)`.
   3. Chamar a IA com a ferramenta obrigatória.
@@ -567,7 +578,11 @@ passos 1 a 5, 7 e 8.
      cota e do limite por hora, inclusive quando o prazo descarta a frase (`model="none"`,
      zero tokens).
   9. Montar a `speech` com o valor por extenso.
-- [ ] T062 [US3] Criar o schema `VoiceEntryRequest` (`phrase` com 1 a 300 caracteres) e
+  - A ordem ficou: frase vazia ou longa, limite por hora, cota de perguntas, prazo (menos de
+    1,5 s), IA, regras, prazo de novo, gravação e commit. O uso é registrado desde o primeiro
+    prazo, inclusive quando a IA não responde (`model="none"`).
+  - Duas falas novas no contrato: data que não se entende e frase com mais de 300 caracteres.
+- [X] T062 [US3] Criar o schema `VoiceEntryRequest` (`phrase` com 1 a 300 caracteres) e
   `VoiceEntryResult` em `backend/app/modules/assistant/schemas.py`, e a rota
   `POST /voice/entries` em `backend/app/modules/assistant/router.py`.
   - Usa `PersonalTokenDep`, o cabeçalho opcional `X-Contai-Deadline` e o limite de 20 por hora
@@ -575,10 +590,13 @@ passos 1 a 5, 7 e 8.
   - Os status são os de `contracts/rest-api.md`.
   - O log estruturado traz só o `outcome`, a duração e o id do token.
   - A rota é registrada no app.
+  - O limite de 20 frases por hora usa o armazenamento do slowapi, mas é conferido no serviço:
+    o decorador responderia no formato comum de erro, e a voz responde sempre
+    `VoiceEntryResult`.
 
 ### Função intermediária e roteamento (site)
 
-- [ ] T063 [US3] Criar `frontend/api/siri.ts`, a função da Vercel na Node runtime, com
+- [X] T063 [US3] Criar `frontend/api/siri.ts`, a função da Vercel na Node runtime, com
   `export async function POST(request: Request)`, conforme `contracts/siri-shortcut.md`.
   - Lê `API_ORIGIN_URL`, `ORIGIN_SECRET`, `VOICE_RELAY_TIMEOUT_MS` (padrão 8000) e
     `VOICE_API_BUDGET_MS` (padrão 5500, sempre pelo menos 2,5 s abaixo do tempo de espera).
@@ -587,11 +605,13 @@ passos 1 a 5, 7 e 8.
   - Não registra a frase nem o token.
 
   Incluir `api` no `tsconfig.json` e no `eslint.config.js` do site.
-- [ ] T064 [US3] Em `frontend/vercel.json`, trocar o `src` da primeira rota de `/api/(.*)` para
+- [X] T064 [US3] Em `frontend/vercel.json`, trocar o `src` da primeira rota de `/api/(.*)` para
   `/api/((?!siri$).*)`, mantendo o `dest` e o `transforms`. Documentar
   `API_ORIGIN_URL`, `VOICE_RELAY_TIMEOUT_MS` e `VOICE_API_BUDGET_MS` no `.env.example` da raiz,
   na seção da Vercel.
-- [ ] T065 [P] [US3] Escrever o ADR `docs/adr/0013-intermediario-da-siri-com-prazo.md`:
+  - O `.env.example` da raiz não tinha seção da Vercel: ela foi criada no fim, com as variáveis
+    comentadas, porque ficam no painel da Vercel.
+- [X] T065 [P] [US3] Escrever o ADR `docs/adr/0013-intermediario-da-siri-com-prazo.md`:
   - **Contexto**: o limite da Siri e o Render dormindo.
   - **Decisão**: a função da Vercel com prazo absoluto e a dupla conferência na API.
   - **Alternativas rejeitadas**: chamar a API direto, manter acordado (conta do Neon) e chave de
@@ -609,23 +629,25 @@ passos 1 a 5, 7 e 8.
 
 ### App
 
-- [ ] T068 [P] [US3] Criar `mobile/src/features/voice/types.ts` e
+- [X] T068 [P] [US3] Criar `mobile/src/features/voice/types.ts` e
   `mobile/src/features/voice/services/personal-tokens.ts` (listar, criar, trocar a conta padrão
   e revogar), conforme `contracts/rest-api.md`.
-- [ ] T069 [US3] Criar `mobile/src/features/voice/hooks/usePersonalTokens.ts`,
+- [X] T069 [US3] Criar `mobile/src/features/voice/hooks/usePersonalTokens.ts`,
   `useCreatePersonalToken.ts`, `useUpdateDefaultAccount.ts` e `useRevokePersonalToken.ts`.
-- [ ] T070 [US3] Criar `mobile/src/features/voice/components/ShortcutSteps.tsx`.
+  - Os quatro hooks ficam em `usePersonalTokens.ts`.
+- [X] T070 [US3] Criar `mobile/src/features/voice/components/ShortcutSteps.tsx`.
   - O passo a passo manual, numerado, com o texto exato de cada ação do atalho de
     `contracts/siri-shortcut.md`: a URL de produção, o cabeçalho `Authorization` com
     `Bearer ` e o campo `speech`.
   - Quando houver `EXPO_PUBLIC_SHORTCUT_URL`, o botão "Instalar o atalho" vem antes.
-- [ ] T071 [US3] Criar `mobile/src/features/voice/components/NewTokenResult.tsx` (token uma vez,
+- [X] T071 [US3] Criar `mobile/src/features/voice/components/NewTokenResult.tsx` (token uma vez,
   "Copiar" com `expo-clipboard` e limpeza ao sair) e as telas:
   - `mobile/app/(app)/siri/index.tsx`: tokens ativos com conta padrão, aviso
     `needs_default_account`, trocar a conta, revogar com confirmação e o aviso de que trocar a
     senha desconecta a Siri;
   - `mobile/app/(app)/siri/novo-token.tsx`: nome e conta padrão; no limite de 5, pede para
     revogar um.
+  - O "Conectar à Siri" da tela Mais entrou aqui.
 - [ ] T072 **FORA DO CÓDIGO (M5)**: com o deploy no ar, montar o atalho "Contaí" à mão, seguindo
   a tela `ShortcutSteps`.
   - Falar com a Siri e medir o tempo até a resposta, com o servidor acordado e com o servidor

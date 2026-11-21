@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.core.database import get_session
 from app.core.errors import Forbidden, Unauthenticated
 from app.core.security import decode_access_token
 from app.modules.auth.errors import EmailNotVerified
+from app.modules.auth.personal_tokens import AuthenticatedToken, PersonalTokenService
 from app.modules.auth.repository import AuthRepository
 from app.modules.users.models import UserStatus
 from app.modules.users.repository import UserRepository
@@ -73,3 +74,36 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+# ---------- token pessoal da Siri (ADR 0012)
+
+
+class VoiceUnauthorized(Exception):
+    """Token pessoal ausente, malformado, inexistente, revogado ou de conta excluída.
+
+    Vira sempre a mesma resposta 401, no formato da voz, sem dizer qual foi o caso.
+    """
+
+
+async def get_personal_token(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthenticatedToken:
+    """Autentica o token pessoal do cabeçalho `Authorization: Bearer ctp_…`.
+
+    É usada só em `POST /api/v1/voice/entries`. As outras rotas usam `get_current_user`, que só
+    aceita o access token da sessão: um token pessoal recebe 401 nelas.
+    """
+    scheme, _, credential = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not credential.strip():
+        raise VoiceUnauthorized()
+    token = await PersonalTokenService(session).authenticate(credential.strip())
+    if token is None:
+        raise VoiceUnauthorized()
+    request.state.user_id = token.user_id
+    return token
+
+
+PersonalTokenDep = Annotated[AuthenticatedToken, Depends(get_personal_token)]
