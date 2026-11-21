@@ -182,13 +182,24 @@ def decode_access_token(token: str) -> AccessTokenClaims:
     )
 
 
-def create_challenge_token(user_id: uuid.UUID) -> str:
-    """Token curto entre a etapa da senha e a etapa do código de verificação."""
-    return _encode({"sub": str(user_id), "typ": _CHALLENGE_TOKEN_TYPE}, CHALLENGE_TOKEN_TTL)
+def create_challenge_token(user_id: uuid.UUID, client: str) -> str:
+    """Token curto entre a etapa da senha e a etapa do código de verificação.
+
+    `client` (`web` ou `mobile`) diz quem pediu: o desafio só vale na segunda etapa do mesmo
+    cliente, para o login do app não abrir uma sessão do site, nem o contrário (ADR 0012).
+    """
+    return _encode(
+        {"sub": str(user_id), "typ": _CHALLENGE_TOKEN_TYPE, "cli": client}, CHALLENGE_TOKEN_TTL
+    )
 
 
-def decode_challenge_token(token: str) -> uuid.UUID:
-    return _to_uuid(_decode(token, _CHALLENGE_TOKEN_TYPE)["sub"])
+def decode_challenge_token(token: str) -> tuple[uuid.UUID, str]:
+    """Devolve o usuário e o cliente que pediu o desafio."""
+    payload = _decode(token, _CHALLENGE_TOKEN_TYPE)
+    client = payload.get("cli")
+    if not isinstance(client, str):
+        raise Unauthenticated()
+    return _to_uuid(payload["sub"]), client
 
 
 # ---------- verificação em duas etapas (TOTP)

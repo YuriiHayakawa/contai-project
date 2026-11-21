@@ -81,6 +81,28 @@ class LoginResponse(BaseModel):
     challenge_token: str | None = None
 
 
+class MobileTokenResponse(BaseModel):
+    """Credenciais do app: o refresh token vai no corpo, e o app o guarda no Keychain."""
+
+    access_token: str
+    refresh_token: str
+    token_type: Literal["bearer"] = "bearer"  # noqa: S105 - tipo do token, não é segredo
+
+
+class MobileLoginResponse(BaseModel):
+    """Login do app: ou as credenciais, ou o desafio da segunda etapa, como no site."""
+
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: Literal["bearer"] | None = None
+    two_factor_required: bool = False
+    challenge_token: str | None = None
+
+
+class MobileRefreshRequest(BaseModel):
+    refresh_token: Annotated[str, StringConstraints(min_length=1, max_length=200)]
+
+
 class TwoFactorLoginRequest(BaseModel):
     """Segunda etapa do login: o desafio e um código do app ou um de recuperação."""
 

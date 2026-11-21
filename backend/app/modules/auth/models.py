@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, text
+from sqlalchemy import CHAR, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base, CreatedAt, UUIDPrimaryKey
@@ -18,6 +18,19 @@ class SessionRevokedReason(StrEnum):
     TOKEN_REUSE = "token_reuse"  # noqa: S105 - motivo, não é token
     TWO_FACTOR_RESET = "two_factor_reset"
     ACCOUNT_DELETION = "account_deletion"
+
+
+class SessionClient(StrEnum):
+    """Quem abriu a sessão: o site, com o cookie, ou o app, com o token no corpo (ADR 0012)."""
+
+    WEB = "web"
+    MOBILE = "mobile"
+
+
+class PersonalTokenRevokedReason(StrEnum):
+    USER_REVOKED = "user_revoked"
+    PASSWORD_CHANGED = "password_changed"  # noqa: S105 - motivo, não é senha
+    PASSWORD_RESET = "password_reset"  # noqa: S105 - motivo, não é senha
 
 
 class EmailTokenType(StrEnum):
@@ -40,6 +53,7 @@ class Session(UUIDPrimaryKey, CreatedAt, Base):
             f"revoked_reason IS NULL OR {_in_list('revoked_reason', SessionRevokedReason)}",
             name="revoked_reason_valid",
         ),
+        CheckConstraint(_in_list("client", SessionClient), name="client_valid"),
         Index("ix_sessions_user_id", "user_id"),
     )
 
@@ -51,6 +65,42 @@ class Session(UUIDPrimaryKey, CreatedAt, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_reason: Mapped[SessionRevokedReason | None] = mapped_column(String(30))
+    # O refresh do site só aceita sessões `web`, e o do app só `mobile`.
+    client: Mapped[SessionClient] = mapped_column(
+        String(10), server_default=SessionClient.WEB.value
+    )
+
+
+class PersonalToken(UUIDPrimaryKey, CreatedAt, Base):
+    """Token pessoal da Siri: só lança por voz (ADR 0012).
+
+    O token tem a forma `ctp_<id>.<segredo>`. O banco guarda só o SHA-256 do segredo, e o token
+    completo aparece uma única vez, na criação.
+    """
+
+    __tablename__ = "personal_tokens"
+    __table_args__ = (
+        CheckConstraint(
+            f"revoked_reason IS NULL OR {_in_list('revoked_reason', PersonalTokenRevokedReason)}",
+            name="revoked_reason_valid",
+        ),
+        Index(
+            "ix_personal_tokens_user_active",
+            "user_id",
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(60))
+    secret_hash: Mapped[str] = mapped_column(CHAR(64))
+    # Conta usada quando a frase não cita nenhuma. Sempre do mesmo usuário (o serviço confere).
+    default_account_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("accounts.id", ondelete="SET NULL")
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_reason: Mapped[PersonalTokenRevokedReason | None] = mapped_column(String(30))
 
 
 class EmailToken(UUIDPrimaryKey, CreatedAt, Base):

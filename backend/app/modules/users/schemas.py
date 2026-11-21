@@ -7,7 +7,7 @@ from typing import Annotated, Self
 from pydantic import BaseModel, StringConstraints
 
 from app.core.security import MAX_PASSWORD_LENGTH
-from app.modules.auth.models import Session
+from app.modules.auth.models import Session, SessionClient
 from app.modules.users.devices import device_label
 from app.modules.users.models import User, UserStatus
 
@@ -54,6 +54,8 @@ class SessionRead(BaseModel):
 
     id: uuid.UUID
     device: str
+    # `mobile` aparece no site como "App do Contaí" (ADR 0012).
+    client: SessionClient
     last_used_at: datetime
     is_current: bool
 
@@ -62,6 +64,7 @@ class SessionRead(BaseModel):
         return cls(
             id=session.id,
             device=device_label(session.user_agent),
+            client=session.client,
             last_used_at=session.last_used_at,
             is_current=is_current,
         )

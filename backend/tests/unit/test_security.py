@@ -211,9 +211,9 @@ def test_token_without_valid_ids_is_rejected() -> None:
 
 def test_challenge_token_round_trip_and_expiry() -> None:
     user_id = uuid.uuid4()
-    token = security.create_challenge_token(user_id)
+    token = security.create_challenge_token(user_id, "mobile")
 
-    assert security.decode_challenge_token(token) == user_id
+    assert security.decode_challenge_token(token) == (user_id, "mobile")
 
     clock.set_fixed_time(NOW + timedelta(minutes=5))
     with pytest.raises(Unauthenticated):
@@ -224,6 +224,6 @@ def test_token_types_are_not_interchangeable() -> None:
     user_id, session_id = uuid.uuid4(), uuid.uuid4()
 
     with pytest.raises(Unauthenticated):
-        security.decode_access_token(security.create_challenge_token(user_id))
+        security.decode_access_token(security.create_challenge_token(user_id, "web"))
     with pytest.raises(Unauthenticated):
         security.decode_challenge_token(security.create_access_token(user_id, session_id))

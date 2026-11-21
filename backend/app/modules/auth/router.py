@@ -12,12 +12,16 @@ from app.core.errors import Unauthenticated
 from app.core.rate_limit import client_ip, limiter
 from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.auth.emails import SPAM_REMINDER
-from app.modules.auth.errors import RefreshNotFromApp
+from app.modules.auth.errors import MobileClientRequired, RefreshNotFromApp
+from app.modules.auth.models import SessionClient
 from app.modules.auth.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
     MessageResponse,
+    MobileLoginResponse,
+    MobileRefreshRequest,
+    MobileTokenResponse,
     RegisterRequest,
     ResendVerificationRequest,
     ResetPasswordRequest,
@@ -37,6 +41,7 @@ REFRESH_COOKIE_NAME = "contai_refresh"
 # O cookie só acompanha o pedido de refresh: nenhuma outra rota o recebe.
 REFRESH_COOKIE_PATH = "/api/v1/auth/refresh"
 CLIENT_HEADER_VALUE = "web"
+MOBILE_CLIENT_HEADER_VALUE = "mobile"
 
 REGISTERED_MESSAGE = (
     "Quase lá! Enviamos um e-mail para você. Abra o link que está nele para confirmar a conta. "
@@ -61,6 +66,15 @@ def get_auth_service(session: Annotated[AsyncSession, Depends(get_session)]) -> 
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def require_mobile_client(x_contai_client: Annotated[str | None, Header()] = None) -> None:
+    """As rotas do app exigem `X-Contai-Client: mobile`; sem ele, 400 (ADR 0012)."""
+    if x_contai_client != MOBILE_CLIENT_HEADER_VALUE:
+        raise MobileClientRequired()
+
+
+MobileClientDep = Depends(require_mobile_client)
 
 
 def _login_limit() -> str:
@@ -185,6 +199,7 @@ async def login_two_factor(
         recovery_code=body.recovery_code,
         user_agent=request.headers.get("user-agent", ""),
         ip=client_ip(request),
+        client=SessionClient.WEB,
     )
     return _token_response(response, tokens)
 
@@ -209,8 +224,88 @@ async def refresh(
     refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
     if not refresh_token:
         raise Unauthenticated()
-    tokens = await service.refresh(refresh_token=refresh_token, ip=client_ip(request))
+    tokens = await service.refresh(
+        refresh_token=refresh_token, ip=client_ip(request), client=SessionClient.WEB
+    )
     return _token_response(response, tokens)
+
+
+# ---------- app mobile (ADR 0012): os tokens vão no corpo, e nenhuma rota lê ou grava o cookie
+
+
+def _mobile_tokens(tokens: IssuedTokens) -> MobileTokenResponse:
+    return MobileTokenResponse(access_token=tokens.access_token, refresh_token=tokens.refresh_token)
+
+
+@router.post(
+    "/mobile/login",
+    summary="Entrar no app com e-mail e senha",
+    description=(
+        "Exige `X-Contai-Client: mobile`. Devolve o access token e o refresh token no corpo. Com "
+        "a verificação em duas etapas ativa, devolve `two_factor_required` e um "
+        "`challenge_token`, que só vale em `/auth/mobile/login/2fa`."
+    ),
+    dependencies=[MobileClientDep],
+)
+@limiter.limit(_login_limit)
+async def mobile_login(
+    request: Request, body: LoginRequest, service: AuthServiceDep
+) -> MobileLoginResponse:
+    outcome = await service.login(
+        email=body.email,
+        password=body.password,
+        user_agent=request.headers.get("user-agent", ""),
+        ip=client_ip(request),
+        client=SessionClient.MOBILE,
+    )
+    if isinstance(outcome, TwoFactorChallenge):
+        return MobileLoginResponse(
+            two_factor_required=True, challenge_token=outcome.challenge_token
+        )
+    return MobileLoginResponse(
+        access_token=outcome.access_token,
+        refresh_token=outcome.refresh_token,
+        token_type="bearer",  # noqa: S106
+    )
+
+
+@router.post(
+    "/mobile/login/2fa",
+    summary="Concluir a entrada no app com o código da segunda etapa",
+    description="Exige `X-Contai-Client: mobile` e um desafio emitido pelo login do app.",
+    dependencies=[MobileClientDep],
+)
+@limiter.limit(_login_limit)
+async def mobile_login_two_factor(
+    request: Request, body: TwoFactorLoginRequest, service: AuthServiceDep
+) -> MobileTokenResponse:
+    tokens = await service.complete_two_factor_login(
+        challenge_token=body.challenge_token,
+        code=body.code,
+        recovery_code=body.recovery_code,
+        user_agent=request.headers.get("user-agent", ""),
+        ip=client_ip(request),
+        client=SessionClient.MOBILE,
+    )
+    return _mobile_tokens(tokens)
+
+
+@router.post(
+    "/mobile/refresh",
+    summary="Renovar o access token do app",
+    description=(
+        "Exige `X-Contai-Client: mobile`. Troca o refresh token por um novo; um token antigo "
+        "reapresentado revoga a sessão. Uma sessão do site recebe 401."
+    ),
+    dependencies=[MobileClientDep],
+)
+async def mobile_refresh(
+    request: Request, body: MobileRefreshRequest, service: AuthServiceDep
+) -> MobileTokenResponse:
+    tokens = await service.refresh(
+        refresh_token=body.refresh_token, ip=client_ip(request), client=SessionClient.MOBILE
+    )
+    return _mobile_tokens(tokens)
 
 
 @router.post(

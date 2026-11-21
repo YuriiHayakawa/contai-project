@@ -96,12 +96,12 @@ P1 verde no roteiro do iPhone. A P3 (US13) fica para depois da entrega e não te
 - [X] T001 **FORA DO CÓDIGO (M1)**: conferir no Expo Go do iPhone a versão do SDK. Resultado em
   2026-11-18: Expo Go 58.0.5, com SDK 58.0.0, e atualizações automáticas da App Store
   desligadas até a entrega. Está registrado em `specs/002-app-mobile-siri/plan.md`.
-- [ ] T002 Criar o projeto Expo SDK 58 em `mobile/` com `npx create-expo-app@latest mobile
+- [X] T002 Criar o projeto Expo SDK 58 em `mobile/` com `npx create-expo-app@latest mobile
   --template blank-typescript` (SDK 58).
   - Configurar o Expo Router: `main: "expo-router/entry"` em `mobile/package.json`.
   - Em `mobile/app.json`: nome "Contaí", `scheme: "contai"`, `userInterfaceStyle: "automatic"`,
     `ios.supportsTablet: false` e o plugin `expo-router`.
-- [ ] T003 Instalar as dependências com `npx expo install`, que escolhe as versões do SDK 58, e
+- [X] T003 Instalar as dependências com `npx expo install`, que escolhe as versões do SDK 58, e
   registrá-las em `mobile/package.json`. A justificativa de cada uma está no plan.md, em Primary
   Dependencies.
   - **Dependências do app**: `expo-router`, `react-native-safe-area-context`,
@@ -115,29 +115,29 @@ P1 verde no roteiro do iPhone. A P3 (US13) fica para depois da entrega e não te
   - **Se o pacote da Atkinson Hyperlegible Next não existir**: converter
     `frontend/src/assets/fonts/AtkinsonHyperlegibleNext-Variable.woff2` para TTF estáticos
     (Regular, SemiBold e Bold). Guardar em `mobile/assets/fonts/` com a licença OFL.
-- [ ] T004 Configurar `mobile/tsconfig.json`: `extends: "expo/tsconfig.base"`, `strict: true`,
+- [X] T004 Configurar `mobile/tsconfig.json`: `extends: "expo/tsconfig.base"`, `strict: true`,
   `noUncheckedIndexedAccess: true` e `paths`:
   - `"@/*": ["./src/*"]`;
   - `"@web/*": ["../frontend/src/*"]`;
   - `"zod": ["./node_modules/zod"]`.
-- [ ] T005 Configurar `mobile/metro.config.js`, partindo de `getDefaultConfig`.
+- [X] T005 Configurar `mobile/metro.config.js`, partindo de `getDefaultConfig`.
   - `watchFolders`: `path.resolve(__dirname, "../frontend/src")`.
   - `resolver.resolveRequest`: `zod` sempre resolve para `mobile/node_modules/zod`, e o resto
     segue a resolução padrão.
   - Comentário: "uma cópia só do zod (research, seção 4)".
-- [ ] T006 Configurar `mobile/jest.config.js` e `mobile/jest.setup.ts`.
+- [X] T006 Configurar `mobile/jest.config.js` e `mobile/jest.setup.ts`.
   - No `jest.config.js`: `preset: "jest-expo"`; `moduleNameMapper` para `^@/(.*)$`,
     `^@web/(.*)$` (`<rootDir>/../frontend/src/$1`) e `^zod$`; `transformIgnorePatterns`
     padrão do jest-expo.
   - No setup: um `expo-secure-store` falso em memória e o `fetch` global falso.
-- [ ] T007 [P] Configurar o lint e a formatação.
+- [X] T007 [P] Configurar o lint e a formatação.
   - `mobile/eslint.config.js`: flat config com `eslint-config-expo`.
     `@typescript-eslint/no-explicit-any: "error"`. `no-restricted-imports` permite de `@web/`
     só `lib/money`, `lib/dates`, `lib/paths`, `features/*/types` e `features/*/schemas`.
   - `mobile/.prettierrc`: igual ao do site.
   - Scripts em `mobile/package.json`: `lint`, `format`, `format:check`, `typecheck`
     (`tsc --noEmit`) e `test`.
-- [ ] T008 Fazer a prova do código compartilhado, com **meio dia de limite** (constituição,
+- [X] T008 Fazer a prova do código compartilhado, com **meio dia de limite** (constituição,
   Princípio XIV).
   - Criar `mobile/src/lib/web-imports.test.ts`. Ele importa `formatBRL` de `@web/lib/money`, as
     funções de data de `@web/lib/dates` e um schema de `@web/features/transactions/schemas`, e
@@ -147,19 +147,23 @@ P1 verde no roteiro do iPhone. A P3 (US13) fica para depois da entrega e não te
   - **Se passar do meio dia**: copiar os arquivos para `mobile/src/shared/`, trocar o apelido e
     registrar o desvio temporário em `specs/002-app-mobile-siri/plan.md`, em Complexity
     Tracking, com a lista de arquivos e o plano de adequação (M10).
-- [ ] T009 [P] Criar `mobile/.env.example`, com as variáveis documentadas, e
+  - **Resultado em 2026-11-18**: passou no Jest, no Linux do CI e no Expo Go do iPhone, com as
+    três linhas certas (R$ 1.234,56, 2026-11-01 e recusado). Bem dentro do meio dia, sem
+    desvio: o apelido `@web` fica.
+- [X] T009 [P] Criar `mobile/.env.example`, com as variáveis documentadas, e
   `mobile/src/lib/config.ts`.
   - Variáveis: `EXPO_PUBLIC_API_URL=https://contai-project.vercel.app` e
     `EXPO_PUBLIC_SHORTCUT_URL=`, vazia até a M6.
   - O `config.ts` lê as variáveis e valida com zod: URL https obrigatória fora do
     desenvolvimento; link do atalho opcional.
   - Garantir `mobile/.env` no `.gitignore`.
-- [ ] T010 [P] Acrescentar a etapa "Mobile: npm ci, lint, formatação, tipos, testes e auditoria"
+- [X] T010 [P] Acrescentar a etapa "Mobile: npm ci, lint, formatação, tipos, testes e auditoria"
   em `infra/ci-local.sh` e um job `mobile` equivalente em `.github/workflows/ci.yml`, que
   continua desligado no GitHub (desvio do Princípio XII).
-- [ ] T011 **FORA DO CÓDIGO (M2)**: criar `mobile/.env` a partir de `mobile/.env.example` com
+- [X] T011 **FORA DO CÓDIGO (M2)**: criar `mobile/.env` a partir de `mobile/.env.example` com
   `EXPO_PUBLIC_API_URL=https://contai-project.vercel.app`. Se o QR code não abrir o app,
   liberar o Metro (porta 8081) no firewall do Windows ou usar `npx expo start --tunnel`.
+  Feita em 2026-11-18.
 
 ---
 
@@ -170,7 +174,7 @@ com a sessão.
 
 ### Backend
 
-- [ ] T012 Criar a migração `backend/alembic/versions/0010_mobile_voice.py`, com `downgrade`.
+- [X] T012 Criar a migração `backend/alembic/versions/0010_mobile_voice.py`, com `downgrade`.
   - **`sessions.client`**: `VARCHAR(10)` NOT NULL, `server_default 'web'`, com
     `CHECK (client IN ('web', 'mobile'))`.
   - **Tabela `personal_tokens`**:
@@ -188,29 +192,31 @@ com a sessão.
     - `voice_phrase IS NULL OR source = 'voice'`;
     - `source <> 'voice' OR voice_phrase IS NOT NULL`;
     - `voice_phrase IS NULL OR char_length(voice_phrase) <= 300`.
-- [ ] T013 Atualizar os modelos de acordo com o `data-model.md`.
+- [X] T013 Atualizar os modelos de acordo com o `data-model.md`.
   - `Session.client` em `backend/app/modules/auth/models.py`, com um `SessionClient(StrEnum)`
     `web`/`mobile`.
   - Modelo `PersonalToken`, com `PersonalTokenRevokedReason`, em
     `backend/app/modules/auth/models.py`.
   - `TransactionSource.VOICE = "voice"` e `voice_phrase: Mapped[str | None]` em
     `backend/app/modules/transactions/models.py`.
-- [ ] T014 [P] Acrescentar `AiTask.VOICE_ENTRY` em `backend/app/ai/models.py` e incluí-lo no
+- [X] T014 [P] Acrescentar `AiTask.VOICE_ENTRY` em `backend/app/ai/models.py` e incluí-lo no
   balde `LimitKind.QUESTION`, junto com `CHAT` e `TEXT_ENTRY`, em `backend/app/ai/usage.py`.
-- [ ] T015 Rodar `backend/tests/integration/test_migrations.py` (upgrade, downgrade e upgrade) e
+  O `CHECK` `ck_ai_usage_task_valid` também ganha `voice_entry`, na migração 0010.
+- [X] T015 Rodar `backend/tests/integration/test_migrations.py` (upgrade, downgrade e upgrade) e
   ajustar o que a migração quebrar.
 
 ### App
 
-- [ ] T016 [P] Criar `mobile/src/theme/tokens.ts`, com as cores, espaçamentos, raios e tamanhos
+- [X] T016 [P] Criar `mobile/src/theme/tokens.ts`, com as cores, espaçamentos, raios e tamanhos
   de texto do `design-system.md`, nos temas claro e escuro. Criar também
   `mobile/src/theme/useTheme.ts`, que escolhe o tema por `useColorScheme()` e muda na hora.
-- [ ] T017 [P] Criar `mobile/src/theme/fonts.ts`. Ele carrega Besley (títulos) e Atkinson
+- [X] T017 [P] Criar `mobile/src/theme/fonts.ts`. Ele carrega Besley (títulos) e Atkinson
   Hyperlegible Next (texto) com `useFonts`, e exporta as famílias por peso.
-- [ ] T018 Criar `mobile/app/_layout.tsx`. Ele carrega as fontes (com a tela de abertura
+- [X] T018 Criar `mobile/app/_layout.tsx`. A tela de prova da T008 (`mobile/app/index.tsx`)
+  continua como tela inicial até a conferência no iPhone, e sai no D2 com as rotas. Ele carrega as fontes (com a tela de abertura
   mantida até carregar), fornece `QueryClientProvider` (cache só em memória), `SessionProvider`
   e `SafeAreaProvider`, e ajusta a barra de status pelo tema.
-- [ ] T019 [P] Criar os componentes base em `mobile/src/components/ui/`, seguindo o
+- [X] T019 [P] Criar os componentes base em `mobile/src/components/ui/`, seguindo o
   `design-system.md`:
   - `Screen.tsx` (com `ScrollView`);
   - `Button.tsx`;
@@ -221,18 +227,18 @@ com a sessão.
   - `LoadingState.tsx`, `ErrorState.tsx` (com o que fazer) e `EmptyState.tsx`;
   - `ConfirmDialog.tsx`;
   - `Toast.tsx`, com ação opcional e anúncio por `AccessibilityInfo.announceForAccessibility`.
-- [ ] T020 [P] Criar `mobile/src/components/ui/ui.test.tsx`. Ele confere os papéis e rótulos
+- [X] T020 [P] Criar `mobile/src/components/ui/ui.test.tsx`. Ele confere os papéis e rótulos
   acessíveis, a área de toque e o `MoneyText` lendo "45 reais e 90 centavos".
-- [ ] T021 Criar `mobile/src/lib/session.test.ts`, que deve falhar primeiro.
+- [X] T021 Criar `mobile/src/lib/session.test.ts`, que deve falhar primeiro.
   - O refresh token é gravado no `expo-secure-store` na chave `contai.refresh_token`, com
     `keychainAccessible: AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`.
   - É lido na abertura e apagado no logout.
   - O access token fica só em memória e nunca passa pelo secure store.
-- [ ] T022 Implementar `mobile/src/lib/session.ts`, com `saveRefreshToken`,
+- [X] T022 Implementar `mobile/src/lib/session.ts`, com `saveRefreshToken`,
   `readRefreshToken`, `clearSession`, `getAccessToken` e `setAccessToken`, e
   `mobile/src/features/auth/SessionProvider.tsx`. O provedor guarda o estado
   `loading | signedOut | signedIn` e o motivo da última saída.
-- [ ] T023 Criar `mobile/src/lib/api-client.test.ts`, que deve falhar primeiro.
+- [X] T023 Criar `mobile/src/lib/api-client.test.ts`, que deve falhar primeiro.
   - Toda chamada leva `X-Contai-Client: mobile` e `Authorization` com o access token.
   - Um 401 dispara **uma única** renovação (`POST /api/v1/auth/mobile/refresh`), mesmo com
     três requisições simultâneas. Cada requisição é repetida uma vez.
@@ -240,10 +246,10 @@ com a sessão.
   - Com relógio falso, uma requisição de mais de 4 s liga o aviso "Acordando o servidor…".
   - O tempo limite é de 90 s.
   - Os erros vêm no formato padronizado, com `code` e `message`.
-- [ ] T024 Implementar `mobile/src/lib/api-client.ts`, com a renovação compartilhada como uma
+- [X] T024 Implementar `mobile/src/lib/api-client.ts`, com a renovação compartilhada como uma
   promessa única, `mobile/src/lib/waking.ts` e
   `mobile/src/components/ui/WakingBanner.tsx`.
-- [ ] T025 [P] Criar `mobile/src/lib/query-client.ts` (padrões de nova tentativa sem repetir
+- [X] T025 [P] Criar `mobile/src/lib/query-client.ts` (padrões de nova tentativa sem repetir
   401/403/422) e `mobile/src/lib/use-refetch-on-focus.ts`, que atualiza as consultas ao voltar
   ao app ou à tela (`AppState` e foco da navegação). O SC-004 precisa disso.
 
@@ -261,7 +267,7 @@ encerrar a sessão pelo site, sair), também no [quickstart.md](quickstart.md), 
 
 ### Testes (escritos primeiro, D1)
 
-- [ ] T026 [P] [US1] Criar `backend/tests/integration/test_auth_mobile.py`:
+- [X] T026 [P] [US1] Criar `backend/tests/integration/test_auth_mobile.py`:
   - `POST /api/v1/auth/mobile/login` sem `X-Contai-Client: mobile` responde 400;
   - com o cabeçalho, devolve `access_token` e `refresh_token` no corpo e nenhum `Set-Cookie`;
   - com duas etapas, devolve um desafio com `client = mobile`;
@@ -275,14 +281,20 @@ encerrar a sessão pelo site, sair), também no [quickstart.md](quickstart.md), 
   - `POST /api/v1/auth/logout` encerra a sessão `mobile`;
   - a troca de senha revoga as sessões `mobile`;
   - `GET /api/v1/users/me/sessions` traz `client`.
-- [ ] T027 [P] [US1] Registrar `POST /auth/mobile/login`, `/auth/mobile/login/2fa` e
+- [X] T027 [P] [US1] Registrar `POST /auth/mobile/login`, `/auth/mobile/login/2fa` e
   `/auth/mobile/refresh` como rotas públicas em `backend/tests/isolation/registry.py`.
-- [ ] T028 [P] [US1] Criar `mobile/src/features/auth/hooks/useLogin.test.tsx`:
+  O registro só aceita rotas autenticadas: uma rota pública nele reprova o
+  `test_no_isolation_entry_points_to_a_route_that_no_longer_exists`. Em vez disso,
+  `test_mobile_routes_stay_public`, em `test_auth_mobile.py`, garante que as três seguem
+  públicas.
+- [ ] T028 [P] [US1] **Movida para o começo do D2**, antes da T036: escrita no D1, ela deixaria
+  a suíte vermelha até o D2. Criar `mobile/src/features/auth/hooks/useLogin.test.tsx`:
   - login sem duas etapas grava a sessão;
   - com duas etapas, leva à tela do código e aceita código ou código de recuperação;
   - credenciais erradas mostram a mensagem genérica;
   - e-mail não confirmado e bloqueio temporário mostram as mensagens do site.
-- [ ] T029 [P] [US1] Criar `mobile/src/features/auth/guard.test.tsx` com `renderRouter` do
+- [ ] T029 [P] [US1] **Movida para o começo do D2**, antes da T038, pelo mesmo motivo da T028.
+  Criar `mobile/src/features/auth/guard.test.tsx` com `renderRouter` do
   `expo-router/testing-library`. O teste fica fora de `mobile/app/`, porque ali todo arquivo
   vira rota.
   - sem sessão, qualquer rota de `(app)` leva a `/entrar`;
@@ -291,28 +303,30 @@ encerrar a sessão pelo site, sair), também no [quickstart.md](quickstart.md), 
 
 ### Backend (D1)
 
-- [ ] T030 [US1] Em `backend/app/core/security.py`, o token de desafio ganha a declaração
+- [X] T030 [US1] Em `backend/app/core/security.py`, o token de desafio ganha a declaração
   `client` (`web` | `mobile`). `decode_challenge_token` devolve `(user_id, client)`. Ajustar os
   usos em `backend/app/modules/auth/service.py`.
-- [ ] T031 [US1] Em `backend/app/modules/auth/repository.py` e
+- [X] T031 [US1] Em `backend/app/modules/auth/repository.py` e
   `backend/app/modules/auth/service.py`:
   - `login(..., client)` e `complete_two_factor_login(..., client)` criam a sessão com o
     `client`;
   - `refresh(refresh_token, client)` recusa, com `Unauthenticated` e sem detectar reutilização,
     uma sessão de outro tipo.
-- [ ] T032 [US1] Em `backend/app/modules/auth/schemas.py` e `backend/app/modules/auth/router.py`:
+- [X] T032 [US1] Em `backend/app/modules/auth/schemas.py` e `backend/app/modules/auth/router.py`:
   - criar `MobileTokenResponse` e `MobileRefreshRequest`;
   - criar as rotas `/auth/mobile/login`, `/auth/mobile/login/2fa` e `/auth/mobile/refresh`, com
     `_login_limit` nas duas primeiras e o cabeçalho `X-Contai-Client: mobile` obrigatório;
   - os três endpoints não leem nem gravam o cookie;
   - `/auth/refresh` e `/auth/login/2fa` passam `client=web`.
-- [ ] T033 [US1] Acrescentar `client` ao schema de leitura de sessões e a
+- [X] T033 [US1] Acrescentar `client` ao schema de leitura de sessões e a
   `GET /api/v1/users/me/sessions`, em `backend/app/modules/users/schemas.py` e
   `backend/app/modules/users/router.py`.
-- [ ] T034 [P] [US1] Na tela de sessões do site
+- [X] T034 [P] [US1] Na tela de sessões do site
   (`frontend/src/features/settings/components/`, com o tipo em
   `frontend/src/features/settings/types.ts`), mostrar "App do Contaí" para `client = mobile`.
-  Atualizar o teste do componente.
+  Atualizar o teste do componente. O tipo `SessionInfo` está em
+  `frontend/src/features/auth/types.ts`, e o componente não tinha teste: foi criado
+  `SessionsSection.test.tsx`.
 
 ### App (D2)
 

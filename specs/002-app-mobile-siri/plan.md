@@ -50,6 +50,15 @@ As decisões e as fontes estão em [research.md](research.md).
 - **App, fontes**: `@expo-google-fonts/besley` e `@expo-google-fonts/atkinson-hyperlegible-next`.
 - **App, P2**: `expo-local-authentication`, `expo-notifications` (só lembretes locais) e
   `expo-document-picker`.
+- **App, além do previsto** (registrado em 2026-11-18, na T003):
+  - `react-dom`, na versão do SDK, porque o Expo Router o exige para resolver as dependências;
+  - `@types/node` explícito, porque os tipos do Expo para `process.env` dependem dele e o
+    TypeScript 6 não o carrega mais sozinho;
+  - `overrides` no `mobile/package.json` só para as faixas vulneráveis do `glob`
+    (`>=9.0.0 <14.0.2`) e do `minimatch` (`>=7.0.0 <11.0.1`), vindas da cadeia do Jest e do
+    `@expo/fingerprint`. A auditoria fica em zero, e o `minimatch` 3 do ESLint não muda;
+  - `expo-asset`, na versão do SDK, porque o `expo-font` o exige para carregar as fontes
+    (registrado na T017).
 - **Backend**: nenhuma dependência nova. Usa FastAPI, SQLAlchemy, Alembic, PyJWT e slowapi, que
   já estão no projeto.
 

@@ -25,7 +25,7 @@ class LimitKind(StrEnum):
 
 
 _TASKS: dict[LimitKind, tuple[AiTask, ...]] = {
-    LimitKind.QUESTION: (AiTask.CHAT, AiTask.TEXT_ENTRY),
+    LimitKind.QUESTION: (AiTask.CHAT, AiTask.TEXT_ENTRY, AiTask.VOICE_ENTRY),
     LimitKind.EXTRACTION: (AiTask.STATEMENT_EXTRACTION, AiTask.RECEIPT_EXTRACTION),
 }
 

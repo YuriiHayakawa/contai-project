@@ -68,10 +68,15 @@ export interface RecoveryCodes {
   recovery_codes: string[];
 }
 
+/** Quem abriu a sessão: o site ou o app do Contaí. */
+export type SessionClient = "web" | "mobile";
+
 /** Uma sessão ativa na tela de dispositivos conectados. */
 export interface SessionInfo {
   id: string;
   device: string;
+  /** `mobile` é o app do Contaí; `web`, o site. */
+  client: SessionClient;
   last_used_at: string;
   is_current: boolean;
 }

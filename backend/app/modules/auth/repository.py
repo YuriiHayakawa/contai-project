@@ -19,6 +19,7 @@ from app.modules.auth.models import (
     LoginAttempt,
     RecoveryCode,
     Session,
+    SessionClient,
     SessionRevokedReason,
     TwoFactorResetRequest,
 )
@@ -39,6 +40,7 @@ class AuthRepository:
         ip: str,
         now: datetime,
         expires_at: datetime,
+        client: SessionClient = SessionClient.WEB,
     ) -> Session:
         session = Session(
             user_id=user_id,
@@ -47,6 +49,7 @@ class AuthRepository:
             ip=ip[:45],
             last_used_at=now,
             expires_at=expires_at,
+            client=client,
         )
         self._session.add(session)
         await self._session.flush()

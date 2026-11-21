@@ -36,7 +36,13 @@ from app.modules.auth.errors import (
     InvalidOrExpiredToken,
     InvalidTwoFactorCode,
 )
-from app.modules.auth.models import EmailToken, EmailTokenType, Session, SessionRevokedReason
+from app.modules.auth.models import (
+    EmailToken,
+    EmailTokenType,
+    Session,
+    SessionClient,
+    SessionRevokedReason,
+)
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.two_factor import verify_second_factor
 from app.modules.categories.service import CategoryService
@@ -65,7 +71,10 @@ PRIVACY_POLICY_REQUIRED_MESSAGE = "Para criar a conta, é preciso aceitar a pol�
 
 @dataclass(frozen=True)
 class IssuedTokens:
-    """O que o login e o refresh entregam: o access token e o refresh token do cookie."""
+    """O que o login e o refresh entregam: o access token e o refresh token.
+
+    O site recebe o refresh token num cookie `httpOnly`; o app, no corpo (ADR 0012).
+    """
 
     access_token: str
     refresh_token: str
@@ -187,7 +196,15 @@ class AuthService:
 
     # ---------- login, refresh e logout
 
-    async def login(self, *, email: str, password: str, user_agent: str, ip: str) -> LoginOutcome:
+    async def login(
+        self,
+        *,
+        email: str,
+        password: str,
+        user_agent: str,
+        ip: str,
+        client: SessionClient = SessionClient.WEB,
+    ) -> LoginOutcome:
         """Entra com e-mail e senha.
 
         Um e-mail sem conta percorre exatamente o mesmo caminho de um com conta e senha errada:
@@ -196,7 +213,8 @@ class AuthService:
         está cadastrado (FR-008).
 
         Com a verificação em duas etapas ativa, a senha correta não dá acesso: devolve um desafio
-        para a segunda etapa (FR-012).
+        para a segunda etapa (FR-012). O desafio e a sessão levam o `client`: o app e o site
+        dividem a contagem de erros e o bloqueio, mas não as sessões (ADR 0012).
         """
         now = clock.utcnow()
         email_key = _login_attempt_key(email)
@@ -224,9 +242,9 @@ class AuthService:
             raise EmailNotVerified()
 
         if user.totp_enabled_at is not None:
-            return TwoFactorChallenge(challenge_token=create_challenge_token(user.id))
+            return TwoFactorChallenge(challenge_token=create_challenge_token(user.id, client))
 
-        return await self._open_session(user, user_agent=user_agent, ip=ip, now=now)
+        return await self._open_session(user, user_agent=user_agent, ip=ip, now=now, client=client)
 
     async def complete_two_factor_login(
         self,
@@ -236,13 +254,17 @@ class AuthService:
         recovery_code: str | None,
         user_agent: str,
         ip: str,
+        client: SessionClient = SessionClient.WEB,
     ) -> IssuedTokens:
         """Segunda etapa do login: confere o código do app ou um de recuperação (FR-012).
 
         Um código errado conta para o mesmo bloqueio do login. Entrar com um código válido
         cancela um pedido de desativação da verificação em duas etapas que esteja em aberto.
+        Um desafio pedido por outro cliente (o do site no app, ou o contrário) não vale.
         """
-        user_id = decode_challenge_token(challenge_token)
+        user_id, challenge_client = decode_challenge_token(challenge_token)
+        if challenge_client != client:
+            raise Unauthenticated()
         now = clock.utcnow()
         user = await self._users.get_by_id(user_id)
         if user is None or user.totp_enabled_at is None:
@@ -263,7 +285,7 @@ class AuthService:
         await self._auth.clear_login_attempts(email_key)
         await self._auth.cancel_open_reset_requests(user.id, now)
         await self._users.save(user)
-        return await self._open_session(user, user_agent=user_agent, ip=ip, now=now)
+        return await self._open_session(user, user_agent=user_agent, ip=ip, now=now, client=client)
 
     async def _record_failed_login(self, email_key: str, now: datetime) -> None:
         failures = await self._auth.count_failed_login(email_key, now)
@@ -292,7 +314,7 @@ class AuthService:
         return tokens + sessions
 
     async def _open_session(
-        self, user: User, *, user_agent: str, ip: str, now: datetime
+        self, user: User, *, user_agent: str, ip: str, now: datetime, client: SessionClient
     ) -> IssuedTokens:
         secret = new_token()
         auth_session = await self._auth.create_session(
@@ -302,6 +324,7 @@ class AuthService:
             ip=ip,
             now=now,
             expires_at=now + SESSION_TTL,
+            client=client,
         )
         return self._issue(auth_session, secret)
 
@@ -312,8 +335,14 @@ class AuthService:
             refresh_token=f"{auth_session.id}.{secret}",
         )
 
-    async def refresh(self, *, refresh_token: str, ip: str) -> IssuedTokens:
-        """Troca o refresh token por um novo. Um token antigo reapresentado revoga a sessão."""
+    async def refresh(
+        self, *, refresh_token: str, ip: str, client: SessionClient = SessionClient.WEB
+    ) -> IssuedTokens:
+        """Troca o refresh token por um novo. Um token antigo reapresentado revoga a sessão.
+
+        Uma sessão do outro cliente (do app no refresh do site, ou o contrário) recebe 401 sem
+        contar como reutilização: um engano de endpoint não derruba a sessão (ADR 0012).
+        """
         session_id, secret = _split_refresh_token(refresh_token)
         now = clock.utcnow()
         auth_session = await self._auth.get_session_by_id(session_id, for_update=True)
@@ -321,6 +350,7 @@ class AuthService:
             auth_session is None
             or auth_session.revoked_at is not None
             or auth_session.expires_at <= now
+            or auth_session.client != client
         ):
             raise Unauthenticated()
 
@@ -388,7 +418,7 @@ class AuthService:
         O `challenge_token` prova que a senha já foi conferida. A resposta é a mesma com ou sem
         pedido de verdade: nada aqui revela o estado da conta.
         """
-        user_id = decode_challenge_token(challenge_token)
+        user_id, _client = decode_challenge_token(challenge_token)
         user = await self._users.get_by_id(user_id)
         if user is not None and user.totp_enabled_at is not None:
             await enqueue_email(
