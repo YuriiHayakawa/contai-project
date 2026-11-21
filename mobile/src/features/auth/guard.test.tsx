@@ -44,6 +44,8 @@ const routes = {
   "(app)/_layout": AppLayout,
   "(app)/index": () => <Text>Painel do mês</Text>,
   "(app)/lancamentos": () => <Text>Lançamentos do mês</Text>,
+  "(app)/lancamento/novo": () => <Text>Novo lançamento</Text>,
+  "(app)/lancamento/[id]": () => <Text>Lançamento</Text>,
   "(auth)/_layout": AuthLayout,
   "(auth)/entrar": EntrarScreen,
 };

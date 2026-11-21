@@ -380,46 +380,59 @@ levar menos de 10 s (SC-002).
 
 ### Testes
 
-- [ ] T041 [P] [US2] Criar `mobile/src/features/transactions/components/TransactionForm.test.tsx`:
+- [X] T041 [P] [US2] Criar `mobile/src/features/transactions/components/TransactionForm.test.tsx`:
   - sugestões iniciais: conta mais usada, data de hoje em America/Sao_Paulo e categoria pela
     descrição, com "Outros" quando não há sugestão;
   - valor vazio, zero ou inválido mostra o erro no campo e não envia;
   - "Receita" troca as categorias.
-- [ ] T042 [P] [US2] Criar `mobile/src/features/transactions/hooks/useTransactions.test.tsx`:
+- [X] T042 [P] [US2] Criar `mobile/src/features/transactions/hooks/useTransactions.test.tsx`:
   - a lista do mês vem da mais recente para a mais antiga e muda com o mês;
   - criar, editar e excluir invalidam a lista e o painel;
   - excluir só acontece depois da confirmação.
 
 ### Implementação
 
-- [ ] T043 [P] [US2] Criar `mobile/src/features/accounts/services/accounts.ts`,
+- [X] T043 [P] [US2] Criar `mobile/src/features/accounts/services/accounts.ts`,
   `mobile/src/features/accounts/hooks/useAccounts.ts`,
   `mobile/src/features/categories/services/categories.ts` e
   `mobile/src/features/categories/hooks/useCategories.ts`, só leitura, com os tipos de
   `@web/features/accounts/types` e `@web/features/categories/types`.
-- [ ] T044 [US2] Criar `mobile/src/features/transactions/services/transactions.ts`: listar com
+- [X] T044 [US2] Criar `mobile/src/features/transactions/services/transactions.ts`: listar com
   filtros de mês e categoria, ver, criar, editar e excluir. Usa os tipos de
   `@web/features/transactions/types` e os endpoints que já existem.
-- [ ] T045 [US2] Criar os hooks em `mobile/src/features/transactions/hooks/`:
+- [X] T045 [US2] Criar os hooks em `mobile/src/features/transactions/hooks/`:
   - `useTransactions.ts` (por mês);
   - `useTransaction.ts`;
   - `useSaveTransaction.ts` e `useDeleteTransaction.ts`, que invalidam a lista e o painel;
   - `useMostUsedAccount.ts`: a conta mais frequente entre os últimos 50 lançamentos, ou a
     primeira conta ativa.
-- [ ] T046 [US2] Criar `mobile/src/features/transactions/components/TransactionForm.tsx`, com
+  - **Sugestão de categoria**: a API não tem rota para isso. O app usa a categoria do lançamento
+    mais recente com a mesma descrição (sem acentos nem maiúsculas) entre os últimos 50, ou
+    "Outros". É o mesmo critério feito no app da "conta mais usada" (achado M3 da análise), em
+    `mobile/src/features/transactions/suggestions.ts`. Uma categoria escolhida à mão não muda
+    mais sozinha.
+- [X] T046 [US2] Criar `mobile/src/features/transactions/components/TransactionForm.tsx`, com
   React Hook Form, `zodResolver` e o schema de `@web/features/transactions/schemas`, o seletor
   despesa/receita, o `MoneyInput`, a conta, a categoria, a data e a descrição.
-- [ ] T047 [US2] Criar `mobile/app/(app)/lancamento/novo.tsx` e
+  - A data é digitada como dia/mês/ano, com "Hoje" e "Ontem" a um toque
+    (`DateField.tsx`), sem biblioteca de calendário. Uma data que não existe, como 31/02, mostra
+    o erro do schema.
+- [X] T047 [US2] Criar `mobile/app/(app)/lancamento/novo.tsx` e
   `mobile/app/(app)/lancamento/[id].tsx`.
   - Na edição, a exclusão pede confirmação.
   - Transferências e parcelas aparecem só para leitura, com "Altere pelo site" e um link (FR-011).
   - Um usuário sem contas é orientado a criar uma pelo site.
-- [ ] T048 [US2] Criar `mobile/src/features/transactions/components/TransactionList.tsx`,
+  - O formulário de edição e a exclusão confirmada ficam em `EditTransaction.tsx`, e a tela só
+    de leitura em `ReadOnlyTransaction.tsx`, com "Alterar pelo site".
+- [X] T048 [US2] Criar `mobile/src/features/transactions/components/TransactionList.tsx`,
   `TransactionRow.tsx` e `MonthSwitcher.tsx`, e a tela
   `mobile/app/(app)/(abas)/lancamentos.tsx`.
   - A tela aceita o filtro de categoria vindo do painel.
   - Tem os estados de carregamento, erro e vazio.
   - Tem um botão flutuante "Lançar", de 56 pt.
+  - O filtro de categoria e o mês chegam pelos parâmetros `categoria` e `mes` da rota, que o
+    painel vai usar na T093.
+  - A aba Lançamentos entrou na barra.
 
 **Checkpoint (fim do D2)**: US1 e US2 funcionam no iPhone. Cronometrar o SC-002.
 
