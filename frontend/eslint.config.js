@@ -19,7 +19,8 @@ export default tseslint.config(
     },
   },
   {
-    files: ["vite.config.ts", "eslint.config.js"],
+    // A configuração e a função da Siri na Vercel (`api/`) rodam no Node.
+    files: ["vite.config.ts", "eslint.config.js", "api/**/*.ts"],
     languageOptions: { globals: { ...globals.node } },
   },
 );

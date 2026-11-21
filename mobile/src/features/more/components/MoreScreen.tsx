@@ -1,4 +1,5 @@
 import { paths } from "@web/lib/paths";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -23,11 +24,18 @@ const SITE_ACTIONS: { label: string; path: SitePath }[] = [
 /** "Mais": sair da conta e os atalhos para o que se faz pelo site. */
 export function MoreScreen() {
   const { colors } = useTheme();
+  const router = useRouter();
   const logout = useLogout();
   const [confirming, setConfirming] = useState(false);
 
   return (
     <Screen title="Mais">
+      <Button
+        label="Conectar à Siri"
+        variant="secondary"
+        accessibilityHint="Gera o token e mostra como montar o atalho."
+        onPress={() => router.push("/siri")}
+      />
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text variant="title3" accessibilityRole="header">
           Conta, pelo site

@@ -1,11 +1,15 @@
 """Entradas e saídas das rotas de Auth (contracts/rest-api.md)."""
 
+import uuid
 from datetime import datetime
-from typing import Annotated, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import BaseModel, StringConstraints, model_validator
 
 from app.core.security import MAX_PASSWORD_LENGTH
+
+if TYPE_CHECKING:
+    from app.modules.auth.personal_tokens import PersonalTokenView
 
 # Conferência de formato, sem dependência extra: algo antes do @, um domínio com ponto e
 # nenhum espaço. Se o endereço existe de verdade, quem diz é o link de confirmação.
@@ -137,3 +141,58 @@ class MessageResponse(BaseModel):
     """Resposta genérica dos pedidos que não revelam se um e-mail tem conta (FR-008)."""
 
     message: str
+
+
+# ---------- tokens pessoais da Siri (ADR 0012)
+
+PersonalTokenName = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)
+]
+
+
+class PersonalTokenCreate(BaseModel):
+    name: PersonalTokenName
+    default_account_id: uuid.UUID
+
+
+class PersonalTokenUpdate(BaseModel):
+    default_account_id: uuid.UUID
+
+
+class AccountRef(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class PersonalTokenRead(BaseModel):
+    """Um token ativo, sem o segredo nem o hash."""
+
+    id: uuid.UUID
+    name: str
+    default_account: AccountRef | None
+    # A conta padrão foi arquivada ou apagada: a Siri não lança frases sem conta citada.
+    needs_default_account: bool
+    created_at: datetime
+    last_used_at: datetime | None
+
+    @classmethod
+    def from_view(cls, view: "PersonalTokenView") -> Self:
+        account = view.default_account
+        return cls(
+            id=view.token.id,
+            name=view.token.name,
+            default_account=AccountRef(id=account.id, name=account.name) if account else None,
+            needs_default_account=view.needs_default_account,
+            created_at=view.token.created_at,
+            last_used_at=view.token.last_used_at,
+        )
+
+
+class PersonalTokenCreated(PersonalTokenRead):
+    """A criação: a única resposta que traz o token completo."""
+
+    token: str
+
+
+class PersonalTokenList(BaseModel):
+    items: list[PersonalTokenRead]

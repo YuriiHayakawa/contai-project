@@ -23,6 +23,8 @@ export default function AppLayout() {
           options={{ ...withHeader, title: "Novo lançamento" }}
         />
         <Stack.Screen name="lancamento/[id]" options={{ ...withHeader, title: "Lançamento" }} />
+        <Stack.Screen name="siri/index" options={{ ...withHeader, title: "Conectar à Siri" }} />
+        <Stack.Screen name="siri/novo-token" options={{ ...withHeader, title: "Novo token" }} />
       </Stack>
     </RequireSession>
   );

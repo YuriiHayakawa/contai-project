@@ -59,8 +59,10 @@ centavos".
 | `repeat` | Conta citada não encontrada | "Não encontrei essa conta. Pode repetir dizendo o nome da conta?" |
 | `repeat` | Conta citada ambígua | "Você tem mais de uma conta assim. Pode repetir dizendo qual?" |
 | `repeat` | Sem conta e sem conta padrão válida | "Não sei em qual conta lançar. Repita dizendo a conta, ou escolha uma conta padrão no app." |
+| `repeat` | Data que não se entende | "Não entendi quando foi. Pode repetir dizendo o dia?" |
 | `repeat` | Data futura | "A data ficou no futuro. Pode repetir dizendo quando foi?" |
 | `repeat` | Frase vazia | "Não ouvi nada. Pode repetir?" |
+| `repeat` | Frase com mais de 300 caracteres | "A frase ficou longa demais. Diga só um gasto, de forma curta." |
 | `unsupported` | Mais de um lançamento | "Entendi mais de um gasto. Diga um de cada vez." |
 | `unsupported` | Transferência ou parcelado | "Transferências e compras parceladas não dá para lançar por voz. Lance pelo app ou pelo site." |
 | `unsupported` | Pergunta | "Pela Siri eu só anoto gastos e entradas. Para perguntas, use o assistente no app." |

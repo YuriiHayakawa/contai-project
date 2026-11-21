@@ -39,10 +39,12 @@ from app.modules.auth.errors import (
 from app.modules.auth.models import (
     EmailToken,
     EmailTokenType,
+    PersonalTokenRevokedReason,
     Session,
     SessionClient,
     SessionRevokedReason,
 )
+from app.modules.auth.personal_tokens import PersonalTokenService
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.two_factor import verify_second_factor
 from app.modules.categories.service import CategoryService
@@ -302,7 +304,8 @@ class AuthService:
         )
 
     async def purge_expired_auth_data(self) -> int:
-        """Apaga tokens de e-mail vencidos e sessões expiradas ou revogadas há mais de 30 dias.
+        """Apaga tokens de e-mail vencidos, e sessões e tokens da Siri expirados ou revogados há
+        mais de 30 dias.
 
         Devolve o total de linhas apagadas, só para o log do worker.
         """
@@ -311,7 +314,8 @@ class AuthService:
         sessions = await self._auth.delete_stale_sessions(
             now=now, revoked_before=now - REVOKED_SESSION_RETENTION
         )
-        return tokens + sessions
+        personal_tokens = await PersonalTokenService(self._session).purge_revoked()
+        return tokens + sessions + personal_tokens
 
     async def _open_session(
         self, user: User, *, user_agent: str, ip: str, now: datetime, client: SessionClient
@@ -408,6 +412,10 @@ class AuthService:
         await self._auth.clear_login_attempts(_login_attempt_key(user.email))
         await self._auth.revoke_all_sessions(
             user.id, reason=SessionRevokedReason.PASSWORD_RESET, now=now
+        )
+        # A Siri também perde o acesso: quem redefiniu a senha pode ter perdido o celular.
+        await PersonalTokenService(self._session).revoke_all(
+            user.id, PersonalTokenRevokedReason.PASSWORD_RESET
         )
 
     # ---------- desativação da verificação em duas etapas (recuperação, FR-013)

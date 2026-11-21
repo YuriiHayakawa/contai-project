@@ -3,12 +3,15 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.database import get_session
 from app.core.rate_limit import limiter, user_or_ip
+from app.modules.assistant import voice_speech
 from app.modules.assistant.schemas import (
     ConversationDetail,
     ConversationPage,
@@ -18,9 +21,17 @@ from app.modules.assistant.schemas import (
     ProposalSaved,
     SuggestionList,
     UsageRead,
+    VoiceEntryRequest,
+    VoiceEntryResult,
 )
 from app.modules.assistant.service import AssistantService
-from app.modules.auth.dependencies import CurrentUserDep
+from app.modules.assistant.voice import (
+    STATUS_BY_OUTCOME,
+    VoiceEntryService,
+    VoiceOutcome,
+    deadline_from_header,
+)
+from app.modules.auth.dependencies import CurrentUserDep, PersonalTokenDep, VoiceUnauthorized
 
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
@@ -164,3 +175,53 @@ async def discard_proposal(
     message_id: uuid.UUID, current: CurrentUserDep, service: AssistantServiceDep
 ) -> None:
     await service.discard_proposal(current.id, message_id)
+
+
+# ---------- lançamento por voz (feature 002): a única rota que aceita o token pessoal
+
+voice_router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
+
+
+def _voice_response(result: VoiceEntryResult) -> JSONResponse:
+    return JSONResponse(
+        status_code=STATUS_BY_OUTCOME[VoiceOutcome(result.outcome)],
+        content=result.model_dump(mode="json"),
+    )
+
+
+@voice_router.post(
+    "/entries",
+    status_code=status.HTTP_201_CREATED,
+    summary="Lançar um gasto ou uma entrada pela Siri",
+    description=(
+        "Exige `Authorization: Bearer ctp_…`, um token pessoal. `X-Contai-Deadline` é o prazo "
+        "absoluto, em milissegundos Unix; sem ele, a chegada mais 5,5 s. A resposta é sempre um "
+        "`VoiceEntryResult`, e só a de 201 grava."
+    ),
+    response_model=VoiceEntryResult,
+    responses={code: {"model": VoiceEntryResult} for code in (401, 422, 429, 503)},
+)
+async def create_voice_entry(
+    body: VoiceEntryRequest,
+    token: PersonalTokenDep,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    x_contai_deadline: Annotated[str | None, Header()] = None,
+) -> JSONResponse:
+    deadline = deadline_from_header(x_contai_deadline, clock.utcnow())
+    result = await VoiceEntryService(session).enter(token, body.phrase, deadline)
+    return _voice_response(
+        VoiceEntryResult(
+            outcome=result.outcome, speech=result.speech, transaction_id=result.transaction_id
+        )
+    )
+
+
+async def _voice_unauthorized(request: Request, exc: Exception) -> JSONResponse:
+    return _voice_response(
+        VoiceEntryResult(outcome="unauthorized", speech=voice_speech.UNAUTHORIZED)
+    )
+
+
+def register_voice_errors(app: FastAPI) -> None:
+    """Todas as falhas do token pessoal recebem a mesma resposta, no formato da voz."""
+    app.add_exception_handler(VoiceUnauthorized, _voice_unauthorized)

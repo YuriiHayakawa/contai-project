@@ -12,6 +12,7 @@ import { MoreScreen } from "./MoreScreen";
 
 jest.mock("@/features/auth/services/auth");
 jest.mock("expo-linking", () => ({ openURL: jest.fn(async () => true) }));
+jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock("@/lib/config", () => ({
   getConfig: () => ({ apiUrl: "https://contai-project.vercel.app", shortcutUrl: null }),
 }));

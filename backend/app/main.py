@@ -15,7 +15,9 @@ from app.core.logging import RequestIdMiddleware, configure_logging
 from app.core.proxy import ProxySecretMiddleware
 from app.core.rate_limit import register_rate_limiter
 from app.modules.accounts.router import router as accounts_router
+from app.modules.assistant.router import register_voice_errors, voice_router
 from app.modules.assistant.router import router as assistant_router
+from app.modules.auth.router import personal_tokens_router
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.dashboard.router import router as dashboard_router
@@ -118,15 +120,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_error_handlers(app)
     register_rate_limiter(app)
+    register_voice_errors(app)
 
     app.include_router(health.router)
     app.include_router(auth_router)
+    app.include_router(personal_tokens_router)
     app.include_router(users_router)
     app.include_router(accounts_router)
     app.include_router(categories_router)
     app.include_router(transactions_router)
     app.include_router(imports_router)
     app.include_router(assistant_router)
+    app.include_router(voice_router)
     app.include_router(dashboard_router)
     app.include_router(worker_router)
     return app

@@ -26,7 +26,8 @@ from app.modules.auth.errors import (
     TwoFactorNotEnabled,
     TwoFactorSetupRequired,
 )
-from app.modules.auth.models import SessionRevokedReason
+from app.modules.auth.models import PersonalTokenRevokedReason, SessionRevokedReason
+from app.modules.auth.personal_tokens import PersonalTokenService
 from app.modules.auth.repository import AuthRepository
 from app.modules.auth.two_factor import verify_second_factor
 from app.modules.users import emails
@@ -89,6 +90,10 @@ class UserService:
             reason=SessionRevokedReason.PASSWORD_CHANGED,
             now=clock.utcnow(),
             except_session_id=current_session_id,
+        )
+        # Os tokens da Siri caem todos (FR-020): o aparelho que trocou a senha conecta de novo.
+        await PersonalTokenService(self._session).revoke_all(
+            user_id, PersonalTokenRevokedReason.PASSWORD_CHANGED
         )
 
     async def accept_ai_documents(self, user_id: uuid.UUID) -> None:

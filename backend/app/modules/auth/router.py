@@ -1,5 +1,6 @@
 """Rotas de autenticação. Só validam a entrada, chamam o serviço e formatam a resposta."""
 
+import uuid
 from datetime import timedelta
 from typing import Annotated
 
@@ -14,6 +15,7 @@ from app.modules.auth.dependencies import CurrentUserDep
 from app.modules.auth.emails import SPAM_REMINDER
 from app.modules.auth.errors import MobileClientRequired, RefreshNotFromApp
 from app.modules.auth.models import SessionClient
+from app.modules.auth.personal_tokens import PersonalTokenService
 from app.modules.auth.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
@@ -22,6 +24,11 @@ from app.modules.auth.schemas import (
     MobileLoginResponse,
     MobileRefreshRequest,
     MobileTokenResponse,
+    PersonalTokenCreate,
+    PersonalTokenCreated,
+    PersonalTokenList,
+    PersonalTokenRead,
+    PersonalTokenUpdate,
     RegisterRequest,
     ResendVerificationRequest,
     ResetPasswordRequest,
@@ -375,3 +382,63 @@ async def confirm_two_factor_reset(
 )
 async def cancel_two_factor_reset(body: TwoFactorResetCancelBody, service: AuthServiceDep) -> None:
     await service.cancel_two_factor_reset(body.token)
+
+
+# ---------- tokens pessoais da Siri (ADR 0012): só a sessão normal os gerencia
+
+personal_tokens_router = APIRouter(prefix="/api/v1/personal-tokens", tags=["personal-tokens"])
+
+
+def get_personal_token_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> PersonalTokenService:
+    return PersonalTokenService(session)
+
+
+PersonalTokenServiceDep = Annotated[PersonalTokenService, Depends(get_personal_token_service)]
+
+
+@personal_tokens_router.get("", summary="Tokens da Siri ativos, do mais novo para o mais antigo")
+async def list_personal_tokens(
+    current: CurrentUserDep, service: PersonalTokenServiceDep
+) -> PersonalTokenList:
+    views = await service.list_active(current.id)
+    return PersonalTokenList(items=[PersonalTokenRead.from_view(view) for view in views])
+
+
+@personal_tokens_router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    summary="Criar um token da Siri",
+    description="O token completo aparece só nesta resposta. No máximo 5 ativos por usuário.",
+)
+async def create_personal_token(
+    body: PersonalTokenCreate, current: CurrentUserDep, service: PersonalTokenServiceDep
+) -> PersonalTokenCreated:
+    view, token = await service.create(
+        current.id, name=body.name, default_account_id=body.default_account_id
+    )
+    return PersonalTokenCreated(**PersonalTokenRead.from_view(view).model_dump(), token=token)
+
+
+@personal_tokens_router.patch("/{token_id}", summary="Trocar a conta padrão de um token")
+async def update_personal_token(
+    token_id: uuid.UUID,
+    body: PersonalTokenUpdate,
+    current: CurrentUserDep,
+    service: PersonalTokenServiceDep,
+) -> PersonalTokenRead:
+    view = await service.set_default_account(current.id, token_id, body.default_account_id)
+    return PersonalTokenRead.from_view(view)
+
+
+@personal_tokens_router.delete(
+    "/{token_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revogar um token",
+    description="A revogação vale já na requisição seguinte e não pode ser desfeita.",
+)
+async def revoke_personal_token(
+    token_id: uuid.UUID, current: CurrentUserDep, service: PersonalTokenServiceDep
+) -> None:
+    await service.revoke(current.id, token_id)

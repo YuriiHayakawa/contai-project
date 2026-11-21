@@ -105,3 +105,24 @@ class MessageCreate(BaseModel):
     content: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_QUESTION_LENGTH)
     ]
+
+
+# ---------- lançamento por voz (feature 002)
+
+
+class VoiceEntryRequest(BaseModel):
+    """A frase que a Siri entendeu. O tamanho de 1 a 300 é conferido pelo serviço, que responde
+    no formato da voz em vez do erro de validação comum."""
+
+    phrase: Annotated[str, StringConstraints(max_length=2_000)]
+
+
+class VoiceEntryResult(BaseModel):
+    """Toda resposta da voz tem este formato; o atalho lê só `speech`."""
+
+    outcome: Literal[
+        "saved", "repeat", "unsupported", "limit", "unavailable", "deadline", "unauthorized"
+    ]
+    speech: str
+    # Só quando `outcome = saved`. A função da Vercel não o repassa ao atalho.
+    transaction_id: uuid.UUID | None = None
