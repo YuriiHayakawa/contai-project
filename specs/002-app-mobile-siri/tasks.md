@@ -784,8 +784,11 @@ passo 6.
   `mobile/app/(app)/lancamento/[id].tsx`.
   - Na linha da lista, o "Desfazer" fica ao lado da linha, e não dentro dela: um botão dentro
     de outro some para o VoiceOver.
-- [ ] T088 **FORA DO CÓDIGO (M8)**: revisar o texto novo da política de privacidade (T085) antes
+- [X] T088 **FORA DO CÓDIGO (M8)**: revisar o texto novo da política de privacidade (T085) antes
   do deploy.
+  - **Resultado em 2026-11-22**: aprovada a versão 4, com um acréscimo no trecho da frase
+    guardada: "Por isso, fale só o gasto, sem informações pessoais." Os 10 segundos do
+    "Refazer", em que a frase fica no token de restauração do aparelho, ficam fora do texto.
 - [ ] T089 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com o CI local verde, para publicar
   o desfazer e o destaque. Conferir o passo 6 do quickstart no app e no site.
   - **Achado em 2026-11-22**: o "Desfazer" do app respondia "Não encontramos o que você
