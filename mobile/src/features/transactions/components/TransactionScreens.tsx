@@ -2,7 +2,7 @@
 // mostram os estados de carregamento, erro e "sem contas".
 import { paths } from "@web/lib/paths";
 import { useRouter } from "expo-router";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -13,6 +13,8 @@ import { errorMessage } from "@/lib/api-client";
 import { openSite } from "@/lib/site";
 
 import { activeAccounts, useAccounts } from "../../accounts/hooks/useAccounts";
+import { useMarkProposalSaved } from "../../assistant/hooks/useProposalActions";
+import { takeProposalDraft } from "../../assistant/proposal-draft";
 import { useCategories } from "../../categories/hooks/useCategories";
 import { useRecentTransactions } from "../hooks/useMostUsedAccount";
 import { useSaveTransaction } from "../hooks/useSaveTransaction";
@@ -45,6 +47,9 @@ export function NewTransactionScreen() {
   const toast = useToast();
   const data = useFormData();
   const save = useSaveTransaction();
+  // O "Ajustar" de uma proposta do assistente: lido uma vez, ao abrir o formulário.
+  const [draft] = useState(takeProposalDraft);
+  const markSaved = useMarkProposalSaved();
 
   if (data.pending) {
     return (
@@ -79,14 +84,17 @@ export function NewTransactionScreen() {
         accounts={data.accounts}
         categories={data.categories}
         recent={data.recent}
+        preset={draft?.values}
         submitLabel="Salvar lançamento"
         saving={save.isPending}
         saveError={save.error}
         onSubmit={(input) =>
           save.mutate(
-            { input },
+            { input: draft ? { ...input, source: "assistant" } : input },
             {
-              onSuccess: () => {
+              onSuccess: (transaction) => {
+                // A proposta do assistente volta marcada como salva (FR-012).
+                if (draft) markSaved.mutate({ messageId: draft.messageId, transaction });
                 toast.show({ message: "Lançamento salvo.", kind: "success" });
                 router.back();
               },

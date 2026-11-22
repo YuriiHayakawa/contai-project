@@ -29,6 +29,8 @@ export interface TransactionFormProps {
   recent: Transaction[];
   /** Na edição, o lançamento; sem ele, um lançamento novo. */
   transaction?: Transaction;
+  /** Um lançamento novo já preenchido, como o "Ajustar" de uma proposta do assistente. */
+  preset?: TransactionPreset;
   submitLabel: string;
   onSubmit: (input: TransactionInput) => void;
   saving?: boolean;
@@ -41,8 +43,18 @@ const TYPE_OPTIONS = [
   { value: "income" as const, label: "Receita" },
 ];
 
+/** Os valores de uma proposta do assistente; uma conta ou categoria `null` fica para escolher. */
+export interface TransactionPreset {
+  type: EntryType;
+  amountCents: number;
+  description: string;
+  date: string;
+  accountId: string | null;
+  categoryId: string | null;
+}
+
 function initialValues(props: TransactionFormProps): TransactionFormValues {
-  const { transaction, recent, accounts, categories } = props;
+  const { transaction, preset, recent, accounts, categories } = props;
   const base = { installments: "1", fromAccountId: "", toAccountId: "" };
   if (transaction) {
     return {
@@ -54,6 +66,21 @@ function initialValues(props: TransactionFormProps): TransactionFormValues {
       accountId: transaction.account_id,
       date: transaction.date,
       notes: transaction.notes ?? "",
+    };
+  }
+  if (preset) {
+    return {
+      ...base,
+      type: preset.type,
+      amountCents: preset.amountCents,
+      description: preset.description,
+      categoryId:
+        preset.categoryId ??
+        suggestCategoryId(preset.description, preset.type, recent, categories) ??
+        "",
+      accountId: preset.accountId ?? "",
+      date: preset.date,
+      notes: "",
     };
   }
   return {
@@ -74,9 +101,19 @@ function initialValues(props: TransactionFormProps): TransactionFormValues {
  * mão não muda mais sozinha.
  */
 export function TransactionForm(props: TransactionFormProps) {
-  const { accounts, categories, recent, transaction, submitLabel, onSubmit, saving, saveError } =
-    props;
-  const categoryChosen = useRef(transaction !== undefined);
+  const {
+    accounts,
+    categories,
+    recent,
+    transaction,
+    preset,
+    submitLabel,
+    onSubmit,
+    saving,
+    saveError,
+  } = props;
+
+  const categoryChosen = useRef(transaction !== undefined || Boolean(preset?.categoryId));
   const { control, getValues, handleSubmit, setValue } = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
     defaultValues: initialValues(props),

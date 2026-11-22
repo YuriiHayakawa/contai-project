@@ -837,24 +837,34 @@ iPhone.
 
 **Independent Test**: os três passos da história 6 na spec.
 
-- [ ] T094 [P] [US6] Criar `mobile/src/features/assistant/hooks/useConversation.test.tsx` e
+- [X] T094 [P] [US6] Criar `mobile/src/features/assistant/hooks/useConversation.test.tsx` e
   `mobile/src/features/assistant/components/ProposalCard.test.tsx`.
   - Enviar uma pergunta mostra "Preparando a resposta…" e depois a resposta.
   - A proposta tem "Salvar" (só com os campos completos), "Ajustar" (abre o formulário
     preenchido) e "Descartar".
   - O limite diário mostra a mensagem do site com o horário em que volta.
   - Apagar uma conversa pede confirmação.
-- [ ] T095 [P] [US6] Criar `mobile/src/features/assistant/services/assistant.ts`, com
+  - A confirmação de apagar fica no teste do histórico (`AssistantHome`), no mesmo arquivo.
+- [X] T095 [P] [US6] Criar `mobile/src/features/assistant/services/assistant.ts`, com
   conversas, mensagens, proposta salva e descartada, e uso, e
   `mobile/src/features/assistant/types.ts`, a partir de `@web/features/assistant/types`.
-- [ ] T096 [US6] Criar `mobile/src/features/assistant/hooks/useConversations.ts`,
+- [X] T096 [US6] Criar `mobile/src/features/assistant/hooks/useConversations.ts`,
   `useConversation.ts`, `useAsk.ts` e `useProposalActions.ts`. Salvar invalida a lista e o
   painel.
-- [ ] T097 [US6] Criar `mobile/src/features/assistant/components/MessageBubble.tsx`,
+  - `useAssistantUsage` e `useDeleteConversation` ficam em `useConversations.ts`.
+- [X] T097 [US6] Criar `mobile/src/features/assistant/components/MessageBubble.tsx`,
   `ProposalCard.tsx` e `Composer.tsx`, e as telas `mobile/app/(app)/(abas)/assistente.tsx`
   (histórico e nova conversa) e `mobile/app/(app)/assistente/[id].tsx` (a conversa).
   - "Ajustar" abre `lancamento/novo` preenchido.
   - O resultado volta para marcar a proposta como salva.
+  - As telas ficam em `mobile/src/features/assistant/components/AssistantHome.tsx` e
+    `ConversationView.tsx`. A rota `assistente/nova` é a conversa que nasce com a primeira
+    pergunta.
+  - "Ajustar" guarda os valores num rascunho em memória (`assistant/proposal-draft.ts`), que o
+    formulário de lançamento novo lê uma vez. O formulário ganhou a prop `preset`, e o
+    lançamento salvo marca a proposta.
+  - A aba Assistente entrou na barra. Para o corte 2 (T131), basta tirar o `Tabs.Screen` dela e
+    as rotas `assistente`.
 
 ---
 

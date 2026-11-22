@@ -157,4 +157,32 @@ describe("formulário de lançamento", () => {
       notes: "Jantar",
     });
   });
+
+  it("com a proposta do assistente, vem preenchido e deixa escolher o que faltou", async () => {
+    const { onSubmit, user } = await renderForm({
+      preset: {
+        type: "expense",
+        amountCents: 3250,
+        description: "Almoço",
+        date: "2026-11-20",
+        accountId: null,
+        categoryId: "cat-food",
+      },
+    });
+
+    expect(screen.getByLabelText("Valor em reais").props.value).toBe("32,50");
+    expect(screen.getByLabelText("Data").props.value).toBe("20/11/2026");
+    expect(screen.getByRole("button", { name: "Categoria: Alimentação" })).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Conta: Escolha" })).toBeOnTheScreen();
+
+    await user.press(screen.getByRole("button", { name: "Salvar lançamento" }));
+    expect(await screen.findByText("Escolha uma conta.")).toBeOnTheScreen();
+    await user.press(screen.getByRole("button", { name: "Conta: Escolha" }));
+    await user.press(screen.getByRole("radio", { name: "Nubank" }));
+    await user.press(screen.getByRole("button", { name: "Salvar lançamento" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 3250, account_id: "acc-nubank", date: "2026-11-20" }),
+    );
+  });
 });
