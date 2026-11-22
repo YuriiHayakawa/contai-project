@@ -1,6 +1,6 @@
 import type { TransactionFilters } from "@web/features/transactions/types";
 import { type YearMonth, monthRange } from "@web/lib/dates";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 
 import { listTransactions } from "../services/transactions";
 
@@ -19,6 +19,8 @@ export function useTransactions(month: YearMonth, categoryId?: string | null) {
     queryFn: ({ pageParam, signal }) => listTransactions(filters, pageParam, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor,
+    // Ao trocar de mês, a lista anterior fica até a nova chegar, sem piscar.
+    placeholderData: keepPreviousData,
   });
   return {
     ...query,

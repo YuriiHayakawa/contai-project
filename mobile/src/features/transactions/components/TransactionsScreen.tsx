@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Text } from "@/components/ui/Text";
 import { errorMessage } from "@/lib/api-client";
+import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import { useRefetchOnFocus } from "@/lib/use-refetch-on-focus";
 import { radius, space } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
@@ -50,6 +51,7 @@ export function TransactionsScreen() {
   const accounts = useAccounts();
   const categories = useCategories();
   const undo = useUndoVoice();
+  const pull = usePullToRefresh(transactions.refetch);
   useRefetchOnFocus(transactions.refetch);
 
   const categoryName =
@@ -126,8 +128,8 @@ export function TransactionsScreen() {
         undoingId={undo.isPending ? (undo.variables?.id ?? null) : null}
         header={header}
         empty={empty}
-        refreshing={transactions.isRefetching && !transactions.isFetchingNextPage}
-        onRefresh={() => void transactions.refetch()}
+        refreshing={pull.refreshing}
+        onRefresh={pull.onRefresh}
         loadingMore={transactions.isFetchingNextPage}
         onEndReached={() => {
           if (transactions.hasNextPage && !transactions.isFetchingNextPage) {

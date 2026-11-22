@@ -9,6 +9,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { Screen } from "@/components/ui/Screen";
 import { Text } from "@/components/ui/Text";
 import { errorMessage } from "@/lib/api-client";
+import { usePullToRefresh } from "@/lib/use-pull-to-refresh";
 import { radius, space } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
 
@@ -29,6 +30,7 @@ export function DashboardView() {
   const { colors } = useTheme();
   const [month, setMonth] = useState<YearMonth>(yearMonthOf());
   const dashboard = useDashboard(month);
+  const pull = usePullToRefresh(dashboard.refetch);
 
   let content;
   if (dashboard.status === "loading") {
@@ -85,11 +87,7 @@ export function DashboardView() {
   }
 
   return (
-    <Screen
-      title="Painel"
-      refreshing={dashboard.refreshing}
-      onRefresh={() => void dashboard.refetch()}
-    >
+    <Screen title="Painel" refreshing={pull.refreshing} onRefresh={pull.onRefresh}>
       <VoiceHighlights />
       {content}
     </Screen>

@@ -1,6 +1,6 @@
 import type { DashboardCategories, DashboardSummary } from "@web/features/dashboard/types";
 import type { YearMonth } from "@web/lib/dates";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { useRefetchOnFocus } from "@/lib/use-refetch-on-focus";
 
@@ -24,10 +24,14 @@ export function useDashboard(month: YearMonth) {
   const summary = useQuery({
     queryKey: [...dashboardQueryKey, "summary", month],
     queryFn: ({ signal }) => getSummary(month, signal),
+    // Ao trocar de mês, os números anteriores ficam até os novos chegarem: a tela não pisca
+    // para "Carregando…" nem volta a rolagem para o topo.
+    placeholderData: keepPreviousData,
   });
   const categories = useQuery({
     queryKey: [...dashboardQueryKey, "categories", month],
     queryFn: ({ signal }) => getCategories(month, signal),
+    placeholderData: keepPreviousData,
   });
   // A contagem é de lançamentos: um lançamento novo, em qualquer tela, a atualiza.
   const count = useQuery({
@@ -53,9 +57,5 @@ export function useDashboard(month: YearMonth) {
     };
   }
 
-  return {
-    ...state,
-    refetch,
-    refreshing: summary.isRefetching || categories.isRefetching,
-  };
+  return { ...state, refetch };
 }
