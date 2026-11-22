@@ -72,7 +72,7 @@ P1 verde no roteiro do iPhone. A P3 (US13) fica para depois da entrega e não te
 |-------|------|---------|---------------|
 | **D1** | 18–19/11 | T001–T034 | O app abre no Expo Go com tema e fontes. A prova do `@web` está decidida. O login do app funciona no backend local, com testes. |
 | **D2** | 19–20/11 | T035–T048 | US1 e US2 funcionam no iPhone contra a produção, depois da M3. |
-| **D3** | 20–21/11 | T049–T073 | US3: a Siri lança em produção. M4, M5 e M6 feitas. |
+| **D3** | 20–21/11 | T049–T073 | US3: a Siri lança em produção. M4 e M5 feitas; M6 cancelada (entrega em vídeo). |
 | **D4** | 21–22/11 | T074–T093 | US4 e US5 no app e no site. A política de privacidade está revisada (M8). |
 | **D5** | 23/11 | T094–T097 e o **corte 1** (T130) | US6 pronta, ou cortada. |
 | **D6** | 24/11 | **Corte 2** (T131), T098–T101 (se não cortadas) e T140–T147 | US7 pronta, ou cortada. Acabamento feito e roteiro completo (M7). |
@@ -153,7 +153,7 @@ P1 verde no roteiro do iPhone. A P3 (US13) fica para depois da entrega e não te
 - [X] T009 [P] Criar `mobile/.env.example`, com as variáveis documentadas, e
   `mobile/src/lib/config.ts`.
   - Variáveis: `EXPO_PUBLIC_API_URL=https://contai-project.vercel.app` e
-    `EXPO_PUBLIC_SHORTCUT_URL=`, vazia até a M6.
+    `EXPO_PUBLIC_SHORTCUT_URL=`, que fica vazia: a M6 foi cancelada (entrega em vídeo).
   - O `config.ts` lê as variáveis e valida com zod: URL https obrigatória fora do
     desenvolvimento; link do atalho opcional.
   - Garantir `mobile/.env` no `.gitignore`.
@@ -619,9 +619,9 @@ passos 1 a 5, 7 e 8.
   - **Consequências**: o risco residual na fronteira do prazo.
 
   Referências: research, seções 1 e 2.
-- [ ] T066 **FORA DO CÓDIGO (M4)**: criar na Vercel a variável `API_ORIGIN_URL` com o valor
+- [X] T066 **FORA DO CÓDIGO (M4)**: criar na Vercel a variável `API_ORIGIN_URL` com o valor
   `https://contai-api.onrender.com`, em Production.
-- [ ] T067 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com o CI local verde. Depois do
+- [X] T067 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com o CI local verde. Depois do
   deploy, conferir com `curl`:
   - `POST https://contai-project.vercel.app/api/siri` sem token responde 200 com
     `outcome: unauthorized`;
@@ -648,18 +648,27 @@ passos 1 a 5, 7 e 8.
   - `mobile/app/(app)/siri/novo-token.tsx`: nome e conta padrão; no limite de 5, pede para
     revogar um.
   - O "Conectar à Siri" da tela Mais entrou aqui.
-- [ ] T072 **FORA DO CÓDIGO (M5)**: com o deploy no ar, montar o atalho "Contaí" à mão, seguindo
+- [X] T072 **FORA DO CÓDIGO (M5)**: com o deploy no ar, montar o atalho "Contaí" à mão, seguindo
   a tela `ShortcutSteps`.
   - Falar com a Siri e medir o tempo até a resposta, com o servidor acordado e com o servidor
     dormindo.
   - Se a Siri desistir antes de 8 s, ou tolerar mais, ajustar `VOICE_RELAY_TIMEOUT_MS` e
     `VOICE_API_BUDGET_MS` na Vercel.
   - Anotar o resultado em `specs/002-app-mobile-siri/research.md`, seção 1.
-- [ ] T073 **FORA DO CÓDIGO (M6)**: no mesmo atalho, trocar o token por uma pergunta de
+  - **Resultado em 2026-11-22**: com o servidor acordado, a resposta veio bem rápido. Com o
+    servidor dormindo, a Siri respondeu "O Contaí está acordando… Tente de novo em um
+    minuto", como previsto. Os 8 s e os 5,5 s ficam como estão. O primeiro erro era uma
+    digitação errada de `Bearer` no atalho, e não do código.
+- [X] T073 **CANCELADA em 2026-11-22**: a entrega virou um vídeo gravado pelo mantenedor, e
+  ninguém além dele instala o atalho. `EXPO_PUBLIC_SHORTCUT_URL` fica vazia: o botão
+  "Instalar o atalho" continua escondido (já é assim, com teste em
+  `NewTokenResult.test.tsx`), e o passo a passo manual continua no app. O texto original
+  fica abaixo, para registro.
+  - ~~FORA DO CÓDIGO (M6): no mesmo atalho, trocar o token por uma pergunta de
   importação ("Cole o token que o app do Contaí mostrou").
   - Conferir que nenhuma ação guarda um token (FR-017a).
   - Compartilhar pelo iCloud e pôr o link em `EXPO_PUBLIC_SHORTCUT_URL`, no `mobile/.env`.
-  - Instalar pelo link num atalho novo e confirmar que funciona.
+  - Instalar pelo link num atalho novo e confirmar que funciona.~~
 
 **Checkpoint (fim do D3)**: "E aí Siri, Contaí" lança em produção, e frases ambíguas não gravam
 nada.
@@ -929,13 +938,14 @@ iPhone.
   `specs/002-app-mobile-siri/validation/resultado-roteiro.md` e abrir uma tarefa de correção
   para cada falha.
 - [ ] T150 **FORA DO CÓDIGO (M1)**, 25/11: conferir no Expo Go que o SDK continua 58.
-- [ ] T151 **FORA DO CÓDIGO (M9)**, 25/11:
-  - Acordar o servidor alguns minutos antes da apresentação, abrindo o app.
+- [ ] T151 **FORA DO CÓDIGO (M9)**, antes de gravar o vídeo:
+  - Acordar o servidor alguns minutos antes da gravação, abrindo o app.
   - Ou criar no cron-job.org um job temporário que chama
-    `https://contai-project.vercel.app/api/v1/health` a cada 10 min, só durante a janela da
-    apresentação, e apagá-lo depois.
-- [ ] T152 **FORA DO CÓDIGO**, 25/11: conferir que o token da demonstração está ativo e que "E
-  aí Siri, Contaí" responde.
+    `https://contai-project.vercel.app/api/v1/health` a cada 10 min, só durante a gravação,
+    e apagá-lo depois.
+  - Opcional: gravar também uma frase com o servidor dormindo, para mostrar o "acordando".
+- [ ] T152 **FORA DO CÓDIGO**, na gravação: conferir que o token da demonstração está ativo e
+  que "E aí Siri, Contaí" responde. Gravar o vídeo e entregar até 25/11.
 - [ ] T153 **FORA DO CÓDIGO (M10)**, depois da entrega: se a T008 tiver gerado um desvio
   (cópias em `mobile/src/shared/`), decidir quando voltar ao `@web` e atualizar o
   Complexity Tracking do plano.
@@ -1035,7 +1045,7 @@ Fica para depois da entrega. O atalho para o site (T039) atende até lá.
 | T066 (M4) | — | T067 |
 | T067 (M3) | T049–T065 e T066 | T072 (M5) |
 | T072 (M5) | T067 e T070 | T073 (M6) e o ajuste do tempo de espera |
-| T073 (M6) | T072 | O link do atalho no app (`EXPO_PUBLIC_SHORTCUT_URL`) |
+| T073 (M6, cancelada) | — | Nada: o link não entra no app |
 | T089 (M3) | T074–T088 | Passo 6 do quickstart em produção |
 | T146 (M7) | T144 e T145 | T147, corte final e P2 |
 
@@ -1073,9 +1083,12 @@ T082 frontend types.ts (destrava o site e o app ao mesmo tempo)
 
 ## Implementation Strategy
 
-### MVP para a apresentação
+### MVP para o vídeo da entrega
 
-O MVP é US1 + US2 + US3 + US4 + US5, até o fim do D4. Esse é o caminho que o avaliador vê:
+**Mudança em 2026-11-22**: a entrega é um vídeo gravado pelo mantenedor, sem o professor
+instalar nada. A M6 (link do iCloud do atalho) foi cancelada, e o atalho é montado à mão.
+
+O MVP é US1 + US2 + US3 + US4 + US5, até o fim do D4. Esse é o caminho que o vídeo mostra:
 entrar → lançar → falar com a Siri → ver e desfazer → painel. A US6 e a US7 são acréscimos que
 os cortes T130 e T131 podem retirar sem deixar nada quebrado.
 
@@ -1088,5 +1101,5 @@ os cortes T130 e T131 podem retirar sem deixar nada quebrado.
 4. **D4**: US4 e US5 no app e no site (T089). O MVP está completo.
 5. **D5**: US6, e às 23/11 à noite o corte 1 (T130).
 6. **D6**: US7 (se não cortada), o corte 2 ao meio-dia (T131), o acabamento e o roteiro (T146).
-7. **D7**: verificações do dia (T150–T152) e a apresentação.
+7. **D7**: verificações do dia (T150–T152), a gravação e a entrega do vídeo.
 8. **Depois**: P2 na ordem US8 → US12, e a M10 (T153).

@@ -70,6 +70,15 @@ primeiro deploy precisa conferir isso com `curl`: `/api/siri` responde a funçã
   resolve sem depender do atalho.
 - **Manter o servidor sempre acordado**: ver a seção 2.
 
+**Medição no iPhone (M5, 2026-11-22)**
+
+- **Servidor acordado**: a Siri respondeu bem rápido, com o lançamento salvo.
+- **Servidor dormindo**: a função respondeu "O Contaí está acordando. Nada foi lançado. Tente de
+  novo em um minuto.", e a Siri leu a mensagem antes de desistir. A espera de 8 s cabe no limite
+  da Siri.
+- **Decisão**: `VOICE_RELAY_TIMEOUT_MS` e `VOICE_API_BUDGET_MS` ficam nos padrões (8000 e 5500).
+- O primeiro erro da medição era uma digitação errada de `Bearer` no cabeçalho do atalho.
+
 ## 2. Manter o servidor acordado: limites do Render e do Neon
 
 **Fatos levantados**
