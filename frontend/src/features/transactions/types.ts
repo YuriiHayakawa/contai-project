@@ -2,6 +2,8 @@
 import type { ISODate } from "../../lib/dates";
 
 export type TransactionType = "expense" | "income" | "transfer";
+/** De onde veio o lançamento; `voice` é o que a Siri lançou (feature 002). */
+export type TransactionSource = "manual" | "import" | "assistant" | "voice";
 /** Despesa ou receita: o que leva categoria. Transferência tem rota própria. */
 export type EntryType = Exclude<TransactionType, "transfer">;
 
@@ -22,7 +24,9 @@ export interface Transaction {
   installment_group_id: string | null;
   installment_number: number | null;
   installment_count: number | null;
-  source: "manual" | "import" | "assistant";
+  source: TransactionSource;
+  /** A frase que a Siri entendeu; só nos lançamentos por voz. */
+  voice_phrase: string | null;
   created_at: string;
 }
 
@@ -127,6 +131,14 @@ export interface TransactionFilters {
   installment_group_id?: string;
   /** Os dois lados de uma transferência. */
   transfer_group_id?: string;
+  /** De onde veio: `voice` para o bloco "Lançados por voz". */
+  source?: TransactionSource;
+}
+
+/** Resposta do desfazer de um lançamento por voz: o token do "Refazer" e por quantos segundos. */
+export interface UndoVoiceResult {
+  restore_token: string;
+  expires_in: number;
 }
 
 export interface TransactionPage {

@@ -85,6 +85,7 @@ const saved: Transaction = {
   installment_number: null,
   installment_count: null,
   source: "manual",
+  voice_phrase: null,
   created_at: "2026-09-28T15:00:00Z",
 };
 

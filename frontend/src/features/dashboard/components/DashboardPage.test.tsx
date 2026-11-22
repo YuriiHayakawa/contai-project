@@ -95,6 +95,7 @@ const rent: Transaction = {
   installment_number: null,
   installment_count: null,
   source: "manual",
+  voice_phrase: null,
   created_at: `${CURRENT}-05T12:00:00Z`,
 };
 

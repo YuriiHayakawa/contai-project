@@ -38,6 +38,7 @@ function transferSide(id: string, direction: "out" | "in", accountId: string): T
     installment_number: null,
     installment_count: null,
     source: "manual",
+    voice_phrase: null,
     created_at: "2026-10-02T12:00:00Z",
   };
 }

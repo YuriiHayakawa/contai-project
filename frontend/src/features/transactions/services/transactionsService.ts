@@ -10,6 +10,7 @@ import type {
   TransactionPage,
   TransactionPatch,
   TransferInput,
+  UndoVoiceResult,
 } from "../types";
 
 /** Uma página de lançamentos, da data mais nova para a mais antiga. */
@@ -61,6 +62,16 @@ export async function updateTransaction(
 /** Exclui um lançamento; a transferência sai dos dois lados. */
 export function deleteTransaction(id: string, scope: EditScope = "single"): Promise<void> {
   return api.delete(`/transactions/${id}`, { params: { scope } });
+}
+
+/** Desfaz um lançamento por voz, sem confirmação; devolve o token do "Refazer". */
+export function undoVoice(id: string): Promise<UndoVoiceResult> {
+  return api.post<UndoVoiceResult>(`/transactions/${id}/undo-voice`);
+}
+
+/** Refaz o lançamento desfeito: ele volta igual, com o mesmo id. */
+export function restoreTransaction(restoreToken: string): Promise<Transaction> {
+  return api.post<Transaction>("/transactions/restore", { restore_token: restoreToken });
 }
 
 // ---------- última conta usada

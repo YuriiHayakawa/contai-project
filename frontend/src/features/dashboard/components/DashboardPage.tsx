@@ -21,6 +21,7 @@ import {
   type CategoryOption,
 } from "../../categories/hooks/useCategories";
 import { listSearch } from "../../transactions/filters";
+import { VoiceHighlights } from "../../transactions/components/VoiceHighlights";
 import { useNewTransaction } from "../../transactions/hooks/useNewTransaction";
 import { useDashboard } from "../hooks/useDashboard";
 import { TREND_MONTHS } from "../services/dashboardService";
@@ -116,6 +117,10 @@ export function DashboardPage() {
 
   return (
     <PageContent wide>
+      {/* O que a Siri lançou fica no topo, para conferir e desfazer na hora (US4). */}
+      <div className="mb-6 empty:hidden">
+        <VoiceHighlights />
+      </div>
       <PeriodPicker month={month} onChange={changeMonth} />
 
       {/* O aviso é de hoje: não acompanha o mês exibido, e some ao olhar um mês que passou. */}

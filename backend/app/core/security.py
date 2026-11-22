@@ -44,6 +44,12 @@ _RECOVERY_GROUP = 5
 _JWT_ALGORITHM = "HS256"
 _ACCESS_TOKEN_TYPE = "access"  # noqa: S105 - nome de tipo, não é segredo
 _CHALLENGE_TOKEN_TYPE = "2fa_challenge"  # noqa: S105 - nome de tipo, não é segredo
+_RESTORE_TOKEN_TYPE = "voice_restore"  # noqa: S105 - nome de tipo, não é segredo
+# Público do token de restauração da voz. O access token não tem `aud`, e a biblioteca recusa
+# decodificar como access um token que tenha: um token de restauração nunca abre uma sessão.
+RESTORE_TOKEN_AUDIENCE = "voice-restore"  # noqa: S105 - nome do público, não é segredo
+# Os 10 s do botão "Refazer" mais 5 s de folga para a rede (research, seção 8).
+RESTORE_TOKEN_TTL = timedelta(seconds=15)
 _COMMON_PASSWORDS_FILE = Path(__file__).parent / "data" / "common_passwords.txt"
 
 # Argon2id com m=19 MiB, t=2 e p=1, a primeira configuração recomendada pelo OWASP. O padrão da
@@ -200,6 +206,56 @@ def decode_challenge_token(token: str) -> tuple[uuid.UUID, str]:
     if not isinstance(client, str):
         raise Unauthenticated()
     return _to_uuid(payload["sub"]), client
+
+
+# ---------- token de restauração do desfazer da voz
+
+
+@dataclass(frozen=True)
+class RestoreClaims:
+    user_id: uuid.UUID
+    # A linha inteira da transação, como o serviço de lançamentos a guardou.
+    row: dict[str, Any]
+    expires_at: datetime
+
+
+def create_restore_token(user_id: uuid.UUID, row: dict[str, Any]) -> str:
+    """Token assinado com a linha desfeita: refazer reinsere exatamente essa linha."""
+    return _encode(
+        {
+            "sub": str(user_id),
+            "typ": _RESTORE_TOKEN_TYPE,
+            "aud": RESTORE_TOKEN_AUDIENCE,
+            "txn": row,
+        },
+        RESTORE_TOKEN_TTL,
+    )
+
+
+def decode_restore_token(token: str) -> RestoreClaims:
+    """Confere a assinatura e o público. A validade fica com quem chama: um token vencido é
+    "tarde demais" (410), e não "token inválido" (401)."""
+    try:
+        payload: dict[str, Any] = jwt.decode(
+            token,
+            get_settings().jwt_secret.get_secret_value(),
+            algorithms=[_JWT_ALGORITHM],
+            audience=RESTORE_TOKEN_AUDIENCE,
+            options={
+                "verify_exp": False,
+                "verify_iat": False,
+                "require": ["exp", "sub", "typ", "aud", "txn"],
+            },
+        )
+    except jwt.InvalidTokenError as exc:
+        raise Unauthenticated() from exc
+    if payload["typ"] != _RESTORE_TOKEN_TYPE or not isinstance(payload["txn"], dict):
+        raise Unauthenticated()
+    return RestoreClaims(
+        user_id=_to_uuid(payload["sub"]),
+        row=payload["txn"],
+        expires_at=datetime.fromtimestamp(int(payload["exp"]), tz=UTC),
+    )
 
 
 # ---------- verificação em duas etapas (TOTP)

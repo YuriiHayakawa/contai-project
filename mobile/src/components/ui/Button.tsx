@@ -18,6 +18,8 @@ export interface ButtonProps {
   disabled?: boolean;
   loading?: boolean;
   accessibilityHint?: string;
+  /** Quando o texto visível não basta fora de contexto: "Lançado por voz, 45 reais. Desfazer". */
+  accessibilityLabel?: string;
   testID?: string;
   ref?: Ref<ComponentRef<typeof View>>;
 }
@@ -30,6 +32,7 @@ export function Button({
   disabled = false,
   loading = false,
   accessibilityHint,
+  accessibilityLabel,
   testID,
   ref,
 }: ButtonProps) {
@@ -49,7 +52,7 @@ export function Button({
       ref={ref}
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}

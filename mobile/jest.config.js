@@ -14,4 +14,7 @@ module.exports = {
     "^zod$": mobileZod,
   },
   testPathIgnorePatterns: ["/node_modules/", "<rootDir>/app/"],
+  // No CI, os arquivos rodam em paralelo num contêiner pequeno: um teste com folhas e toques
+  // pode passar dos 5 s padrão sem estar errado. O site usa o mesmo limite.
+  testTimeout: 20000,
 };

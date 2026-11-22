@@ -25,6 +25,8 @@ export interface ToastAction {
 
 export interface ToastOptions {
   action?: ToastAction;
+  /** Quanto o aviso fica na tela; o "Refazer" da voz fica 10 s. Sem ele, 5 s, ou 8 s com ação. */
+  durationMs?: number;
 }
 
 export interface ToastApi {
@@ -40,6 +42,7 @@ interface ToastData {
   kind: ToastKind;
   message: string;
   action?: ToastAction;
+  durationMs?: number;
 }
 
 export interface ToastProviderProps {
@@ -68,7 +71,7 @@ let nextToastId = 1;
 
 function durationOf(toast: ToastData): number | null {
   if (toast.kind === "error") return null;
-  return toast.action ? DURATION_WITH_ACTION_MS : DURATION_MS;
+  return toast.durationMs ?? (toast.action ? DURATION_WITH_ACTION_MS : DURATION_MS);
 }
 
 function ToastItem({ toast, onDismiss }: ToastItemProps) {
@@ -142,7 +145,13 @@ export function ToastProvider({ children }: ToastProviderProps) {
     const show =
       (kind: ToastKind) =>
       (message: string, options: ToastOptions = {}): void => {
-        const toast: ToastData = { id: nextToastId++, kind, message, action: options.action };
+        const toast: ToastData = {
+          id: nextToastId++,
+          kind,
+          message,
+          action: options.action,
+          durationMs: options.durationMs,
+        };
         // Passando de três, o mais antigo dá lugar ao novo.
         setToasts((current) => [...current, toast].slice(-MAX_STACKED));
       };

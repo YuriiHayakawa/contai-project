@@ -119,6 +119,15 @@ class PersonalTokenRepository:
         )
         return list(result.scalars())
 
+    async def list_all(self, user_id: uuid.UUID) -> list[PersonalToken]:
+        """Ativos e revogados, do mais antigo para o mais novo: é a exportação dos dados."""
+        result = await self._session.execute(
+            select(PersonalToken)
+            .where(PersonalToken.user_id == user_id)
+            .order_by(PersonalToken.created_at, PersonalToken.id)
+        )
+        return list(result.scalars())
+
     async def get_active(self, user_id: uuid.UUID, token_id: uuid.UUID) -> PersonalToken | None:
         result = await self._session.execute(
             select(PersonalToken).where(

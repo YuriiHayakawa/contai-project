@@ -4,6 +4,7 @@ import datetime as dt
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import ColumnElement, delete, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +43,8 @@ class TransactionFilters:
     installment_group_id: uuid.UUID | None = None
     transfer_group_id: uuid.UUID | None = None
     ids: list[uuid.UUID] | None = field(default=None)
+    # De onde veio o lançamento: `voice` é o bloco "Lançados por voz" (feature 002).
+    source: TransactionSource | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,8 @@ def _conditions(user_id: uuid.UUID, filters: TransactionFilters) -> list[ColumnE
         conditions.append(Transaction.transfer_group_id == filters.transfer_group_id)
     if filters.ids is not None:
         conditions.append(Transaction.id.in_(filters.ids))
+    if filters.source is not None:
+        conditions.append(Transaction.source == filters.source)
     if filters.text:
         conditions.append(matches_text(filters.text))
     return conditions
@@ -164,6 +169,14 @@ class TransactionRepository:
             created_at=created_at,
             updated_at=created_at,
         )
+        self._session.add(transaction)
+        await self._session.flush()
+        await self._session.refresh(transaction)
+        return transaction
+
+    async def insert_exact(self, user_id: uuid.UUID, row: dict[str, Any]) -> Transaction:
+        """Reinsere uma linha exatamente como era, com o id e as datas: é o "Refazer" da voz."""
+        transaction = Transaction(user_id=user_id, **row)
         self._session.add(transaction)
         await self._session.flush()
         await self._session.refresh(transaction)

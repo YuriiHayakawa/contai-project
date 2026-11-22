@@ -96,6 +96,8 @@ class TransactionRead(BaseModel):
     installment_number: int | None
     installment_count: int | None
     source: TransactionSource
+    # A frase que a Siri entendeu, só nos lançamentos por voz (FR-028).
+    voice_phrase: str | None
     created_at: dt.datetime
 
     @classmethod
@@ -116,6 +118,7 @@ class TransactionRead(BaseModel):
             installment_number=transaction.installment_number,
             installment_count=transaction.installment_count,
             source=TransactionSource(transaction.source),
+            voice_phrase=transaction.voice_phrase,
             created_at=transaction.created_at,
         )
 
@@ -133,3 +136,17 @@ class TransactionList(BaseModel):
     uma transferência."""
 
     items: list[TransactionRead]
+
+
+# ---------- desfazer e refazer da voz (feature 002, research, seção 8)
+
+
+class UndoVoiceResponse(BaseModel):
+    """O lançamento foi apagado. Com o token, ele volta igual em até `expires_in` segundos."""
+
+    restore_token: str
+    expires_in: int
+
+
+class RestoreRequest(BaseModel):
+    restore_token: Annotated[str, StringConstraints(min_length=1, max_length=8000)]

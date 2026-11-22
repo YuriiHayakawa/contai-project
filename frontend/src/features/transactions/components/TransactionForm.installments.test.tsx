@@ -401,6 +401,7 @@ describe("TransactionForm: transferência", () => {
         installment_number: null,
         installment_count: null,
         source: "manual",
+        voice_phrase: null,
         created_at: "2026-09-15T12:00:00Z",
       },
     });

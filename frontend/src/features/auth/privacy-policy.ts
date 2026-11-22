@@ -3,9 +3,9 @@
 // backend/app/modules/auth/service.py. O texto final é conferido na T220, com os termos atuais
 // do provedor de IA.
 
-export const PRIVACY_POLICY_VERSION = "3";
+export const PRIVACY_POLICY_VERSION = "4";
 /** Data da versão, como dia de calendário (`YYYY-MM-DD`). */
-export const PRIVACY_POLICY_UPDATED_ON = "2026-11-08";
+export const PRIVACY_POLICY_UPDATED_ON = "2026-11-21";
 
 export interface PolicySection {
   title: string;
@@ -22,6 +22,8 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
       "seu nome e seu e-mail;",
       "sua senha, de forma embaralhada: nem nós conseguimos lê-la;",
       "suas contas, categorias e lançamentos;",
+      "nos lançamentos que você faz pela Siri, a frase que ela entendeu;",
+      "os atalhos da Siri que você conectou: o nome, a conta padrão e as datas de uso. O token de cada um fica embaralhado, como a senha;",
       "os arquivos que você envia para importar, só até serem lidos;",
       "suas conversas com o assistente.",
     ],
@@ -30,7 +32,8 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
     title: "Como seus dados são tratados",
     paragraphs: [
       "Cada pessoa vê apenas os próprios dados. Ninguém que usa o Contaí consegue ver contas, lançamentos, arquivos ou conversas de outra pessoa.",
-      "Os arquivos que você envia para importar são apagados depois de lidos. Os registros técnicos do sistema não guardam senhas, valores nem descrições dos seus lançamentos.",
+      "Os arquivos que você envia para importar são apagados depois de lidos. Os registros técnicos do sistema não guardam senhas, valores, descrições dos seus lançamentos nem as frases faladas para a Siri.",
+      "A frase que a Siri entendeu fica guardada junto com o lançamento feito por voz, para você conferir o que ela ouviu. Por isso, fale só o gasto, sem informações pessoais. Ela entra quando você baixa os seus dados e é apagada junto com o lançamento ou com a conta.",
       "Você pode baixar todos os seus dados e excluir a sua conta quando quiser. Ao pedir a exclusão, a conta é desativada na hora e você tem 7 dias para desistir; depois disso, seus dados, arquivos e conversas são apagados de vez.",
     ],
   },
@@ -42,7 +45,8 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
     items: [
       "quando você faz uma pergunta ao assistente: a pergunta e os dados necessários para respondê-la, como totais e lançamentos do período perguntado;",
       "quando o Contaí sugere uma categoria: apenas a descrição do lançamento;",
-      "quando você envia um PDF ou uma imagem de extrato, fatura ou comprovante: o conteúdo desse arquivo. Antes do primeiro envio, o Contaí avisa e só continua se você aceitar.",
+      "quando você envia um PDF ou uma imagem de extrato, fatura ou comprovante: o conteúdo desse arquivo. Antes do primeiro envio, o Contaí avisa e só continua se você aceitar;",
+      "quando você lança um gasto pela Siri: a frase que ela reconheceu. Antes disso, a sua voz é reconhecida pela Siri, da Apple, no seu iPhone; o Contaí recebe só o texto.",
     ],
   },
   {
@@ -79,7 +83,8 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
       "Vercel: entrega as páginas do app e repassa os seus pedidos ao servidor do Contaí;",
       "Render: roda o servidor do Contaí, que lê e grava os seus dados;",
       "Neon: guarda o banco de dados, com todos os dados listados no começo desta política, e o histórico de poucas horas que serve de cópia de segurança;",
-      "Brevo: entrega os e-mails do Contaí, como o de confirmação da conta e o de nova senha. Para isso, recebe seu nome, seu e-mail e o texto de cada mensagem.",
+      "Brevo: entrega os e-mails do Contaí, como o de confirmação da conta e o de nova senha. Para isso, recebe seu nome, seu e-mail e o texto de cada mensagem;",
+      "Apple: se você usa o lançamento por voz, a Siri reconhece a sua voz conforme a política da própria Apple, e o atalho envia ao Contaí só o texto reconhecido.",
     ],
   },
 ];

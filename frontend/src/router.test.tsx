@@ -806,11 +806,11 @@ describe("política de privacidade", () => {
       screen.getByText(/Cópias diárias, cifradas e guardadas por 14 dias, estão em implantação/),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Todos os dias o Contaí faz uma cópia/)).not.toBeInTheDocument();
-    for (const provider of ["Vercel", "Render", "Neon", "Brevo"]) {
+    for (const provider of ["Vercel", "Render", "Neon", "Brevo", "Apple"]) {
       expect(screen.getByText(new RegExp(`^${provider}:`))).toBeInTheDocument();
     }
     expect(screen.getByText(/transferência internacional de dados/)).toBeInTheDocument();
-    expect(screen.getByText(/Versão 3, de 8 de novembro de 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Versão 4, de 21 de novembro de 2026/)).toBeInTheDocument();
   });
 });
 

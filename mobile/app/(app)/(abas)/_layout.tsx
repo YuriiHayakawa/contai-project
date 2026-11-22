@@ -1,5 +1,5 @@
-// Abas do app. Assistente entra com a US6, que sai no corte 2: a barra nunca mostra uma aba sem
-// tela.
+// Abas do app. A aba Assistente (US6) sai no corte 2 (T131): basta tirar o `Tabs.Screen` dela e as
+// rotas `assistente`. A barra nunca mostra uma aba sem tela.
 import { Tabs } from "expo-router/js-tabs";
 import { SymbolView } from "expo-symbols";
 import type { ComponentProps } from "react";
@@ -32,6 +32,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="lancamentos"
         options={{ title: "Lançamentos", tabBarIcon: tabIcon("list.bullet") }}
+      />
+      <Tabs.Screen
+        name="assistente"
+        options={{ title: "Assistente", tabBarIcon: tabIcon("bubble.left.and.bubble.right") }}
       />
       <Tabs.Screen
         name="mais"

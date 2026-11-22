@@ -72,7 +72,7 @@ P1 verde no roteiro do iPhone. A P3 (US13) fica para depois da entrega e não te
 |-------|------|---------|---------------|
 | **D1** | 18–19/11 | T001–T034 | O app abre no Expo Go com tema e fontes. A prova do `@web` está decidida. O login do app funciona no backend local, com testes. |
 | **D2** | 19–20/11 | T035–T048 | US1 e US2 funcionam no iPhone contra a produção, depois da M3. |
-| **D3** | 20–21/11 | T049–T073 | US3: a Siri lança em produção. M4, M5 e M6 feitas. |
+| **D3** | 20–21/11 | T049–T073 | US3: a Siri lança em produção. M4 e M5 feitas; M6 cancelada (entrega em vídeo). |
 | **D4** | 21–22/11 | T074–T093 | US4 e US5 no app e no site. A política de privacidade está revisada (M8). |
 | **D5** | 23/11 | T094–T097 e o **corte 1** (T130) | US6 pronta, ou cortada. |
 | **D6** | 24/11 | **Corte 2** (T131), T098–T101 (se não cortadas) e T140–T147 | US7 pronta, ou cortada. Acabamento feito e roteiro completo (M7). |
@@ -153,7 +153,7 @@ P1 verde no roteiro do iPhone. A P3 (US13) fica para depois da entrega e não te
 - [X] T009 [P] Criar `mobile/.env.example`, com as variáveis documentadas, e
   `mobile/src/lib/config.ts`.
   - Variáveis: `EXPO_PUBLIC_API_URL=https://contai-project.vercel.app` e
-    `EXPO_PUBLIC_SHORTCUT_URL=`, vazia até a M6.
+    `EXPO_PUBLIC_SHORTCUT_URL=`, que fica vazia: a M6 foi cancelada (entrega em vídeo).
   - O `config.ts` lê as variáveis e valida com zod: URL https obrigatória fora do
     desenvolvimento; link do atalho opcional.
   - Garantir `mobile/.env` no `.gitignore`.
@@ -619,9 +619,9 @@ passos 1 a 5, 7 e 8.
   - **Consequências**: o risco residual na fronteira do prazo.
 
   Referências: research, seções 1 e 2.
-- [ ] T066 **FORA DO CÓDIGO (M4)**: criar na Vercel a variável `API_ORIGIN_URL` com o valor
+- [X] T066 **FORA DO CÓDIGO (M4)**: criar na Vercel a variável `API_ORIGIN_URL` com o valor
   `https://contai-api.onrender.com`, em Production.
-- [ ] T067 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com o CI local verde. Depois do
+- [X] T067 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com o CI local verde. Depois do
   deploy, conferir com `curl`:
   - `POST https://contai-project.vercel.app/api/siri` sem token responde 200 com
     `outcome: unauthorized`;
@@ -648,18 +648,27 @@ passos 1 a 5, 7 e 8.
   - `mobile/app/(app)/siri/novo-token.tsx`: nome e conta padrão; no limite de 5, pede para
     revogar um.
   - O "Conectar à Siri" da tela Mais entrou aqui.
-- [ ] T072 **FORA DO CÓDIGO (M5)**: com o deploy no ar, montar o atalho "Contaí" à mão, seguindo
+- [X] T072 **FORA DO CÓDIGO (M5)**: com o deploy no ar, montar o atalho "Contaí" à mão, seguindo
   a tela `ShortcutSteps`.
   - Falar com a Siri e medir o tempo até a resposta, com o servidor acordado e com o servidor
     dormindo.
   - Se a Siri desistir antes de 8 s, ou tolerar mais, ajustar `VOICE_RELAY_TIMEOUT_MS` e
     `VOICE_API_BUDGET_MS` na Vercel.
   - Anotar o resultado em `specs/002-app-mobile-siri/research.md`, seção 1.
-- [ ] T073 **FORA DO CÓDIGO (M6)**: no mesmo atalho, trocar o token por uma pergunta de
+  - **Resultado em 2026-11-22**: com o servidor acordado, a resposta veio bem rápido. Com o
+    servidor dormindo, a Siri respondeu "O Contaí está acordando… Tente de novo em um
+    minuto", como previsto. Os 8 s e os 5,5 s ficam como estão. O primeiro erro era uma
+    digitação errada de `Bearer` no atalho, e não do código.
+- [X] T073 **CANCELADA em 2026-11-22**: a entrega virou um vídeo gravado pelo mantenedor, e
+  ninguém além dele instala o atalho. `EXPO_PUBLIC_SHORTCUT_URL` fica vazia: o botão
+  "Instalar o atalho" continua escondido (já é assim, com teste em
+  `NewTokenResult.test.tsx`), e o passo a passo manual continua no app. O texto original
+  fica abaixo, para registro.
+  - ~~FORA DO CÓDIGO (M6): no mesmo atalho, trocar o token por uma pergunta de
   importação ("Cole o token que o app do Contaí mostrou").
   - Conferir que nenhuma ação guarda um token (FR-017a).
   - Compartilhar pelo iCloud e pôr o link em `EXPO_PUBLIC_SHORTCUT_URL`, no `mobile/.env`.
-  - Instalar pelo link num atalho novo e confirmar que funciona.
+  - Instalar pelo link num atalho novo e confirmar que funciona.~~
 
 **Checkpoint (fim do D3)**: "E aí Siri, Contaí" lança em produção, e frases ambíguas não gravam
 nada.
@@ -676,7 +685,7 @@ passo 6.
 
 ### Testes (escritos primeiro)
 
-- [ ] T074 [P] [US4] Criar `backend/tests/integration/test_voice_undo_restore.py`.
+- [X] T074 [P] [US4] Criar `backend/tests/integration/test_voice_undo_restore.py`.
   - **Desfazer** (`undo-voice`):
     - num lançamento por voz, apaga e devolve `restore_token` e `expires_in: 10`;
     - num lançamento que não é por voz, responde 409 `not_voice_entry`;
@@ -690,34 +699,40 @@ passo 6.
     - com a conta apagada, responde 409 `restore_conflict`.
   - **Separação dos tokens**: um token com `aud = voice-restore` é recusado como access token
     por `get_current_user`.
-- [ ] T075 [P] [US4] Acrescentar ao `backend/tests/integration/test_transactions.py` o filtro
+- [X] T075 [P] [US4] Acrescentar ao `backend/tests/integration/test_transactions.py` o filtro
   `source=voice` e os campos `source` e `voice_phrase` no `TransactionRead`.
   - Editar um lançamento por voz mantém a origem e a frase.
   - Os schemas de criação e edição recusam `source` e `voice_phrase`.
+  - A exportação já trazia a origem; ganhou a coluna `frase_por_voz` e o arquivo
+    `tokens-da-siri.csv` (nome, conta padrão e datas, sem o token nem o hash).
 
   Acrescentar ao `backend/tests/integration/test_export.py` a frase e os tokens pessoais na
   exportação, sem hash.
-- [ ] T076 [P] [US4] Registrar `POST /transactions/{id}/undo-voice` e
+- [X] T076 [P] [US4] Registrar `POST /transactions/{id}/undo-voice` e
   `POST /transactions/restore` em `backend/tests/isolation/registry.py`. Desfazer o lançamento
   de outro usuário responde 404, e restaurar com o token de outro usuário é recusado.
-- [ ] T077 [P] [US4] Criar
+  - Os casos ficam em `backend/tests/isolation/test_voice_undo.py`.
+- [X] T077 [P] [US4] Criar
   `frontend/src/features/transactions/components/VoiceHighlights.test.tsx` e
   `frontend/src/features/transactions/hooks/useUndoVoice.test.ts`.
   - O bloco mostra os lançamentos dos últimos 7 dias, com "Você disse: …".
   - "Desfazer" não pede confirmação e mostra "Refazer" por 10 s, que restaura.
   - Desfazer de novo mostra "Esse lançamento já tinha sido desfeito."
-- [ ] T078 [P] [US4] Criar `mobile/src/features/transactions/hooks/useUndoVoice.test.tsx` e
+- [X] T078 [P] [US4] Criar `mobile/src/features/transactions/hooks/useUndoVoice.test.tsx` e
   `mobile/src/features/transactions/components/VoiceHighlights.test.tsx`, com os mesmos casos e
   mais o rótulo acessível: "Lançado por voz, 45 reais, iFood. Desfazer".
 
 ### Backend
 
-- [ ] T079 [US4] Em `backend/app/core/security.py`:
+- [X] T079 [US4] Em `backend/app/core/security.py`:
   - criar `create_restore_token(user_id, row)` e `decode_restore_token(token)`, um JWT HS256 com
     `aud = "voice-restore"`, validade de 15 s e a linha inteira em `txn`;
   - garantir que a decodificação do access token exige o público dele e recusa
     `voice-restore`.
-- [ ] T080 [US4] Em `backend/app/modules/transactions/` (`schemas.py`, `repository.py`,
+  - O `security.py` recebe a linha já montada: quem conhece as colunas é o serviço de
+    lançamentos. O access token não tem `aud`, e o PyJWT recusa decodificar como access um token
+    que tenha.
+- [X] T080 [US4] Em `backend/app/modules/transactions/` (`schemas.py`, `repository.py`,
   `service.py` e `router.py`):
   - o filtro `source` em `GET /transactions`;
   - `source` e `voice_phrase` no `TransactionRead`;
@@ -726,43 +741,67 @@ passo 6.
   - `POST /transactions/restore`, que reinsere com o mesmo id, é idempotente e trata os
     conflitos 409 e 410;
   - os erros de domínio `NotVoiceEntry`, `RestoreExpired` e `RestoreConflict`.
-- [ ] T081 [US4] Em `backend/app/modules/users/export.py`, incluir `source` e `voice_phrase`
+  - Os erros ficam em `backend/app/modules/transactions/errors.py`.
+- [X] T081 [US4] Em `backend/app/modules/users/export.py`, incluir `source` e `voice_phrase`
   em cada lançamento e a lista de tokens pessoais (nome, conta padrão e datas, nunca o hash).
 
 ### Site
 
-- [ ] T082 [P] [US4] Em `frontend/src/features/transactions/types.ts`, acrescentar
+- [X] T082 [P] [US4] Em `frontend/src/features/transactions/types.ts`, acrescentar
   `TransactionSource` com `"voice"`, `source` e `voicePhrase`, no mesmo formato de nomes que o
   arquivo já usa. O app recebe a mudança pelo `@web`.
-- [ ] T083 [US4] Em `frontend/src/features/transactions/services/` e `hooks/`, criar
+- [X] T083 [US4] Em `frontend/src/features/transactions/services/` e `hooks/`, criar
   `undoVoice`, `restoreTransaction`, `useUndoVoice` (com o Refazer de 10 s) e
   `useVoiceHighlights` (`source=voice&from=<hoje − 6 dias>`, com hoje em America/Sao_Paulo pelo
   `lib/dates`).
-- [ ] T084 [US4] Criar `frontend/src/features/transactions/components/VoiceHighlights.tsx`,
+  - O toast do site ganhou `durationMs`, para o "Refazer" ficar os 10 s do token.
+- [X] T084 [US4] Criar `frontend/src/features/transactions/components/VoiceHighlights.tsx`,
   `VoiceBadge.tsx` e `UndoToast.tsx`.
   - Pôr o bloco no topo do painel (`frontend/src/features/dashboard/components/`).
   - Pôr a marca "por voz" e "Você disse: …" na lista e no detalhe, com o botão "Desfazer".
-- [ ] T085 [US4] Atualizar `frontend/src/features/auth/components/PrivacyPolicyPage.tsx`:
+  - Não houve `UndoToast.tsx`: o toast do site já aceita a ação "Refazer". O detalhe do
+    lançamento ganhou o botão "Desfazer" para os lançamentos por voz.
+- [X] T085 [US4] Atualizar `frontend/src/features/auth/components/PrivacyPolicyPage.tsx`:
   - no lançamento por voz, a frase é reconhecida pela Siri (Apple) e depois enviada ao serviço
     de IA;
   - a frase entendida fica guardada junto com o lançamento, entra na exportação e é apagada com
     ele ou com a conta.
+  - O texto fica em `frontend/src/features/auth/privacy-policy.ts`. A política foi para a
+    versão 4 (2026-11-21), aqui e em `PRIVACY_POLICY_VERSION` do backend. A página não tinha
+    teste: foi criado `PrivacyPolicyPage.test.tsx`, e o `router.test.tsx` passou a conferir a
+    versão 4 e a Apple.
 
   Atualizar o teste da página.
 
 ### App
 
-- [ ] T086 [US4] Criar `mobile/src/features/transactions/services/voice.ts` (`undoVoice` e
+- [X] T086 [US4] Criar `mobile/src/features/transactions/services/voice.ts` (`undoVoice` e
   `restoreTransaction`) e os hooks `useUndoVoice.ts` e `useVoiceHighlights.ts`, em
   `mobile/src/features/transactions/hooks/`.
-- [ ] T087 [US4] Criar `mobile/src/features/transactions/components/VoiceHighlights.tsx` e
+- [X] T087 [US4] Criar `mobile/src/features/transactions/components/VoiceHighlights.tsx` e
   `VoiceBadge.tsx`, e usar o `Toast` com a ação "Refazer" por 10 s, anunciada ao VoiceOver.
   Pôr a marca "por voz", "Você disse: …" e "Desfazer" no `TransactionRow.tsx` e em
   `mobile/app/(app)/lancamento/[id].tsx`.
-- [ ] T088 **FORA DO CÓDIGO (M8)**: revisar o texto novo da política de privacidade (T085) antes
+  - Na linha da lista, o "Desfazer" fica ao lado da linha, e não dentro dela: um botão dentro
+    de outro some para o VoiceOver.
+- [X] T088 **FORA DO CÓDIGO (M8)**: revisar o texto novo da política de privacidade (T085) antes
   do deploy.
+  - **Resultado em 2026-11-22**: aprovada a versão 4, com um acréscimo no trecho da frase
+    guardada: "Por isso, fale só o gasto, sem informações pessoais." Os 10 segundos do
+    "Refazer", em que a frase fica no token de restauração do aparelho, ficam fora do texto.
 - [ ] T089 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com o CI local verde, para publicar
   o desfazer e o destaque. Conferir o passo 6 do quickstart no app e no site.
+  - **Achado em 2026-11-22**: o "Desfazer" do app respondia "Não encontramos o que você
+    procura." no iPhone. A causa não era código: o merge desta tarefa ainda não tinha sido
+    feito, e a produção estava no D3. O `source` já vinha no `TransactionRead` desde o D1, por
+    isso o app mostrava a marca "por voz" e o botão, mas `POST /transactions/{id}/undo-voice`
+    respondia 404 `not_found` (rota inexistente) e `POST /transactions/restore`, 405. O filtro
+    `source=voice` também era ignorado, e o bloco "Lançados por voz" mostrava todos os
+    lançamentos dos últimos 7 dias.
+  - **Conferência depois de cada deploy com rotas novas**: chamar cada rota nova sem login, com
+    `curl`, em `https://contai-project.vercel.app/api/v1/...`. Uma rota publicada responde 401
+    `unauthenticated`. Um 404 `not_found` ou um 405 quer dizer que ela ainda não está no ar.
+    Neste deploy: `undo-voice` e `restore` precisam responder 401.
 
 ---
 
@@ -775,7 +814,7 @@ com o bloco de voz no topo.
 
 ### Testes (escritos primeiro)
 
-- [ ] T090 [P] [US5] Criar `mobile/src/features/dashboard/components/CategoryBars.test.tsx` e
+- [X] T090 [P] [US5] Criar `mobile/src/features/dashboard/components/CategoryBars.test.tsx` e
   `mobile/src/features/dashboard/hooks/useDashboard.test.tsx`.
   - As barras vêm ordenadas, com largura proporcional.
   - Cada barra tem o rótulo "Alimentação, 842 reais e 30 centavos, 34% das saídas".
@@ -783,19 +822,23 @@ com o bloco de voz no topo.
   - Trocar o mês refaz a consulta.
   - Sem dados, aparecem os primeiros passos.
   - Ao voltar ao app, a consulta é feita de novo.
+  - O percentual vem do campo `percent` da API (achado M1 da análise), com até uma casa,
+    como no site.
 
 ### Implementação
 
-- [ ] T091 [P] [US5] Criar `mobile/src/features/dashboard/services/dashboard.ts` e
+- [X] T091 [P] [US5] Criar `mobile/src/features/dashboard/services/dashboard.ts` e
   `mobile/src/features/dashboard/hooks/useDashboard.ts`, com os endpoints do painel que já
   existem e os tipos de `@web/features/dashboard/types`. Usam o
   `use-refetch-on-focus.ts` (SC-004).
-- [ ] T092 [US5] Criar `mobile/src/features/dashboard/components/MonthSummary.tsx` (entradas,
+- [X] T092 [US5] Criar `mobile/src/features/dashboard/components/MonthSummary.tsx` (entradas,
   saídas e saldo), `CategoryBars.tsx` (barras com `View`, sem biblioteca), `AccountBalances.tsx`
   e `FirstSteps.tsx`.
-- [ ] T093 [US5] Criar `mobile/app/(app)/(abas)/index.tsx`, o painel. Na ordem: o
+- [X] T093 [US5] Criar `mobile/app/(app)/(abas)/index.tsx`, o painel. Na ordem: o
   `VoiceHighlights` no topo, o `MonthSwitcher`, o resumo, as categorias e as contas, com puxar
   para atualizar. Tocar numa categoria abre `lancamentos` com o filtro.
+  - A tela fica em `mobile/src/features/dashboard/components/DashboardView.tsx`. A aba
+    Lançamentos acompanha o mês mandado pelo painel mesmo se já estiver aberta.
 
 **Checkpoint (fim do D4)**: o caminho entrar → lançar → Siri → desfazer → painel está inteiro no
 iPhone.
@@ -808,24 +851,34 @@ iPhone.
 
 **Independent Test**: os três passos da história 6 na spec.
 
-- [ ] T094 [P] [US6] Criar `mobile/src/features/assistant/hooks/useConversation.test.tsx` e
+- [X] T094 [P] [US6] Criar `mobile/src/features/assistant/hooks/useConversation.test.tsx` e
   `mobile/src/features/assistant/components/ProposalCard.test.tsx`.
   - Enviar uma pergunta mostra "Preparando a resposta…" e depois a resposta.
   - A proposta tem "Salvar" (só com os campos completos), "Ajustar" (abre o formulário
     preenchido) e "Descartar".
   - O limite diário mostra a mensagem do site com o horário em que volta.
   - Apagar uma conversa pede confirmação.
-- [ ] T095 [P] [US6] Criar `mobile/src/features/assistant/services/assistant.ts`, com
+  - A confirmação de apagar fica no teste do histórico (`AssistantHome`), no mesmo arquivo.
+- [X] T095 [P] [US6] Criar `mobile/src/features/assistant/services/assistant.ts`, com
   conversas, mensagens, proposta salva e descartada, e uso, e
   `mobile/src/features/assistant/types.ts`, a partir de `@web/features/assistant/types`.
-- [ ] T096 [US6] Criar `mobile/src/features/assistant/hooks/useConversations.ts`,
+- [X] T096 [US6] Criar `mobile/src/features/assistant/hooks/useConversations.ts`,
   `useConversation.ts`, `useAsk.ts` e `useProposalActions.ts`. Salvar invalida a lista e o
   painel.
-- [ ] T097 [US6] Criar `mobile/src/features/assistant/components/MessageBubble.tsx`,
+  - `useAssistantUsage` e `useDeleteConversation` ficam em `useConversations.ts`.
+- [X] T097 [US6] Criar `mobile/src/features/assistant/components/MessageBubble.tsx`,
   `ProposalCard.tsx` e `Composer.tsx`, e as telas `mobile/app/(app)/(abas)/assistente.tsx`
   (histórico e nova conversa) e `mobile/app/(app)/assistente/[id].tsx` (a conversa).
   - "Ajustar" abre `lancamento/novo` preenchido.
   - O resultado volta para marcar a proposta como salva.
+  - As telas ficam em `mobile/src/features/assistant/components/AssistantHome.tsx` e
+    `ConversationView.tsx`. A rota `assistente/nova` é a conversa que nasce com a primeira
+    pergunta.
+  - "Ajustar" guarda os valores num rascunho em memória (`assistant/proposal-draft.ts`), que o
+    formulário de lançamento novo lê uma vez. O formulário ganhou a prop `preset`, e o
+    lançamento salvo marca a proposta.
+  - A aba Assistente entrou na barra. Para o corte 2 (T131), basta tirar o `Tabs.Screen` dela e
+    as rotas `assistente`.
 
 ---
 
@@ -909,13 +962,14 @@ iPhone.
   `specs/002-app-mobile-siri/validation/resultado-roteiro.md` e abrir uma tarefa de correção
   para cada falha.
 - [ ] T150 **FORA DO CÓDIGO (M1)**, 25/11: conferir no Expo Go que o SDK continua 58.
-- [ ] T151 **FORA DO CÓDIGO (M9)**, 25/11:
-  - Acordar o servidor alguns minutos antes da apresentação, abrindo o app.
+- [ ] T151 **FORA DO CÓDIGO (M9)**, antes de gravar o vídeo:
+  - Acordar o servidor alguns minutos antes da gravação, abrindo o app.
   - Ou criar no cron-job.org um job temporário que chama
-    `https://contai-project.vercel.app/api/v1/health` a cada 10 min, só durante a janela da
-    apresentação, e apagá-lo depois.
-- [ ] T152 **FORA DO CÓDIGO**, 25/11: conferir que o token da demonstração está ativo e que "E
-  aí Siri, Contaí" responde.
+    `https://contai-project.vercel.app/api/v1/health` a cada 10 min, só durante a gravação,
+    e apagá-lo depois.
+  - Opcional: gravar também uma frase com o servidor dormindo, para mostrar o "acordando".
+- [ ] T152 **FORA DO CÓDIGO**, na gravação: conferir que o token da demonstração está ativo e
+  que "E aí Siri, Contaí" responde. Gravar o vídeo e entregar até 25/11.
 - [ ] T153 **FORA DO CÓDIGO (M10)**, depois da entrega: se a T008 tiver gerado um desvio
   (cópias em `mobile/src/shared/`), decidir quando voltar ao `@web` e atualizar o
   Complexity Tracking do plano.
@@ -1015,7 +1069,7 @@ Fica para depois da entrega. O atalho para o site (T039) atende até lá.
 | T066 (M4) | — | T067 |
 | T067 (M3) | T049–T065 e T066 | T072 (M5) |
 | T072 (M5) | T067 e T070 | T073 (M6) e o ajuste do tempo de espera |
-| T073 (M6) | T072 | O link do atalho no app (`EXPO_PUBLIC_SHORTCUT_URL`) |
+| T073 (M6, cancelada) | — | Nada: o link não entra no app |
 | T089 (M3) | T074–T088 | Passo 6 do quickstart em produção |
 | T146 (M7) | T144 e T145 | T147, corte final e P2 |
 
@@ -1053,9 +1107,12 @@ T082 frontend types.ts (destrava o site e o app ao mesmo tempo)
 
 ## Implementation Strategy
 
-### MVP para a apresentação
+### MVP para o vídeo da entrega
 
-O MVP é US1 + US2 + US3 + US4 + US5, até o fim do D4. Esse é o caminho que o avaliador vê:
+**Mudança em 2026-11-22**: a entrega é um vídeo gravado pelo mantenedor, sem o professor
+instalar nada. A M6 (link do iCloud do atalho) foi cancelada, e o atalho é montado à mão.
+
+O MVP é US1 + US2 + US3 + US4 + US5, até o fim do D4. Esse é o caminho que o vídeo mostra:
 entrar → lançar → falar com a Siri → ver e desfazer → painel. A US6 e a US7 são acréscimos que
 os cortes T130 e T131 podem retirar sem deixar nada quebrado.
 
@@ -1068,5 +1125,5 @@ os cortes T130 e T131 podem retirar sem deixar nada quebrado.
 4. **D4**: US4 e US5 no app e no site (T089). O MVP está completo.
 5. **D5**: US6, e às 23/11 à noite o corte 1 (T130).
 6. **D6**: US7 (se não cortada), o corte 2 ao meio-dia (T131), o acabamento e o roteiro (T146).
-7. **D7**: verificações do dia (T150–T152) e a apresentação.
+7. **D7**: verificações do dia (T150–T152), a gravação e a entrega do vídeo.
 8. **Depois**: P2 na ordem US8 → US12, e a M10 (T153).
