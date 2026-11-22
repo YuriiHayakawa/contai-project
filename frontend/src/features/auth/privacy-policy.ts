@@ -33,7 +33,7 @@ export const PRIVACY_POLICY_SECTIONS: readonly PolicySection[] = [
     paragraphs: [
       "Cada pessoa vê apenas os próprios dados. Ninguém que usa o Contaí consegue ver contas, lançamentos, arquivos ou conversas de outra pessoa.",
       "Os arquivos que você envia para importar são apagados depois de lidos. Os registros técnicos do sistema não guardam senhas, valores, descrições dos seus lançamentos nem as frases faladas para a Siri.",
-      "A frase que a Siri entendeu fica guardada junto com o lançamento feito por voz, para você conferir o que ela ouviu. Ela entra quando você baixa os seus dados e é apagada junto com o lançamento ou com a conta.",
+      "A frase que a Siri entendeu fica guardada junto com o lançamento feito por voz, para você conferir o que ela ouviu. Por isso, fale só o gasto, sem informações pessoais. Ela entra quando você baixa os seus dados e é apagada junto com o lançamento ou com a conta.",
       "Você pode baixar todos os seus dados e excluir a sua conta quando quiser. Ao pedir a exclusão, a conta é desativada na hora e você tem 7 dias para desistir; depois disso, seus dados, arquivos e conversas são apagados de vez.",
     ],
   },

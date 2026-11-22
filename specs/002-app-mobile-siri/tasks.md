@@ -788,6 +788,17 @@ passo 6.
   do deploy.
 - [ ] T089 **FORA DO CÓDIGO (M3)**: aprovar o merge na `main` com o CI local verde, para publicar
   o desfazer e o destaque. Conferir o passo 6 do quickstart no app e no site.
+  - **Achado em 2026-11-22**: o "Desfazer" do app respondia "Não encontramos o que você
+    procura." no iPhone. A causa não era código: o merge desta tarefa ainda não tinha sido
+    feito, e a produção estava no D3. O `source` já vinha no `TransactionRead` desde o D1, por
+    isso o app mostrava a marca "por voz" e o botão, mas `POST /transactions/{id}/undo-voice`
+    respondia 404 `not_found` (rota inexistente) e `POST /transactions/restore`, 405. O filtro
+    `source=voice` também era ignorado, e o bloco "Lançados por voz" mostrava todos os
+    lançamentos dos últimos 7 dias.
+  - **Conferência depois de cada deploy com rotas novas**: chamar cada rota nova sem login, com
+    `curl`, em `https://contai-project.vercel.app/api/v1/...`. Uma rota publicada responde 401
+    `unauthenticated`. Um 404 `not_found` ou um 405 quer dizer que ela ainda não está no ar.
+    Neste deploy: `undo-voice` e `restore` precisam responder 401.
 
 ---
 
